@@ -50,7 +50,7 @@ code { font-size: .92em; background: #eceef6; padding: .05em .35em; border-radiu
   color: #fff; display: grid; place-items: end center; padding: 7rem 1.5rem 4.5rem; text-align: center;
 }
 .mind { position: absolute; inset: 0; width: 100%; height: 100%; }
-.mind .layers use { transform-box: fill-box; }
+.mind .layers use, .net circle { transform-box: fill-box; transform-origin: center; }
 .net line { stroke: var(--blue-hi); stroke-width: 1.2; opacity: .55; }
 .net circle { fill: var(--blue-hi); }
 .net circle.ring { fill: none; stroke: var(--blue-hi); stroke-width: 1.5; }
@@ -221,20 +221,64 @@ h2 .dim { color: var(--grey); }
 .copy:hover { background: var(--blue-hi); }
 .small-link { font-size: .88rem; color: #9fb6ff; }
 
-/* one orchestrated moment: the hero assembles on load */
+/* the hero tells the story in one sequence (about 2.6 s):
+   the agent alone (a rim of light), members wire in one by one, the mind fills with their layers, CO-OWN assembles.
+   Scrolling then fans the layers out, the way the reference turns its head. */
+.hero { --p: 0; }
+.mind .layer { transform-box: fill-box; transform-origin: 30% 100%;
+  transform: translate(calc(var(--p) * var(--i) * -34px), calc(var(--p) * var(--i) * 10px)) rotate(calc(var(--p) * var(--i) * -3deg)); }
+.mind .rim { fill: none; stroke: #5b84ff; stroke-width: 2.5; opacity: calc(.9 - var(--p) * .6); }
+.mind .rim.glow { stroke-width: 10; stroke: #2a5bff; }
+.hero-text { translate: 0 calc(var(--p) * -70px); opacity: calc(1 - var(--p) * .7); }
+.net line { stroke-dasharray: 1; }
+.hero .big { position: relative; }
+.hero .big::before, .hero .big::after { content: attr(data-text); position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+
 @media (prefers-reduced-motion: no-preference) {
-  .mind .layers use { animation: rise 1.4s cubic-bezier(.2,.7,.2,1) both; }
-  .mind .layers use:nth-child(2) { animation-delay: .12s; }
-  .mind .layers use:nth-child(3) { animation-delay: .24s; }
-  .mind .layers use:nth-child(4) { animation-delay: .36s; }
-  .net { animation: fade 1.2s .7s both; }
-  .net circle.core { animation: pulse 2.8s 2s ease-in-out infinite; }
-  .hero .big { animation: rise 1s .2s cubic-bezier(.2,.7,.2,1) both; }
-  .hero .line, .lede, .hero-text .btn { animation: fade .8s .7s both; }
+  .mind .rim { stroke-dasharray: 1; animation: draw 1.3s cubic-bezier(.5,0,.2,1) both; }
+  .mind .layer use { animation: fill-in 1s calc(1s + var(--i) * .12s) cubic-bezier(.2,.7,.2,1) both; }
+  .net line { animation: draw .6s calc(.5s + var(--n, 0) * .14s) ease-out both; }
+  .net circle { animation: pop .4s calc(.5s + var(--n, 0) * .14s) both; }
+  .net circle.core { animation: pop .5s .4s both, pulse 2.8s 2.4s ease-in-out infinite; }
+  .net circle.ring { animation: pop .4s calc(.5s + var(--n, 0) * .14s) both, ring 3.4s 2.4s ease-in-out infinite; }
+  .hero .big > span { display: block; animation: slice .9s 1.3s steps(1, end) both; }
+  .hero .big::before { animation: shard-a .9s 1.3s steps(1, end) forwards; }
+  .hero .big::after { animation: shard-b .9s 1.3s steps(1, end) forwards; }
+  .hero .line, .lede, .hero-text .btn { animation: up .7s 2s cubic-bezier(.2,.7,.2,1) both; }
+  .lede { animation-delay: 2.1s; }
+  .hero-text .btn { animation-delay: 2.2s; }
 }
-@keyframes rise { from { opacity: 0; translate: 0 40px; } }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes fill-in { from { opacity: 0; translate: -30px 30px; } }
+@keyframes pop { from { opacity: 0; scale: 0; } }
+@keyframes up { from { opacity: 0; translate: 0 24px; } }
 @keyframes fade { from { opacity: 0; } }
+/* the headline arrives in horizontal slices that snap into place, like the reference's glitch */
+@keyframes slice {
+  0% { clip-path: inset(0 0 100% 0); }
+  12% { clip-path: inset(0 0 62% 0); translate: -18px 0; }
+  24% { clip-path: inset(38% 0 30% 0); translate: 14px 0; }
+  36% { clip-path: inset(0 0 40% 0); translate: -6px 0; }
+  50% { clip-path: inset(20% 0 0 0); translate: 8px 0; }
+  64% { clip-path: inset(0 0 12% 0); translate: -3px 0; }
+  78% { clip-path: inset(0); translate: 2px 0; }
+  100% { clip-path: inset(0); translate: 0 0; }
+}
+@keyframes shard-a {
+  0% { opacity: 1; clip-path: inset(62% 0 18% 0); translate: 26px 0; }
+  24% { clip-path: inset(70% 0 8% 0); translate: -22px 0; }
+  50% { clip-path: inset(8% 0 80% 0); translate: 16px 0; }
+  78% { opacity: 1; clip-path: inset(88% 0 0 0); translate: -6px 0; }
+  100% { opacity: 0; }
+}
+@keyframes shard-b {
+  0% { opacity: .5; clip-path: inset(30% 0 52% 0); translate: -34px 0; color: var(--blue-hi); }
+  36% { clip-path: inset(46% 0 40% 0); translate: 20px 0; }
+  64% { opacity: .5; clip-path: inset(12% 0 82% 0); translate: -10px 0; }
+  100% { opacity: 0; }
+}
 @keyframes pulse { 50% { opacity: .55; } }
+@keyframes ring { 50% { scale: 1.35; opacity: .5; } }
 
 @media (max-width: 900px) {
   .top nav { display: none; }

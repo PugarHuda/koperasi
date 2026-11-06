@@ -1,4 +1,18 @@
 // Reads one Koperasi straight from NEAR (no backend) and renders members, by-laws, work, audit and profit shares.
+// hero scroll progress 0..1 drives the layers fanning out (CSS reads --p)
+const hero = document.querySelector(".hero");
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  let queued = false;
+  addEventListener("scroll", () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      hero.style.setProperty("--p", Math.min(1, scrollY / hero.offsetHeight).toFixed(3));
+      queued = false;
+    });
+  }, { passive: true });
+}
+
 const dep = await (await fetch("deployment.json")).json();
 const testnet = dep.network !== "mainnet";
 const RPCS = testnet
@@ -71,8 +85,9 @@ try {
   $("nodes").innerHTML = shown.map((_, i) => {
     const a = Math.PI * (1.08 + (0.84 * i) / Math.max(1, shown.length - 1));
     const x = core.x + Math.cos(a) * 520, y = core.y + Math.sin(a) * 260 + 40;
-    return tag("line", { x1: core.x, y1: core.y, x2: x, y2: y })
-      + `<circle class="${i % 2 ? "ring" : "dot"}" cx="${x}" cy="${y}" r="${i % 2 ? 11 : 6}"><title>${esc(shown[i][0])}</title></circle>`;
+    // each member wires into the mind in turn: the line draws from the member to the core
+    return tag("line", { x1: x, y1: y, x2: core.x, y2: core.y, pathLength: 1, style: `--n:${i}` })
+      + `<circle class="${i % 2 ? "ring" : "dot"}" style="--n:${i}" cx="${x}" cy="${y}" r="${i % 2 ? 11 : 6}"><title>${esc(shown[i][0])}</title></circle>`;
   }).join("") + tag("circle", { class: "core", cx: core.x, cy: core.y, r: 9 });
 
   // passbook: the co-op's life as ledger lines, newest first
