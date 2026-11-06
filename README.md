@@ -23,9 +23,9 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 | Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet) |
 | The co-op's DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet) (Sputnik v2, role `member`, RoleWeight, threshold 1/2) |
 | Agent account | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, only `record_receipt` / `update_receipt` on the contract |
-| Agent Market listing | [@koperasi](https://market.near.ai) (self-hosted, draft while we test) |
+| Agent Market listing | [@koperasi](https://market.near.ai) (self-hosted) |
 | USDC on testnet | `usdc.fakes.testnet` (anyone can mint, so judges can run the demo) |
-| Web | `web/` (static, reads the contract directly; run below) |
+| Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract straight from NEAR; source in `web/`) |
 
 ## Try it
 
