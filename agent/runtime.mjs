@@ -12,6 +12,8 @@ import path from "node:path";
 import YAML from "yaml";
 import { ROOT, DEPLOYMENT, account, call, sha256, view } from "../scripts/lib.mjs";
 import { market } from "./market.mjs";
+import { recoverPersonal } from "./sig.mjs";
+import { verifyModel } from "./tee.mjs";
 
 const NEARAI = "https://cloud-api.near.ai/v1";
 // ponytail: fixed output and brief limits keep one job's cost bounded before the call; tune with the model's price.
@@ -20,6 +22,32 @@ const MAX_BRIEF_CHARS = 12000;
 const STATE = path.join(ROOT, "agent", ".state.json");
 
 export class ConfigMismatch extends Error {}
+/** The model's servers did not prove they are genuine TEEs, or a response was not signed by one: no job is sent. */
+export class NotVerified extends Error {}
+
+/**
+ * Can the co-op's NEAR AI organization pay for inference right now? A 1-token call: 402 means no credits (it costs
+ * nothing then), otherwise it costs well under a millionth of a dollar. The balance API takes only web sessions.
+ */
+export async function canPay(model, key = process.env.NEARAI_API_KEY) {
+  const r = await fetch(`${NEARAI}/chat/completions`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: "ok" }], max_tokens: 1 }),
+  });
+  if (r.status === 402) return { ok: false, reason: (await r.json().catch(() => ({})))?.error?.message ?? "no credits" };
+  return r.ok ? { ok: true } : { ok: false, reason: `HTTP ${r.status}` };
+}
+
+const teeCache = new Map(); // model → verification, re-checked every hour
+export async function verifiedTee(model) {
+  const hit = teeCache.get(model);
+  if (hit && Date.now() - Date.parse(hit.at) < 3_600_000) return hit;
+  const r = await verifyModel(model);
+  if (!r.ok) throw new NotVerified(`${model} is not verified as running in a TEE: ${r.reason}`);
+  teeCache.set(model, r);
+  return r;
+}
 
 /** Reads the config file and checks it against the hash on-chain. Throws ConfigMismatch if they differ. */
 export async function loadApprovedConfig(dep, file = dep.configUri) {
@@ -47,21 +75,25 @@ async function infer(config, job, capMicroUsd) {
       costMicroUsd: 0,
     };
   }
+  const tee = await verifiedTee(config.model); // no job leaves this machine for an unverified model
+  const body = JSON.stringify({
+    model: config.model,
+    messages: [
+      { role: "system", content: config.system_prompt },
+      { role: "user", content: `Job: ${String(job.title).slice(0, 300)}\n\n${String(job.description)}`.slice(0, MAX_BRIEF_CHARS) },
+    ],
+    max_tokens: MAX_OUTPUT_TOKENS,
+  });
   const res = await fetch(`${NEARAI}/chat/completions`, {
     method: "POST",
-    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: "system", content: config.system_prompt },
-        { role: "user", content: `Job: ${String(job.title).slice(0, 300)}\n\n${String(job.description)}`.slice(0, MAX_BRIEF_CHARS) },
-      ],
-      max_tokens: MAX_OUTPUT_TOKENS,
-    }),
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "accept-encoding": "identity" },
+    body,
   });
-  if (!res.ok) throw new Error(`NEAR AI Cloud ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const raw = await res.text();
+  if (!res.ok) throw new Error(`NEAR AI Cloud ${res.status}: ${raw.slice(0, 200)}`);
   const inferenceId = res.headers.get("inference-id");
-  const out = await res.json();
+  const out = JSON.parse(raw);
+  const signature = await checkSignature(out.id, config.model, body, raw, tee, key);
   // Fail closed: a cost we cannot read is booked at the per-job cap, never as free.
   let costMicroUsd = capMicroUsd;
   if (inferenceId) {
@@ -73,7 +105,25 @@ async function infer(config, job, capMicroUsd) {
     const nano = JSON.stringify(c ?? {}).match(/"costNanoUsd":\s*(\d+)/);
     if (nano) costMicroUsd = Math.ceil(Number(nano[1]) / 1000);
   }
-  return { text: out.choices[0].message.content, costMicroUsd, inferenceId };
+  return { text: out.choices[0].message.content, costMicroUsd, inferenceId, signature };
+}
+
+/**
+ * The response must be signed by a server whose TEE we verified: the signed text ends with
+ * sha256(request body):sha256(response body), and the EIP-191 signer is an attested signing address.
+ */
+async function checkSignature(chatId, model, reqBody, respBody, tee, key) {
+  const s = await fetch(`${NEARAI}/signature/${encodeURIComponent(chatId)}?model=${encodeURIComponent(model)}&signing_algo=ecdsa`, {
+    headers: { authorization: `Bearer ${key}` },
+  }).then((r) => (r.ok ? r.json() : Promise.reject(new NotVerified(`signature for ${chatId}: HTTP ${r.status}`))));
+  const hashes = `${sha256(Buffer.from(reqBody))}:${sha256(Buffer.from(respBody))}`;
+  const signer = recoverPersonal(s.text, s.signature).toLowerCase();
+  const attested = [tee.gateway, ...tee.models].map((x) => x?.signing_address?.toLowerCase()).filter(Boolean);
+  if (!s.text.endsWith(hashes)) throw new NotVerified(`response ${chatId}: signed hashes do not match what was sent and received`);
+  if (signer !== s.signing_address.toLowerCase() || !attested.includes(signer)) {
+    throw new NotVerified(`response ${chatId}: signed by ${signer}, which is not an attested TEE signing address`);
+  }
+  return { chat_id: chatId, signer, kind: s.signature_kind ?? null };
 }
 
 const usdcUnits = (s) => BigInt(Math.round(Number(s) * 1e6));
@@ -126,6 +176,18 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
       if (halted || state.spentMicroUsd + capJob > capDay) {
         log(`inference budget left today: ${(capDay - state.spentMicroUsd) / 1e6} USD; not starting "${job.title}"`);
         continue;
+      }
+      if (process.env.NEARAI_API_KEY) {
+        try {
+          await verifiedTee(config.model); // prove the model runs in a TEE before accepting the work
+          const pay = await canPay(config.model); // and that the co-op can pay for it
+          if (!pay.ok) throw new NotVerified(`NEAR AI credits: ${pay.reason}`);
+        } catch (e) {
+          if (!(e instanceof NotVerified)) throw e;
+          log(`not starting "${job.title}": ${e.message}`);
+          halted = true;
+          continue;
+        }
       }
       await m.start(a.assignmentId);
       const { text, costMicroUsd } = await infer(config, job, capJob);

@@ -136,12 +136,12 @@ fn join_twice_fails() {
 }
 
 #[test]
-fn cancel_join_removes_pending() {
+fn cancel_join_waits_for_the_dao_before_removing_pending() {
     let mut k = setup();
     as_(&acc("alice.testnet"), near(1));
     k.join();
-    k.cancel_join();
-    assert!(!k.is_pending(acc("alice.testnet")));
+    let _ = k.cancel_join();
+    assert!(k.is_pending(acc("alice.testnet")), "nothing changes until the DAO policy is read");
 }
 
 // ---------- members' vote ----------
@@ -462,4 +462,94 @@ fn failed_forward_can_be_flushed() {
     as_(&acc("anyone.testnet"), near(0));
     k.flush_to_dao();
     assert_eq!(k.get_info().unforwarded.0, 0);
+}
+
+// ---------- cancel_join cannot keep a vote without a deposit ----------
+
+#[test]
+fn cancel_before_the_vote_refunds() {
+    let mut k = setup();
+    as_(&acc("alice.testnet"), near(1));
+    k.join();
+    let _ = k.cancel_join();
+    as_(&acc("koperasi.testnet"), near(0));
+    k.on_cancel_policy(acc("alice.testnet"), Ok(policy(&[])));
+    assert!(!k.is_pending(acc("alice.testnet")));
+    assert!(k.get_member(acc("alice.testnet")).is_none());
+}
+
+#[test]
+fn cancel_after_the_vote_admits_instead_of_refunding() {
+    let mut k = setup();
+    as_(&acc("alice.testnet"), near(1));
+    k.join();
+    let _ = k.cancel_join();
+    as_(&acc("koperasi.testnet"), near(0));
+    k.on_cancel_policy(acc("alice.testnet"), Ok(policy(&["alice.testnet"])));
+    let m = k.get_member(acc("alice.testnet")).expect("admitted");
+    assert_eq!(m.join_deposit, near(1), "the deposit stays locked as a member's deposit");
+    assert!(!k.is_pending(acc("alice.testnet")));
+}
+
+#[test]
+#[should_panic(expected = "no pending join")]
+fn cancel_without_a_request_fails() {
+    let mut k = setup();
+    as_(&acc("alice.testnet"), near(0));
+    let _ = k.cancel_join();
+}
+
+#[test]
+#[should_panic(expected = "could not read DAO policy")]
+fn cancel_keeps_the_deposit_when_the_dao_cannot_be_read() {
+    let mut k = setup();
+    as_(&acc("alice.testnet"), near(1));
+    k.join();
+    as_(&acc("koperasi.testnet"), near(0));
+    k.on_cancel_policy(acc("alice.testnet"), Err(PromiseError::Failed));
+}
+
+// ---------- savings from a real staking pool ----------
+
+#[test]
+fn staking_pool_is_set_by_the_dao_and_savings_follow_the_stake() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    assert_eq!(k.get_staking_pool(), None);
+    as_(&dao(), near(0));
+    k.set_staking_pool(Some(acc("pool.testnet")));
+    assert_eq!(k.get_staking_pool(), Some(acc("pool.testnet")));
+    as_(&acc("bob.testnet"), near(0));
+    let _ = k.sync_savings(acc("alice.testnet"));
+    as_(&acc("koperasi.testnet"), near(0));
+    k.on_staked(acc("alice.testnet"), Ok(U128(7 * 10u128.pow(24))));
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings, U128(7 * 10u128.pow(24)));
+    as_(&dao(), near(0));
+    k.set_staking_pool(None);
+    assert_eq!(k.get_staking_pool(), None);
+}
+
+#[test]
+#[should_panic(expected = "only the DAO")]
+fn only_the_dao_chooses_the_staking_pool() {
+    let mut k = setup();
+    as_(&acc("alice.testnet"), near(0));
+    k.set_staking_pool(Some(acc("pool.testnet")));
+}
+
+#[test]
+#[should_panic(expected = "the DAO has not chosen a staking pool")]
+fn sync_savings_needs_a_pool() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    let _ = k.sync_savings(acc("alice.testnet"));
+}
+
+#[test]
+#[should_panic(expected = "could not read the staking pool")]
+fn savings_unchanged_when_the_pool_cannot_be_read() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    as_(&acc("koperasi.testnet"), near(0));
+    k.on_staked(acc("alice.testnet"), Err(PromiseError::Failed));
 }

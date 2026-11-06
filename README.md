@@ -38,9 +38,10 @@ Requirements: Node 22+. Rust + `cargo-near` only to rebuild the contract.
 cd contract && cargo test
 ```
 
-See: `36 passed`. They cover membership from the DAO policy, by-laws only by vote, receipts refused under an
+See: `44 passed`. They cover membership from the DAO policy, by-laws only by vote, receipts refused under an
 unapproved config, receipt status rules, the audit net of the 5% market fee, the profit share with no money lost to
-rounding, claim rollback, steward bond and slash, pause.
+rounding, claim rollback, steward bond and slash, pause, `cancel_join` admitting (not refunding) someone the DAO already
+voted in, and savings read from the staking pool.
 
 > Windows without NASM: `AWS_LC_SYS_PREBUILT_NASM=1 cargo test`.
 
@@ -102,12 +103,39 @@ cp .env.example .env    # KOP_MARKET_TOKEN=aat_… from your agent's page, NEARA
 node agent/runtime.mjs  # one pass; --loop to keep polling every 45 s
 ```
 
-It checks the by-laws hash against the contract first and exits with `REFUSED: config_mismatch` if they differ.
+Before it accepts any job it checks, and refuses on any failure:
+
+1. the by-laws file hashes to what the members voted on-chain (`REFUSED: config_mismatch` otherwise);
+2. **the by-laws model runs in genuine TEEs** (`agent/tee.mjs`, the algorithm of NEAR AI's official verifier): the
+   Intel TDX quotes of the gateway and the model servers verify against Intel's collateral (`@phala/dcap-qvl-node`),
+   their `report_data` binds each server's signing address and a fresh 32-byte nonce, `sha256(app_compose)` matches
+   `mr_config_id`, and NVIDIA NRAS passes the GPU evidence carrying the same nonce;
+3. the co-op's NEAR AI organization can pay (a 1-token call; 402 means no credits).
+
+After each inference it fetches the response signature and requires that the signed text ends with
+`sha256(request):sha256(response)` and that the EIP-191 signer is one of the attested signing addresses
+(`agent/sig.mjs`, with a self-check: `node agent/sig.mjs`).
+
+```sh
+node agent/tee.mjs z-ai/glm-5.3-flash   # see: TDX UpToDate | binds address true | binds our nonce true | NVIDIA true → VERIFIED
+```
+
+The result is committed to [`evidence/`](evidence) and shown on the live page; a GitHub Action re-checks it daily.
+
+### 5. Keep the co-op running
+
+| What | Command | Automated |
+|---|---|---|
+| Members vote in people who paid the deposit and asked from the page (max 3 a run), sync them at once, vote out anyone in the role without a deposit | `node scripts/approve-requests.mjs` | `.github/workflows/members.yml`, every 30 min, once the `KOP_MEMBER_KEYS` secret holds the demo members' testnet keys |
+| Refresh every member's savings from the staking pool | `node scripts/sync-savings.mjs` | same workflow |
+| Re-prove the by-laws model runs in TEEs | `node agent/tee.mjs <model>` | `.github/workflows/tee.yml`, daily, commits `evidence/` |
+| Propose new by-laws | `node scripts/propose-bylaws.mjs config/config.vN.yaml <member> <points> "why" [voters…]` | by vote only |
+| Upgrade the contract code (state layout unchanged; checks members, receipts and by-laws survive) | `node scripts/upgrade.mjs` | no |
 
 ## How it works
 
 ```
- members ── Sputnik DAO (role member, 1 member 1 vote) ── treasury in USDC, visible in Trezu
+ members ── Sputnik DAO (role member, 1 member 1 vote) ── treasury in USDC (Trezu shows it once the co-op moves to mainnet)
                │ FunctionCall proposals: set_config, award_points, set_savings, set_steward, slash_steward, share
                ▼
          koperasi contract ── by-laws hash ── receipts ── audit ── profit share (claim yourself)
@@ -122,7 +150,7 @@ It checks the by-laws hash against the contract first and exits with `REFUSED: c
 |---|---|
 | Member | role `member` in the Sputnik DAO; the contract reads the DAO policy and keeps no member list of its own to trust |
 | Join deposit | refundable, paid on `join`, returned when the DAO removes the member |
-| Savings | NEAR the member staked for inference; weights the profit share (`set_savings`) |
+| Savings | NEAR the member staked in the pool the DAO chose (`set_staking_pool`), read on-chain by `sync_savings`; weights the profit share |
 | Members' meeting | DAO proposals and votes |
 | By-laws | the agent config; its sha256 is the only one the contract accepts receipts for (`set_config`) |
 | Contribution points | awarded by vote for by-law or tool work (`award_points`); reset after each profit share |
@@ -156,16 +184,23 @@ Rules in plain words: [`RULES.md`](RULES.md).
    members slash the bond. The steward is trusted for at most what they owe minus their bond.
 2. **The runtime.** The config check runs in the runtime the steward operates. The contract refuses receipts under
    any other hash, so a runtime that lies must also lie in public receipts; it cannot quietly run unapproved by-laws
-   and still record work. Moving the runtime into a TEE (OutLayer) would make the check provable; not done yet.
-3. **Savings.** NEAR AI Cloud gives an organization $2.00 of credits a month per 100 NEAR staked (its Credits page).
-   The contract takes savings weights from a DAO vote (`set_savings`), not from reading the staking contract.
+   and still record work. The *inference* is provable (TEE attestation and signed responses, above); the runtime
+   itself is not in a TEE. OutLayer runs WASI WASM in Intel TDX, which would need the runtime rewritten for WASI.
+3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
+   #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
+   NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
+4. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
+   same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
+   code. It is not listed for hire until the co-op's NEAR AI organization has credits, so no buyer can hire an agent
+   that cannot deliver.
 4. **Demand.** Agent Market is young. The demo uses a local stand-in with the same API; the agent is listed on the
    real market and talks to the real API with the same code.
 
 ## Built with
 
-near-sdk 5 (Rust), Sputnik DAO v2, NEAR AI Agent Market REST API, NEAR AI Cloud (OpenAI-compatible, TEE
-attestation, billing), near-api-js 7. AI help: Claude Code wrote much of the code with the builder; every step above
+near-sdk 5 (Rust), Sputnik DAO v2, a NEAR testnet staking pool, NEAR AI Agent Market REST API, NEAR AI Cloud
+(OpenAI-compatible, TEE attestation and response signatures, billing), `@phala/dcap-qvl-node` (Intel TDX quotes),
+NVIDIA NRAS, NEAR Connect (`@hot-labs/near-connect`, wallets on the page), near-api-js 7, GitHub Actions. AI help: Claude Code wrote much of the code with the builder; every step above
 was run on testnet.
 
 ## License

@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Koperasi: an AI agent owned by its members</title>
   <meta name="description" content="An AI agent owned and governed by a co-op of its members on NEAR. One member, one vote. Its config changes only by vote; its earnings are shared with the members." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Koperasi: an AI agent owned by its members" />
+  <meta property="og:description" content="A Sputnik DAO co-op owns one AI agent on NEAR. Members vote its by-laws, the agent runs only the approved version in a verified TEE, and earnings are shared by savings and contribution." />
+  <meta property="og:url" content="https://koperasi-kohl.vercel.app/" />
+  <meta property="og:image" content="https://koperasi-kohl.vercel.app/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -79,6 +86,7 @@
           <li>
             <b>The agent obeys</b>
             <p id="p-agent">…</p>
+            <p id="p-tee" class="p-tee"></p>
           </li>
         </ol>
         <p class="demo-note">Demo co-op on NEAR testnet: the members are demo accounts, and the jobs so far came from the demo market.</p>
@@ -99,7 +107,7 @@
         <li><a href="#bylaws"><b>Vote the by-laws</b><span>Prompt, model, price and caps change only by a vote, pinned by hash.</span><small>koperasi contract</small></a></li>
         <li><a href="#work"><b>Work</b><span>The agent bids, delivers and records one receipt per paid job.</span><small>Agent Market, NEAR AI Cloud</small></a></li>
         <li><a href="#audit"><b>Audit</b><span>Every payout must reach the co-op, or the steward's bond is slashed.</span><small>USDC on NEAR</small></a></li>
-        <li><a href="#shares"><b>Share</b><span>The members vote a profit share and each claims their own.</span><small>DAO treasury, Trezu</small></a></li>
+        <li><a href="#shares"><b>Share</b><span>The members vote a profit share and each claims their own.</span><small>Sputnik DAO treasury</small></a></li>
       </ol>
     </section>
 
@@ -109,6 +117,7 @@
         <div>
           <h2>Every member<br />holds <span class="dim">one vote.</span></h2>
           <p class="sub">Membership is the <code>member</code> role of the co-op's Sputnik DAO; the contract reads it straight from the DAO. Savings are the NEAR each member staked for the agent's inference; contribution points are what they built for it this period.</p>
+          <p class="pool-line" id="pool-line"></p>
           <label class="pick" for="member-pick">Select member
             <select id="member-pick"></select>
           </label>

@@ -84,7 +84,20 @@ try {
     const text = new TextDecoder().decode(raw);
     const get = (re) => esc(text.match(re)?.[1]?.trim() ?? "");
     termsBox.innerHTML += `<div><dt>Charges per job</dt><dd>${get(/^\s+price_usdc:\s*([\d.]+)/m)} USDC</dd></div>`
-      + `<div><dt>AI spend cap</dt><dd>$${get(/max_inference_per_job_usd:\s*([\d.]+)/)} a job, $${get(/max_inference_per_day_usd:\s*([\d.]+)/)} a day</dd></div>`;
+      + `<div><dt>AI spend cap</dt><dd>$${get(/max_inference_per_job_usd:\s*([\d.]+)/)} a job, $${get(/max_inference_per_day_usd:\s*([\d.]+)/)} a day</dd></div>`
+      + `<div class="wide"><dt>Model</dt><dd>${get(/^model:\s*"?([^"\n]+)/m)}</dd></div>`;
+    // the latest proof that this model runs in genuine TEEs (agent/tee.mjs; re-checked by CI)
+    const model = text.match(/^model:\s*"?([^"\n]+)/m)?.[1]?.trim();
+    if (!model) return;
+    const file = `tee-${model.replace(/[^a-z0-9.-]/gi, "_")}.json`;
+    const ev = await fetch(`${RAW}evidence/${file}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const tee = $("p-tee");
+    if (!ev) { tee.textContent = `No TEE check published yet for ${model}.`; return; }
+    const m = ev.models?.[0] ?? {};
+    const when = new Date(ev.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+    tee.innerHTML = ev.ok
+      ? `<span class="state on">TEE verified</span> ${esc(when)} UTC: Intel TDX ${esc(m.tdx_status ?? "")}, NVIDIA GPU ${m.gpu?.verdict === true ? "pass" : "unknown"}, bound to a fresh nonce. The agent re-checks before every job and refuses unverified models. <a href="https://github.com/PugarHuda/koperasi/blob/main/evidence/${esc(file)}">Evidence</a>`
+      : `<span class="state off">TEE not verified</span> ${esc(when)} UTC: ${esc(ev.reason ?? "a check failed")}. The agent will not send jobs to this model.`;
   }).catch(() => {});
   const paidJobs = receipts.filter((x) => x.status === "Paid").length;
   $("p-agent").innerHTML = info.paused
@@ -130,6 +143,10 @@ try {
   pick.onchange = showMember;
   showMember();
 
+  const pool = await view(dep.contract, "get_staking_pool").catch(() => null);
+  $("pool-line").innerHTML = pool
+    ? `Savings are read on-chain from each member's stake in <a href="${explorer(pool)}">${esc(pool)}</a>, the pool the members chose. Anyone can call <code>sync_savings</code> to refresh them.`
+    : "Savings are set by a members' vote (set_savings).";
   rows($("member-table").tBodies[0], members.map(([a, m], i) => `<tr>
       <td>${esc(a)}${a === info.steward ? ` <span class="muted">(steward)</span>` : ""}</td>
       <td class="num" data-label="Savings staked">${nearAmt(m.savings)}</td>
@@ -214,7 +231,7 @@ try {
   $("share-rule").textContent = `The members vote each profit share. ${r.reserve_bps / 100}% stays in the DAO as the co-op's reserve; the rest is split by savings and by contribution, and each member claims their own.`;
   $("plans").innerHTML = `
     <div class="plan"><h3>Co-op<br>reserve</h3><p class="for">Stays in the DAO treasury</p><span class="pct">${r.reserve_bps / 100}%</span>
-      <ul><li>Back to the Sputnik DAO</li><li>Spent only by a vote</li><li>Visible in Trezu</li></ul></div>
+      <ul><li>Back to the Sputnik DAO</li><li>Spent only by a vote</li><li>Readable by anyone on-chain</li></ul></div>
     <div class="plan members"><h3>Members'<br>share</h3><p class="for">Claimed by each member</p><span class="pct">${(r.savings_bps + r.points_bps) / 100}%</span>
       <ul><li>${r.savings_bps / 100}% by savings staked</li><li>${r.points_bps / 100}% by contribution points</li><li>No money lost to rounding</li></ul></div>`;
   rows($("periods").tBodies[0], [...periods].reverse().map((p) => `<tr>

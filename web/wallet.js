@@ -27,8 +27,11 @@ const kindOf = (p) => (typeof p.kind === "string" ? p.kind : Object.keys(p.kind)
 // what a proposal really does, built from its kind; the proposer's description is shown apart, as their claim
 const yocto = (y) => (BigInt(y || 0) > 0n ? `, attaches ${nearAmt(y)} NEAR` : "");
 const argsOf = (b64) => {
-  try { return JSON.stringify(JSON.parse(atob(b64))); } catch { return "(binary args)"; }
+  try { return JSON.stringify(JSON.parse(atob(b64)), null, 1); } catch { return null; }
 };
+// a proposal whose args we cannot show in full is not voted on from here
+const opaque = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.actions.some((a) => argsOf(a.args) === null)
+  || !["AddMemberToRole", "RemoveMemberFromRole", "Transfer", "FunctionCall"].includes(kindOf(p));
 const describe = (p) => {
   const k = kindOf(p);
   if (k === "AddMemberToRole") return `Add ${p.kind.AddMemberToRole.member_id} to role ${p.kind.AddMemberToRole.role}`;
@@ -36,7 +39,7 @@ const describe = (p) => {
   if (k === "Transfer") return `Transfer ${p.kind.Transfer.amount} of ${p.kind.Transfer.token_id || "NEAR"} to ${p.kind.Transfer.receiver_id}`;
   if (k === "FunctionCall") {
     const f = p.kind.FunctionCall;
-    return f.actions.map((a) => `Call ${f.receiver_id} ${a.method_name} ${argsOf(a.args).slice(0, 160)}${yocto(a.deposit)}`).join("; ");
+    return f.actions.map((a) => `Call ${f.receiver_id} ${a.method_name}${yocto(a.deposit)}\n${argsOf(a.args) ?? "(binary args: inspect in the DAO)"}`).join("\n\n");
   }
   return `${k} (open the DAO to inspect)`;
 };
@@ -55,8 +58,10 @@ async function load() {
   const needed = Math.floor((group.length * num) / den) + 1;
   const request = [...proposals].reverse().find((p) => kindOf(p) === "AddMemberToRole" && p.kind.AddMemberToRole.member_id === me);
   const claimable = member ? await view(dep.contract, "get_claimable", { account_id: me }) : "0";
+  const pool = member ? await view(dep.contract, "get_staking_pool") : null;
+  const staked = pool ? await view(pool, "get_account_staked_balance", { account_id: me }).catch(() => "0") : "0";
   const usdcReady = member ? await view(dep.usdc, "storage_balance_of", { account_id: me }).catch(() => null) : null;
-  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady };
+  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, pool, staked };
 }
 
 // each button runs one transaction, then the panel re-reads the chain
@@ -128,11 +133,23 @@ async function render() {
         ? `<button type="button" class="btn" id="w-claim">Claim ${usdc(s.claimable)} USDC</button>`
         : `<p class="small">To receive USDC, register your account with the token first (a one-time 0.0125 NEAR storage deposit).</p>
            <button type="button" class="btn" id="w-usdc">Register for USDC</button>`) : ""}
+      ${s.pool ? `<h3 class="jh">Savings: your stake for the agent's inference</h3>
+      <p class="small">The members chose <a href="${explorer(s.pool)}">${esc(s.pool)}</a>. Your stake there is your savings: it weighs your
+        profit share, and its rewards are what pay for inference. The NEAR stays yours; unstake from the pool any time.</p>
+      <div class="me-card two">
+        <div><span>Staked in the pool now</span><strong>${nearAmt(s.staked)} NEAR</strong></div>
+        <div><span>Counted as savings</span><strong>${nearAmt(s.member.savings)} NEAR</strong></div>
+      </div>
+      <div class="stake-row"><label>Stake <input id="w-amt" type="number" min="1" step="1" value="1" inputmode="numeric"> NEAR</label>
+        <button type="button" class="btn" id="w-stake">Stake</button>
+        <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}
       <h3 class="jh">Open proposals</h3>
       ${open.length ? `<ul class="props">${open.map((p) => {
         const mine = p.votes[me];
-        return `<li><span><strong>#${p.id}</strong> <code class="does">${esc(describe(p))}</code>${p.description
+        const hidden = opaque(p);
+        return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(describe(p))}</pre>${p.description
           ? `<span class="claim">Proposer says: “${esc(p.description.slice(0, 200))}”</span>` : ""}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
+          : hidden ? `<a class="small-link" href="${explorer(dep.dao)}">Inspect in the DAO to vote</a>`
           : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">Approve</button>
              <button type="button" class="btn ghost small" data-vote="VoteReject" data-id="${p.id}">Reject</button></span>`}</li>`;
       }).join("")}</ul>` : `<p class="small">Nothing to vote on right now.</p>`}`;
@@ -149,6 +166,12 @@ async function render() {
   on("w-sync", "Sync membership", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
   on("w-cancel", "Cancel", () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));
   on("w-usdc", "USDC registration", () => send(dep.usdc, "storage_deposit", { account_id: me }, { deposit: 12_500_000_000_000_000_000_000n, tgas: 30 }));
+  on("w-stake", "Stake", () => {
+    const n = Math.floor(Number($("w-amt").value));
+    if (!(n >= 1 && n <= 1000)) throw new Error("stake a whole number of NEAR, 1 to 1000");
+    return send(s.pool, "deposit_and_stake", {}, { deposit: BigInt(n) * 10n ** 24n, tgas: 100 });
+  });
+  on("w-sync-sav", "Savings sync", () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
   on("w-claim", "Claim", () => send(dep.contract, "claim_share", {}, { tgas: 60 }));
   box.querySelectorAll("[data-vote]").forEach((b) => {
     b.onclick = () => act(b.dataset.vote === "VoteApprove" ? "Approve" : "Reject", async () => {

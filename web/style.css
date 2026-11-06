@@ -78,7 +78,9 @@ code { font-size: .92em; background: #eceef6; padding: .05em .35em; border-radiu
 .pterms { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 0; background: rgba(120,150,255,.2); border: 1px solid rgba(120,150,255,.2); }
 .pterms div { background: rgba(3, 8, 32, .9); padding: .45rem .6rem; }
 .pterms dt { font-size: .68rem; color: rgba(255,255,255,.55); }
-.pterms dd { margin: .1rem 0 0; font-size: .82rem; font-weight: 600; }
+.pterms dd { margin: .1rem 0 0; font-size: .82rem; font-weight: 600; overflow-wrap: anywhere; }
+.pterms .wide { grid-column: 1 / -1; }
+.p-tee a { color: #9fb6ff; }
 .lock { display: inline-flex; align-items: center; gap: .45rem; margin-top: .6rem; font-size: .8rem; color: #ffd27a; text-decoration: none; }
 .lock:hover { text-decoration: underline; }
 .lock-ico { width: .7rem; height: .55rem; border: 2px solid currentColor; border-radius: 2px; position: relative; margin-top: .3rem; }
@@ -96,6 +98,8 @@ code { font-size: .92em; background: #eceef6; padding: .05em .35em; border-radiu
 h2 { margin: 0 0 1.6rem; font: 700 clamp(3rem, 7vw, 5.6rem)/.9 var(--display); text-transform: uppercase; letter-spacing: -.005em; }
 h2 .dim { color: var(--grey); }
 .sub { max-width: 26rem; color: var(--muted); margin: 0 0 2rem; }
+.pool-line { max-width: 26rem; margin: -1rem 0 2rem; font-size: .86rem; color: var(--muted); }
+.pool-line a { color: var(--blue); }
 
 /* members: pick one, see their three numbers */
 .pick { display: grid; gap: .5rem; font-size: .9rem; max-width: 18rem; }
@@ -267,6 +271,10 @@ h2 .dim { color: var(--grey); }
 .note-line { margin: 1rem 0 0; font-size: .86rem; padding: .7rem .9rem; background: rgba(255,255,255,.06); border-left: 3px solid var(--blue-hi); }
 .me-card { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: rgba(120,150,255,.25); border: 1px solid rgba(120,150,255,.25); margin-bottom: 1rem; }
 .me-card div { background: rgba(3,8,32,.95); padding: .8rem 1rem; }
+.me-card.two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: .6rem; }
+.stake-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.stake-row input { width: 5rem; font: inherit; padding: .5rem; background: #000; color: #fff; border: 1px solid rgba(120,150,255,.4); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
 .me-card span { display: block; font-size: .74rem; color: rgba(255,255,255,.6); }
 .me-card strong { font: 700 1.5rem/1.1 var(--display); }
 .jh { font: 700 1.3rem var(--display); text-transform: uppercase; margin: 1.4rem 0 .6rem; }
@@ -274,7 +282,7 @@ h2 .dim { color: var(--grey); }
 .props li { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; padding: .6rem .8rem; background: rgba(255,255,255,.05); font-size: .86rem; }
 .props em { font-style: normal; color: #7fe0a6; font-size: .8rem; }
 .props li > span:first-child { display: grid; gap: .3rem; min-width: 0; flex: 1 1 18rem; }
-.props .does { font-size: .76rem; background: rgba(0,0,0,.35); color: #dfe6ff; padding: .3rem .45rem; overflow-wrap: anywhere; }
+.props .does { margin: 0; font-size: .74rem; background: rgba(0,0,0,.35); color: #dfe6ff; padding: .4rem .5rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow: auto; }
 .props .claim { font-size: .76rem; color: rgba(255,255,255,.55); }
 .vote-btns { display: flex; gap: .4rem; }
 .btn.small { padding: .4em .9em; font-size: .82rem; }

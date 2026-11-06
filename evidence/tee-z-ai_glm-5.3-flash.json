@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "model": "z-ai/glm-5.3-flash",
+  "at": "2026-11-06T17:21:02.204Z",
+  "nonce": "8803b509dcfa8841bc3d3bca5db3553d6dc9834a2d118db53d57d9bbfe076b3f",
+  "gateway": {
+    "signing_address": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
+    "signing_algo": "ecdsa",
+    "tdx_status": "UpToDate",
+    "binds_address": true,
+    "binds_nonce": true,
+    "compose_sha256": "dc14d62b75ffde97f64fdba40c6be681b6818eb12312e1adee60b3cd4de2533b",
+    "compose_matches": true,
+    "gpu": null,
+    "ok": true
+  },
+  "models": [
+    {
+      "signing_address": "0x3b753b4406613c5e70ae640508632b600424fa0c",
+      "signing_algo": "ecdsa",
+      "tdx_status": "UpToDate",
+      "binds_address": true,
+      "binds_nonce": true,
+      "compose_sha256": "5f7ebd85cf1f480a118f75dd10fd0cb277e4ddbb23845f1c20d8ea0f1e87efa6",
+      "compose_matches": true,
+      "gpu": {
+        "ok": true,
+        "verdict": true,
+        "nonceMatches": true
+      },
+      "ok": true
+    }
+  ],
+  "reason": null
+}

@@ -36,6 +36,16 @@ trait SputnikDao {
     fn get_policy(&self) -> Value;
 }
 
+#[ext_contract(ext_pool)]
+#[allow(dead_code)]
+trait StakingPool {
+    fn get_account_staked_balance(&self, account_id: AccountId) -> U128;
+}
+
+/// The staking pool members stake in for inference credits ("savings"), chosen by the DAO.
+// ponytail: kept in its own storage key instead of a struct field, so the upgrade needs no state migration.
+const KEY_STAKING_POOL: &[u8] = b"staking_pool";
+
 #[derive(BorshStorageKey)]
 #[near]
 enum Key {
@@ -253,11 +263,26 @@ impl Koperasi {
         }
     }
 
-    /// Withdraw a join request the DAO has not accepted yet.
-    pub fn cancel_join(&mut self) {
+    /// Withdraw a join request the DAO has not accepted yet. If the members already voted you in, this admits you
+    /// instead and keeps the deposit as your member's deposit: nobody can hold a vote in the DAO without one.
+    pub fn cancel_join(&mut self) -> Promise {
         let who = env::predecessor_account_id();
-        let join_deposit = self.pending.remove(&who).unwrap_or_else(|| env::panic_str("no pending join"));
-        let _ = Promise::new(who).transfer(join_deposit);
+        require!(self.pending.contains_key(&who), "no pending join");
+        ext_dao::ext(self.dao_id.clone())
+            .with_static_gas(GAS_VIEW)
+            .get_policy()
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_cancel_policy(who))
+    }
+
+    #[private]
+    pub fn on_cancel_policy(&mut self, account_id: AccountId, #[callback_result] policy: Result<Value, PromiseError>) {
+        let policy = policy.unwrap_or_else(|_| env::panic_str("could not read DAO policy"));
+        if role_has(&policy, MEMBER_ROLE, &account_id) {
+            log!("{} was already voted in: admitted instead of refunded", account_id);
+            self.apply_membership(account_id, true);
+        } else if let Some(join_deposit) = self.pending.remove(&account_id) {
+            let _ = Promise::new(account_id).transfer(join_deposit);
+        }
     }
 
     /// Read the DAO policy and admit (pending → member) or release (member removed from role → refund join_deposit).
@@ -321,6 +346,42 @@ impl Koperasi {
         self.assert_dao();
         for (a, s) in entries {
             self.members.get_mut(&a).unwrap_or_else(|| env::panic_str("not a member")).savings = s;
+        }
+    }
+
+    /// Choose the staking pool whose stake counts as savings (None: savings only by `set_savings` votes).
+    pub fn set_staking_pool(&mut self, pool: Option<AccountId>) {
+        self.assert_dao();
+        match pool {
+            Some(p) => {
+                env::storage_write(KEY_STAKING_POOL, p.as_bytes());
+            }
+            None => {
+                env::storage_remove(KEY_STAKING_POOL);
+            }
+        }
+    }
+
+    pub fn get_staking_pool(&self) -> Option<AccountId> {
+        env::storage_read(KEY_STAKING_POOL).and_then(|b| String::from_utf8(b).ok()?.parse().ok())
+    }
+
+    /// Anyone can call: reads the member's stake in the co-op's staking pool on-chain and makes it their savings.
+    pub fn sync_savings(&mut self, account_id: AccountId) -> Promise {
+        require!(self.members.contains_key(&account_id), "not a member");
+        let pool = self.get_staking_pool().unwrap_or_else(|| env::panic_str("the DAO has not chosen a staking pool"));
+        ext_pool::ext(pool)
+            .with_static_gas(GAS_VIEW)
+            .get_account_staked_balance(account_id.clone())
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_staked(account_id))
+    }
+
+    #[private]
+    pub fn on_staked(&mut self, account_id: AccountId, #[callback_result] staked: Result<U128, PromiseError>) {
+        let staked = staked.unwrap_or_else(|_| env::panic_str("could not read the staking pool"));
+        if let Some(m) = self.members.get_mut(&account_id) {
+            m.savings = staked;
+            log!("savings of {}: {} yocto staked", account_id, staked.0);
         }
     }
 

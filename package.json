@@ -5,10 +5,17 @@
   "scripts": {
     "test": "cd contract && cargo test",
     "deploy": "node scripts/deploy.mjs",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
+    "@phala/dcap-qvl-node": "^0.3.3",
     "near-api-js": "^7.4.0",
     "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
   }
 }

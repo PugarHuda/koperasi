@@ -1,0 +1,30 @@
+# The demo members' duties on the showcase co-op (testnet): vote in people who paid the join deposit and asked from the
+# web page, vote out anyone holding the role without a deposit, and refresh savings from the staking pool.
+# Secret KOP_MEMBER_KEYS: a JSON array of {account_id, private_key} for the demo members (testnet accounts only).
+name: members
+on:
+  schedule: [{ cron: "*/30 * * * *" }]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: { group: members, cancel-in-progress: false }
+jobs:
+  duties:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Load member keys
+        id: keys
+        env: { KEYS: "${{ secrets.KOP_MEMBER_KEYS }}" }
+        run: |
+          if [ -z "$KEYS" ]; then echo "KOP_MEMBER_KEYS is not set: nothing to do"; echo "ready=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          mkdir -p .keys
+          node -e 'for (const k of JSON.parse(process.env.KEYS)) { if (!k.account_id.endsWith(".testnet")) throw new Error("testnet keys only"); require("fs").writeFileSync(`.keys/${k.account_id}.json`, JSON.stringify(k)); }'
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - if: steps.keys.outputs.ready == 'true'
+        run: node scripts/approve-requests.mjs
+      - if: steps.keys.outputs.ready == 'true'
+        run: node scripts/sync-savings.mjs
