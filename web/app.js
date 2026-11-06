@@ -13,6 +13,11 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
   }, { passive: true });
 }
 
+// narrow screens crop the hero to its middle: centre the crop on the agent and its meeting instead
+const fitMind = () => document.querySelector(".mind").setAttribute("viewBox", innerWidth < 900 ? "120 0 1200 760" : "0 0 1200 760");
+fitMind();
+addEventListener("resize", fitMind);
+
 const dep = await (await fetch("deployment.json")).json();
 const testnet = dep.network !== "mainnet";
 const RPCS = testnet
@@ -79,40 +84,53 @@ try {
     setTimeout(() => { b.textContent = "Copy"; }, 1600);
   }));
 
-  // hero: the DAO steers one agent. members vote → the by-laws seal → the agent's mind → paid work.
-  const moving = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const flow = (a, b, dur, begin) => moving
-    ? `<circle class="pulse" r="3"><animateMotion dur="${dur}s" begin="${begin}s" repeatCount="indefinite" path="M${a.x} ${a.y}L${b.x} ${b.y}"/></circle>` : "";
-  const nick = (a) => a === info.steward ? "steward" : a.replace(/\.(testnet|near)$/, "").replace(/^kop-/, "").replace(/-[a-z0-9]{8}$/, "");
-  const seal = { x: 430, y: 235 }, core = { x: 720, y: 300 }, market = { x: 1085, y: 235 };
-  const shown = members.slice(0, 6);
-  const step = 240 / Math.max(1, shown.length - 1);
-  const voters = shown.map(([a], i) => {
-    const m = { x: 150 + (i % 2) * 55, y: shown.length === 1 ? 235 : 150 + i * step };
-    return tag("line", { class: "vote", x1: m.x, y1: m.y, x2: seal.x - 90, y2: seal.y, pathLength: 1, style: `--n:${i}` })
-      + flow(m, { x: seal.x - 90, y: seal.y }, 2.2, 2.8 + i * 0.5)
-      + `<circle class="dot" style="--n:${i}" cx="${m.x}" cy="${m.y}" r="7"><title>${esc(a)}</title></circle>`
-      + `<text class="who" style="--n:${i}" x="${m.x - 16}" y="${m.y - 2}" text-anchor="end">${esc(nick(a))}</text>`
-      + `<text class="sub" style="--n:${i}" x="${m.x - 16}" y="${m.y + 15}" text-anchor="end">1 vote</text>`;
+  // hero: a members' meeting around the agent. Each lit seat is a member who approved the by-laws the agent runs,
+  // read from the DAO proposal that set them; dim rings are open seats.
+  let approvedBy = null, proposalId = null;
+  try {
+    const last = await view(dep.dao, "get_last_proposal_id");
+    const props = await view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 100), limit: 100 });
+    const match = props.reverse().find((p) => p.kind?.FunctionCall?.actions?.some((x) => x.method_name === "set_config"
+      && JSON.parse(atob(x.args)).hash === info.config.hash));
+    if (match) {
+      proposalId = match.id;
+      approvedBy = new Set(Object.entries(match.votes).filter(([, v]) => v === "Approve").map(([k]) => k));
+    }
+  } catch (e) { console.warn("could not read the DAO's proposals", e); }
+
+  // the meeting sits inside the agent's head, around the agent (the core) like a parliament around its chair
+  const c = { x: 720, y: 300 };
+  const seats = [[120, 7], [152, 9], [184, 11], [216, 13]].flatMap(([r, n]) => Array.from({ length: n }, (_, i) => {
+    const deg = 180 + (180 * i) / (n - 1);
+    const t = (deg * Math.PI) / 180;
+    return { x: c.x + r * Math.cos(t), y: c.y + r * Math.sin(t), deg };
+  }));
+  const byCentre = [...seats].sort((p, q) => Math.abs(p.deg - 270) - Math.abs(q.deg - 270));
+  const ordered = [...members].sort(([a], [b]) => (approvedBy?.has(b) ? 1 : 0) - (approvedBy?.has(a) ? 1 : 0));
+  ordered.slice(0, seats.length).forEach(([a], i) => { byCentre[i].who = a; });
+  const yes = approvedBy ? members.filter(([a]) => approvedBy.has(a)).length : members.length;
+  const seatSvg = [...seats].sort((p, q) => p.deg - q.deg).map((st, i) => {
+    const voted = st.who && (!approvedBy || approvedBy.has(st.who));
+    const cls = !st.who ? "seat open" : voted ? "seat yes" : "seat member";
+    const title = !st.who ? "Open seat: join the co-op" : `${st.who}: ${voted ? `approved by-laws v${info.config.version}` : "member, did not vote on these by-laws"}`;
+    return `<circle class="${cls}" style="--n:${i}" cx="${st.x.toFixed(1)}" cy="${st.y.toFixed(1)}" r="${st.who ? 9 : 7}"><title>${esc(title)}</title></circle>`;
   }).join("");
-  const more = members.length > shown.length ? `<text class="sub" x="150" y="425">+${members.length - shown.length} more members</text>` : "";
-  const paidJobs = receipts.filter((x) => x.status === "Paid").length;
-  $("nodes").innerHTML = voters + more
-    + `<g class="seal" style="--n:${shown.length}">
-         <rect x="${seal.x - 90}" y="${seal.y - 34}" width="180" height="68" rx="4"/>
-         <text class="who" x="${seal.x}" y="${seal.y - 6}" text-anchor="middle">BY-LAWS v${info.config.version}</text>
-         <text class="sub" x="${seal.x}" y="${seal.y + 14}" text-anchor="middle">sha256 ${esc(info.config.hash.slice(0, 10))}…</text>
-         <text class="cap" x="${seal.x}" y="${seal.y + 56}" text-anchor="middle">approved by vote</text>
+  const v = info.config.version;
+  $("nodes").innerHTML = seatSvg
+    + `<g class="caption" style="--n:26">
+         <text class="cap" x="150" y="400" text-anchor="middle">MEMBERS' MEETING</text>
+         <text class="who" x="150" y="426" text-anchor="middle">By-laws v${v}</text>
+         <text class="sub" x="150" y="446" text-anchor="middle">${yes} of ${members.length} approved${proposalId != null ? `, proposal #${proposalId}` : ""}</text>
+         <circle class="seat yes" cx="96" cy="476" r="5"/><text class="sub" x="106" y="480">voted</text>
+         <circle class="seat member" cx="152" cy="476" r="5"/><text class="sub" x="162" y="480">member</text>
+         <circle class="seat open" cx="96" cy="500" r="4"/><text class="sub" x="106" y="504">open seat, ${seats.length - Math.min(members.length, seats.length)} left</text>
+       </g>
+       <g class="caption" style="--n:28">
+         <text class="cap" x="1090" y="400" text-anchor="middle">THE AGENT</text>
+         <text class="who" x="1090" y="426" text-anchor="middle">${info.paused ? "Paused by vote" : `Runs v${v} only`}</text>
+         <text class="sub" x="1090" y="446" text-anchor="middle">sha256 ${esc(info.config.hash.slice(0, 10))}…</text>
        </g>`
-    + tag("line", { class: "pin", x1: seal.x + 90, y1: seal.y, x2: core.x, y2: core.y, pathLength: 1, style: `--n:${shown.length + 1}` })
-    + flow({ x: seal.x + 90, y: seal.y }, core, 1.8, 3.2)
-    + tag("line", { class: "work", x1: core.x, y1: core.y, x2: market.x, y2: market.y, pathLength: 1, style: `--n:${shown.length + 2}` })
-    + flow(core, market, 2.4, 3.6)
-    + `<circle class="ring" style="--n:${shown.length + 3}" cx="${market.x}" cy="${market.y}" r="12"/>`
-    + `<text class="who" style="--n:${shown.length + 3}" x="${market.x}" y="${market.y - 26}" text-anchor="middle">Agent Market</text>`
-    + `<text class="sub" style="--n:${shown.length + 3}" x="${market.x}" y="${market.y + 36}" text-anchor="middle">${paidJobs} paid jobs</text>`
-    + `<circle class="core${info.paused ? " off" : ""}" cx="${core.x}" cy="${core.y}" r="10"/>`
-    + `<text class="who core-label" x="${core.x + 22}" y="${core.y + 32}">${info.paused ? "paused by vote" : `the agent runs v${info.config.version} only`}</text>`;
+    + `<circle class="core${info.paused ? " off" : ""}" cx="720" cy="300" r="10"><title>${esc(dep.agent)}</title></circle>`;
 
   // passbook: the co-op's life as ledger lines, newest first
   const lines = [
