@@ -115,7 +115,7 @@ try {
   const paidJobs = receipts.filter((x) => x.status === "Paid").length;
   $("p-agent").innerHTML = info.paused
     ? `<span class="state off">Paused</span> The members voted to stop it.`
-    : `<span class="state on">Working</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${paidJobs} paid jobs so far.`;
+    : `<span class="state on">Allowed to work</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${paidJobs} paid jobs so far.`;
 
   // passbook: the co-op's life as ledger lines, newest first
   const lines = [
@@ -230,7 +230,7 @@ try {
   // live status under the hero
   const paid = receipts.filter((x) => x.status === "Paid").length;
   $("status").innerHTML = [
-    ["Agent", info.paused ? "Paused by vote" : "Working", info.paused ? "warn" : "ok"],
+    ["Agent", info.paused ? "Paused by vote" : "Allowed to work", info.paused ? "warn" : "ok"],
     ["Running by-laws", `v${info.config.version} <small>${short(info.config.hash)}</small>`, ""],
     ["Jobs on-chain", `${receipts.length} <small>${paid} paid</small>`, ""],
     ["Audit", owed > 0n ? `Red <small>${usdc(owed)} USDC missing</small>` : "Green <small>all passed on</small>", owed > 0n ? "warn" : "ok"],

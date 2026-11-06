@@ -85,6 +85,7 @@ code { font-size: .92em; background: #eceef6; padding: .05em .35em; border-radiu
 .lock-ico::before { content: ""; position: absolute; left: 50%; translate: -50% 0; bottom: 100%; width: .42rem; height: .38rem; border: 2px solid currentColor; border-bottom: 0; border-radius: .3rem .3rem 0 0; }
 .state { display: inline-block; font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; padding: .1rem .45rem; border-radius: 3px; margin-right: .35rem; color: #fff; }
 .state.on { background: var(--green); }
+.demo-note { margin: 1rem 0 0; padding-top: .8rem; border-top: 1px solid rgba(120,150,255,.2); font-size: .74rem; color: rgba(255,255,255,.55); }
 .state.off { background: #6b7280; }
 
 /* sections: a numbered rail on the left, big condensed headings */
