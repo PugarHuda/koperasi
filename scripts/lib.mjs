@@ -19,7 +19,9 @@ export const NEAR = 10n ** 24n;
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const KEYS = path.join(ROOT, ".keys");
+// the showcase co-op (the one the web page reads); the demo and fresh deploys use their own local file
 export const DEPLOYMENT = path.join(ROOT, `deployment.${NETWORK}.json`);
+export const LOCAL_DEPLOYMENT = path.join(ROOT, `deployment.${NETWORK}.local.json`);
 
 export const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 export const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64");

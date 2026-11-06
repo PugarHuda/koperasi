@@ -1,12 +1,13 @@
 // Deploys one Koperasi on testnet: Sputnik DAO (1 member 1 vote) + koperasi contract + an agent account that holds
-// only a function-call key, then appoints the steward by a DAO vote. Writes deployment.testnet.json.
+// only a function-call key, then appoints the steward by a DAO vote. Writes deployment.testnet.local.json (your own co-op;
+// the showcase co-op in deployment.testnet.json is left alone).
 //
 //   node scripts/deploy.mjs            (KOP_FUNDER_KEYS=.funders if the faucet is rate-limited)
 import fs from "node:fs";
 import path from "node:path";
 import { KeyPair } from "near-api-js";
 import {
-  ROOT, NEAR, NETWORK, DEPLOYMENT, account, accountUrl, call, createDao, decide, ensureAccount, fnCall, saveKey,
+  ROOT, NEAR, NETWORK, LOCAL_DEPLOYMENT, account, accountUrl, call, createDao, decide, ensureAccount, fnCall, saveKey,
   sha256, view,
 } from "./lib.mjs";
 
@@ -78,7 +79,7 @@ await call(steward, ids.contract, "bond_steward", {}, { deposit: NEAR });
 
 const info = await view(ids.contract, "get_info");
 const deployment = { network: NETWORK, tag, usdc: USDC, dao: daoId, ...ids, configHash, configUri: configFile };
-fs.writeFileSync(DEPLOYMENT, JSON.stringify(deployment, null, 2));
+fs.writeFileSync(LOCAL_DEPLOYMENT, JSON.stringify(deployment, null, 2));
 console.log(`\n✔ deployed\n  contract ${accountUrl(ids.contract)}\n  dao      ${accountUrl(daoId)}`);
 console.log(`  members ${info.members}, steward ${info.steward}, bond ${info.steward_bond}`);
-console.log(`  wrote ${path.relative(ROOT, DEPLOYMENT)}`);
+console.log(`  wrote ${path.relative(ROOT, LOCAL_DEPLOYMENT)}`);

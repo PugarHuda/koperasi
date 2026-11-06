@@ -6,6 +6,6 @@
   "steward": "kop-steward-mw4i2iwk.testnet",
   "contract": "koperasi-mw4i2iwk.testnet",
   "agent": "agent.koperasi-mw4i2iwk.testnet",
-  "configHash": "372ac6517fa3f2b4259f6c7bd5251ac71cd414a25955868e464afa7c3990636d",
-  "configUri": "config/config.v1.yaml"
+  "configHash": "6c237221b16948190895ff89528c5da394e09dd1715594752424d9fee186adc3",
+  "configUri": "config/config.v3.yaml"
 }

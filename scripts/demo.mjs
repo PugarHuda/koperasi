@@ -1,19 +1,21 @@
 // npm run demo: the whole Koperasi story on NEAR testnet against a local stand-in for Agent Market. No funds, no keys:
-// it creates its own testnet accounts (faucet, or KOP_FUNDER_KEYS when the faucet is rate-limited).
+// it deploys its own co-op with its own testnet accounts (faucet, or KOP_FUNDER_KEYS when the faucet is rate-limited),
+// so it never touches the showcase co-op the web page reads.
 // Each step prints what to look for ("see:").
 import fs from "node:fs";
 import path from "node:path";
 import { startMockMarket } from "../agent/mock-market.mjs";
 import { ConfigMismatch, runOnce } from "../agent/runtime.mjs";
 import {
-  ROOT, DEPLOYMENT, NEAR, account, accountUrl, call, decide, ensureAccount, fnCall, sha256, sleep, view,
+  ROOT, LOCAL_DEPLOYMENT, NEAR, account, hasKey, accountUrl, call, decide, ensureAccount, fnCall, sha256, sleep, view,
 } from "./lib.mjs";
 
-if (!fs.existsSync(DEPLOYMENT)) {
-  console.log("no deployment yet: running scripts/deploy.mjs first");
+const mine = () => fs.existsSync(LOCAL_DEPLOYMENT) && JSON.parse(fs.readFileSync(LOCAL_DEPLOYMENT, "utf8"));
+if (!mine() || !hasKey(mine().steward)) {
+  console.log("deploying your own co-op on testnet first (scripts/deploy.mjs)");
   await import("./deploy.mjs");
 }
-const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
+const dep = mine();
 const { contract: K, dao: DAO, usdc: USDC } = dep;
 const steward = account(dep.steward);
 const usd = (u) => `${(Number(u) / 1e6).toFixed(2)} USDC`;
@@ -48,8 +50,9 @@ see(`${(await view(K, "get_info")).members} members; bob needed 2 of 2 votes, no
 step("A member rewrites the agent's by-laws (config v2); the members approve it and she earns contribution points");
 const v2 = "config/config.v2.yaml";
 const v2hash = sha256(fs.readFileSync(path.join(ROOT, v2)));
-await decide(alice, members, DAO, "By-laws v2: take documentation jobs, bid 4 USDC",
-  fnCall(K, "set_config", { version: 2, hash: v2hash, uri: v2, contributor: alice.accountId, points: 10 }));
+const next = (await view(K, "get_config")).version + 1; // 2 on a fresh co-op; higher if you re-run the demo on it
+await decide(alice, members, DAO, `By-laws v${next}: take documentation jobs, bid 4 USDC`,
+  fnCall(K, "set_config", { version: next, hash: v2hash, uri: v2, contributor: alice.accountId, points: 10 }));
 dep.configUri = v2;
 see(`by-laws v${(await view(K, "get_config")).version} ${v2hash.slice(0, 12)}…, alice has ${(await view(K, "get_member", { account_id: alice.accountId })).points} points`);
 
@@ -61,8 +64,8 @@ await runOnce({ dep });
 await sleep(2000);
 await runOnce({ dep, log: quiet });
 const receipts = await view(K, "get_receipts", { from: 0, limit: 500 });
-const v2receipts = receipts.filter((r) => r.config_version === 2);
-see(`${v2receipts.length} receipts under by-laws v2, status ${v2receipts.map((r) => r.status).join(", ")}`);
+const v2receipts = receipts.filter((r) => r.config_version === next);
+see(`${v2receipts.length} receipts under by-laws v${next}, status ${v2receipts.map((r) => r.status).join(", ")}`);
 
 // ---------------------------------------------------------------------------------------------------------------
 step("Attack: someone edits the agent's config without a vote");

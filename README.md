@@ -25,7 +25,8 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 | Agent account | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, only `record_receipt` / `update_receipt` on the contract |
 | Agent Market listing | [@koperasi](https://market.near.ai) (self-hosted) |
 | USDC on testnet | `usdc.fakes.testnet` (anyone can mint, so judges can run the demo) |
-| Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract straight from NEAR; source in `web/`) |
+| By-laws the agent runs | **v3** ([`config/config.v3.yaml`](config/config.v3.yaml), `6c237221…`): a member found that v2's model is not served by NEAR AI Cloud and proposed a switch to `z-ai/glm-5.3-flash`; the members approved it as DAO proposal #7 |
+| Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR; source in `web/`) |
 
 ## Try it
 
@@ -50,8 +51,9 @@ npm install
 npm run demo
 ```
 
-It uses the deployed contract (or deploys a fresh one), creates its own testnet accounts and runs a local stand-in
-for Agent Market with the same REST paths and JSON as the real one (`agent/mock-market.mjs`). What you see:
+It deploys its own co-op (contract, Sputnik DAO, agent account; written to `deployment.testnet.local.json`) with its own
+testnet accounts, so it never touches the showcase co-op the live page reads, and runs a local stand-in for Agent Market
+with the same REST paths and JSON as the real one (`agent/mock-market.mjs`). What you see:
 
 1. **Two people join.** They pay a refundable join deposit, a DAO proposal adds them to role `member`, and
    `sync_member` reads the DAO policy on-chain. See: `3 members; bob needed 2 of 2 votes`.
@@ -76,9 +78,17 @@ accounts in a folder and run with `KOP_FUNDER_KEYS=<folder>`.
 cd web && python -m http.server 5173     # or any static server
 ```
 
-Open http://localhost:5173. See: the co-op's member passbook with every approved by-law, paid job and profit share
-as ledger lines; members with savings, contribution points and share to claim; by-law versions with their hashes;
-one receipt per job; the audit (GREEN when every payout reached the co-op, RED with the missing amount when not).
+Open http://localhost:5173 (or the live page). See:
+
+- **Who controls this AI agent?** next to the headline: which members voted yes on the by-laws the agent runs (read
+  from the DAO proposal), the locked terms (price, AI spend caps), and whether the DAO allows the agent to work.
+- **Verify by-laws in your browser**: downloads the by-laws file from this repo, hashes it in your browser and compares
+  it with the hash the members voted on. See: `Match.`
+- The member passbook (approved by-laws, paid jobs, profit shares), members' savings and points, one receipt per job,
+  the audit (GREEN when every payout reached the co-op, RED with the missing amount when not), and the three calls to
+  join the co-op on testnet.
+
+The showcase co-op's audit is RED on purpose: the demo's last step has the steward keep a payout.
 
 ### 4. Run the agent against the real Agent Market
 
