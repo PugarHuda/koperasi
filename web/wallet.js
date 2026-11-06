@@ -24,12 +24,21 @@ async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } =
 }
 
 const kindOf = (p) => (typeof p.kind === "string" ? p.kind : Object.keys(p.kind)[0]);
+// what a proposal really does, built from its kind; the proposer's description is shown apart, as their claim
+const yocto = (y) => (BigInt(y || 0) > 0n ? `, attaches ${nearAmt(y)} NEAR` : "");
+const argsOf = (b64) => {
+  try { return JSON.stringify(JSON.parse(atob(b64))); } catch { return "(binary args)"; }
+};
 const describe = (p) => {
   const k = kindOf(p);
-  if (k === "AddMemberToRole") return `Accept ${p.kind.AddMemberToRole.member_id} as a member`;
-  if (k === "RemoveMemberFromRole") return `Remove ${p.kind.RemoveMemberFromRole.member_id}`;
-  if (k === "FunctionCall") return `${p.description || p.kind.FunctionCall.actions.map((a) => a.method_name).join(", ")}`;
-  return p.description || k;
+  if (k === "AddMemberToRole") return `Add ${p.kind.AddMemberToRole.member_id} to role ${p.kind.AddMemberToRole.role}`;
+  if (k === "RemoveMemberFromRole") return `Remove ${p.kind.RemoveMemberFromRole.member_id} from role ${p.kind.RemoveMemberFromRole.role}`;
+  if (k === "Transfer") return `Transfer ${p.kind.Transfer.amount} of ${p.kind.Transfer.token_id || "NEAR"} to ${p.kind.Transfer.receiver_id}`;
+  if (k === "FunctionCall") {
+    const f = p.kind.FunctionCall;
+    return f.actions.map((a) => `Call ${f.receiver_id} ${a.method_name} ${argsOf(a.args).slice(0, 160)}${yocto(a.deposit)}`).join("; ");
+  }
+  return `${k} (open the DAO to inspect)`;
 };
 
 async function load() {
@@ -122,7 +131,8 @@ async function render() {
       <h3 class="jh">Open proposals</h3>
       ${open.length ? `<ul class="props">${open.map((p) => {
         const mine = p.votes[me];
-        return `<li><span>#${p.id} ${esc(describe(p))}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
+        return `<li><span><strong>#${p.id}</strong> <code class="does">${esc(describe(p))}</code>${p.description
+          ? `<span class="claim">Proposer says: “${esc(p.description.slice(0, 200))}”</span>` : ""}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
           : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">Approve</button>
              <button type="button" class="btn ghost small" data-vote="VoteReject" data-id="${p.id}">Reject</button></span>`}</li>`;
       }).join("")}</ul>` : `<p class="small">Nothing to vote on right now.</p>`}`;

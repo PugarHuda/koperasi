@@ -273,6 +273,9 @@ h2 .dim { color: var(--grey); }
 .props { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
 .props li { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; padding: .6rem .8rem; background: rgba(255,255,255,.05); font-size: .86rem; }
 .props em { font-style: normal; color: #7fe0a6; font-size: .8rem; }
+.props li > span:first-child { display: grid; gap: .3rem; min-width: 0; flex: 1 1 18rem; }
+.props .does { font-size: .76rem; background: rgba(0,0,0,.35); color: #dfe6ff; padding: .3rem .45rem; overflow-wrap: anywhere; }
+.props .claim { font-size: .76rem; color: rgba(255,255,255,.55); }
 .vote-btns { display: flex; gap: .4rem; }
 .btn.small { padding: .4em .9em; font-size: .82rem; }
 .cli { max-width: 68rem; margin: 0 auto 2.4rem; text-align: left; }
