@@ -4,6 +4,7 @@ const testnet = dep.network !== "mainnet";
 const RPCS = testnet
   ? ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.near.org"]
   : ["https://free.rpc.fastnear.com", "https://near.drpc.org", "https://rpc.mainnet.near.org"];
+const RAW = "https://raw.githubusercontent.com/PugarHuda/koperasi/main/";
 const explorer = (id) => `https://${testnet ? "testnet." : ""}nearblocks.io/address/${id}`;
 
 async function view(contract, method, args = {}) {
@@ -52,13 +53,26 @@ try {
   $("net").textContent = `Reading ${dep.network}: ${dep.contract}`;
   $("chip").innerHTML = `${members.length} members<br>${receipts.length} jobs on-chain`;
 
+  // join: the three calls a newcomer makes, with this co-op's real accounts and deposit
+  const net = testnet ? "testnet" : "mainnet";
+  $("join-deposit").textContent = `${nearAmt(info.join_deposit)} NEAR, refunded when the DAO removes you.`;
+  $("join-cmd").textContent = `near call ${dep.contract} join '{}' --deposit ${nearAmt(info.join_deposit)} --accountId YOU.${net} --networkId ${net}`;
+  $("sync-cmd").textContent = `near call ${dep.contract} sync_member '{"account_id":"YOU.${net}"}' --accountId YOU.${net} --gas 60000000000000 --networkId ${net}`;
+  $("dao-link").href = explorer(dep.dao);
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    await navigator.clipboard.writeText($(b.dataset.copy).textContent);
+    b.textContent = "Copied";
+    setTimeout(() => { b.textContent = "Copy"; }, 1600);
+  }));
+
   // hero: one node per member, wired into the agent's mind
   const core = { x: 720, y: 330 };
   const shown = members.slice(0, 12);
   $("nodes").innerHTML = shown.map((_, i) => {
     const a = Math.PI * (1.08 + (0.84 * i) / Math.max(1, shown.length - 1));
     const x = core.x + Math.cos(a) * 520, y = core.y + Math.sin(a) * 260 + 40;
-    return tag("line", { x1: core.x, y1: core.y, x2: x, y2: y }) + tag("circle", { class: i % 2 ? "ring" : "dot", cx: x, cy: y, r: i % 2 ? 11 : 6 });
+    return tag("line", { x1: core.x, y1: core.y, x2: x, y2: y })
+      + `<circle class="${i % 2 ? "ring" : "dot"}" cx="${x}" cy="${y}" r="${i % 2 ? 11 : 6}"><title>${esc(shown[i][0])}</title></circle>`;
   }).join("") + tag("circle", { class: "core", cx: core.x, cy: core.y, r: 9 });
 
   // passbook: the co-op's life as ledger lines, newest first
@@ -116,6 +130,35 @@ try {
       </div>
     </li>`).join("");
 
+  // by-laws: anyone can hash the published file in their own browser and compare it with the contract
+  const current = versions.find((v) => v.version === info.config.version) ?? info.config;
+  const box = $("verify");
+  box.innerHTML = `<button type="button" class="btn">Verify by-laws v${current.version} in your browser</button>
+    <p class="hint">Downloads <code>${esc(current.uri)}</code> from the public repo, hashes it here, and compares it with the hash the members voted on.</p>`;
+  box.querySelector("button").onclick = async () => {
+    box.innerHTML = `<p class="hint">Hashing ${esc(current.uri)}…</p>`;
+    try {
+      const raw = await (await fetch(`${RAW}${current.uri}`, { cache: "no-store" })).arrayBuffer();
+      const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", raw))].map((b) => b.toString(16).padStart(2, "0")).join("");
+      const text = new TextDecoder().decode(raw);
+      const pick = (re) => esc(text.match(re)?.[1]?.trim() ?? "not set");
+      const ok = hex === current.hash;
+      box.innerHTML = `
+        <p class="match ${ok ? "ok" : "bad"}">${ok ? "Match. The file is exactly what the members approved." : "Mismatch. The published file is not what the members approved."}</p>
+        <dl class="hashes"><dt>Your browser</dt><dd>${hex}</dd><dt>On-chain, v${current.version}</dt><dd>${esc(current.hash)}</dd></dl>
+        <dl class="terms">
+          <div><dt>Model</dt><dd>${pick(/^model:\s*"?([^"\n]+)/m)}</dd></div>
+          <div><dt>Bid per job</dt><dd>${pick(/^\s+price_usdc:\s*([\d.]+)/m)} USDC</dd></div>
+          <div><dt>Inference cap per job</dt><dd>$${pick(/max_inference_per_job_usd:\s*([\d.]+)/)}</dd></div>
+          <div><dt>Inference cap per day</dt><dd>$${pick(/max_inference_per_day_usd:\s*([\d.]+)/)}</dd></div>
+          <div class="wide"><dt>Takes jobs tagged</dt><dd>${pick(/tags_any:\s*\[([^\]]*)\]/)}</dd></div>
+        </dl>
+        <details><summary>Read the whole file</summary><pre>${esc(text)}</pre></details>`;
+    } catch (e) {
+      box.innerHTML = `<p class="match bad">Could not download ${esc(current.uri)}: ${esc(e.message)}. Reload and try again.</p>`;
+    }
+  };
+
   rows($("receipts").tBodies[0], [...receipts].reverse().slice(0, 12).map((r) => `<tr>
       <td>${esc(r.job_id.slice(0, 8))}… <span class="muted">${date(r.ts)}</span></td>
       <td class="num" data-label="Price">${usdc(r.price)}</td>
@@ -139,6 +182,17 @@ try {
       ? `Any member can propose slashing the steward's bond (${bond} NEAR).`
       : "The members already slashed the steward's bond; they can appoint a new steward by vote."}</p>`
     : `<span class="seal">GREEN</span><p>Every paid job has reached the co-op. Steward bond at stake: ${bond} NEAR.</p>`;
+
+  $("audit-note").hidden = owed === 0n;
+
+  // live status under the hero
+  const paid = receipts.filter((x) => x.status === "Paid").length;
+  $("status").innerHTML = [
+    ["Agent", info.paused ? "Paused by vote" : "Working", info.paused ? "warn" : "ok"],
+    ["Running by-laws", `v${info.config.version} <small>${short(info.config.hash)}</small>`, ""],
+    ["Jobs on-chain", `${receipts.length} <small>${paid} paid</small>`, ""],
+    ["Audit", owed > 0n ? `Red <small>${usdc(owed)} USDC missing</small>` : "Green <small>all passed on</small>", owed > 0n ? "warn" : "ok"],
+  ].map(([k, v, c]) => `<div><dt>${k}</dt><dd class="${c}">${v}</dd></div>`).join("");
 
   const r = info.share_rule;
   $("share-rule").textContent = `The members vote each profit share. ${r.reserve_bps / 100}% stays in the DAO as the co-op's reserve; the rest is split by savings and by contribution, and each member claims their own.`;

@@ -60,6 +60,24 @@
       </div>
     </section>
 
+    <dl class="status" id="status" aria-live="polite">
+      <div><dt>Agent</dt><dd>…</dd></div>
+      <div><dt>Running by-laws</dt><dd>…</dd></div>
+      <div><dt>Jobs on-chain</dt><dd>…</dd></div>
+      <div><dt>Audit</dt><dd>…</dd></div>
+    </dl>
+
+    <section class="loop" aria-labelledby="loop-title">
+      <h2 id="loop-title">How the co-op<br /><span class="dim">runs its agent</span></h2>
+      <ol>
+        <li><a href="#members"><b>Join</b><span>Pay a refundable deposit; the members vote you into the DAO.</span><small>Sputnik DAO</small></a></li>
+        <li><a href="#bylaws"><b>Vote the by-laws</b><span>Prompt, model, price and caps change only by a vote, pinned by hash.</span><small>koperasi contract</small></a></li>
+        <li><a href="#work"><b>Work</b><span>The agent bids, delivers and records one receipt per paid job.</span><small>Agent Market, NEAR AI Cloud</small></a></li>
+        <li><a href="#audit"><b>Audit</b><span>Every payout must reach the co-op, or the steward's bond is slashed.</span><small>USDC on NEAR</small></a></li>
+        <li><a href="#shares"><b>Share</b><span>The members vote a profit share and each claims their own.</span><small>DAO treasury, Trezu</small></a></li>
+      </ol>
+    </section>
+
     <section id="members" class="block">
       <div class="rail"><span class="num">01</span><span class="tag">Members</span></div>
       <div class="split">
@@ -81,23 +99,13 @@
       </details>
     </section>
 
-    <section class="band" aria-label="What it runs on">
-      <p>Built on what NEAR<br />already runs.</p>
-      <ul>
-        <li>Sputnik DAO</li>
-        <li>NEAR AI Cloud</li>
-        <li>Agent Market</li>
-        <li>Trezu</li>
-        <li>USDC</li>
-      </ul>
-    </section>
-
     <section id="bylaws" class="block">
       <div class="rail"><span class="num">02</span><span class="tag">By-laws</span></div>
       <div class="split">
         <div>
           <h2>The members<br />hold the <span class="dim">agent's mind.</span></h2>
           <p class="sub">The agent's prompt, model, prices and spend caps are its by-laws. A new version needs a member vote. The agent compares this hash with its config before every job, and the contract refuses receipts under any other.</p>
+          <div class="verify" id="verify" aria-live="polite"></div>
         </div>
         <ol class="versions" id="versions" reversed></ol>
       </div>
@@ -139,6 +147,7 @@
           <h2>Every payout<br />is <span class="dim">counted.</span></h2>
           <p class="sub">Agent Market pays one human account, the steward. The steward must pass every payout on to the co-op, with a bond at stake. Anyone can check the two numbers on the right.</p>
           <div class="verdict" id="verdict"></div>
+          <p class="note" id="audit-note" hidden>This is the demo co-op. In the last step of <code>npm run demo</code> the steward keeps a payout on purpose, so the audit shows what members see when money goes missing.</p>
         </div>
         <div class="bars" id="rekon"></div>
       </div>
@@ -162,8 +171,16 @@
 
     <section class="closing">
       <h2><b>Own</b> <span class="chip" id="chip">…</span> <span class="thin">the agent</span></h2>
-      <p>Clone it, deploy your own co-op on testnet, and vote on your agent's by-laws.</p>
-      <a class="btn" href="https://github.com/PugarHuda/koperasi#try-it">Start a koperasi <span aria-hidden="true">→</span></a>
+      <p>Join this co-op on testnet in three steps, or deploy your own with <code>npm run demo</code>.</p>
+      <ol class="join">
+        <li><b>Pay the join deposit</b><span id="join-deposit">Refundable when you leave.</span>
+          <div class="cmd"><code id="join-cmd">near call … join</code><button type="button" class="copy" data-copy="join-cmd">Copy</button></div></li>
+        <li><b>Get voted in</b><span>Any member proposes adding you to the <code>member</code> role of the DAO; the members vote.</span>
+          <a class="small-link" id="dao-link" href="#">Open the DAO</a></li>
+        <li><b>Sync your membership</b><span>The contract reads the DAO's decision on-chain.</span>
+          <div class="cmd"><code id="sync-cmd">near call … sync_member</code><button type="button" class="copy" data-copy="sync-cmd">Copy</button></div></li>
+      </ol>
+      <a class="btn" href="https://github.com/PugarHuda/koperasi#try-it">Start your own koperasi <span aria-hidden="true">→</span></a>
       <footer class="foot">
         <div><span class="brand"><span class="brand-mark" aria-hidden="true"></span>Koperasi</span><p>Built at NEAR HACKATHON 2026.</p></div>
         <nav aria-label="On NEAR" class="links" id="links"></nav>

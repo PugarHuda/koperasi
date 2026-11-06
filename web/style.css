@@ -94,11 +94,45 @@ h2 .dim { color: var(--grey); }
 .badge.Submitted { color: var(--blue-hi); }
 .badge.Disputed, .badge.Refunded { color: var(--red); }
 
-/* black band */
-.band { background: var(--black); color: #fff; display: flex; flex-wrap: wrap; gap: 2rem 4rem; align-items: center; justify-content: space-between; padding: 3rem clamp(1.2rem, 4vw, 3rem) 3rem calc(clamp(1.2rem, 4vw, 3rem) + 6.5rem); }
-.band p { margin: 0; font-size: clamp(1.5rem, 2.6vw, 2.1rem); line-height: 1.15; font-weight: 400; }
-.band ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 1rem 2.4rem; }
-.band li { font: 600 1.25rem var(--display); text-transform: uppercase; letter-spacing: .04em; opacity: .9; }
+/* live status strip under the hero */
+.status { margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--black); color: #fff; border-top: 1px solid #1b2142; }
+.status div { padding: 1.4rem clamp(1.2rem, 3vw, 2.4rem); border-right: 1px solid #1b2142; }
+.status dt { font-size: .78rem; color: #8b93b5; }
+.status dd { margin: .3rem 0 0; font: 700 1.9rem/1 var(--display); text-transform: uppercase; }
+.status dd small { display: block; margin-top: .35rem; font: 400 .78rem var(--body); text-transform: none; color: #8b93b5; }
+.status dd.ok::before, .status dd.warn::before { content: ""; display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; margin-right: .5rem; vertical-align: .2em; background: var(--green); }
+.status dd.warn::before { background: var(--red); }
+
+/* the co-op loop: five steps, each links to its section */
+.loop { background: var(--black); color: #fff; padding: 6rem clamp(1.2rem, 4vw, 3rem) 6.5rem calc(clamp(1.2rem, 4vw, 3rem) + 6.5rem); }
+.loop h2 .dim { color: #6f7699; }
+.loop ol { list-style: none; margin: 3rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; counter-reset: step; }
+.loop li { counter-increment: step; }
+.loop li a { position: relative; display: grid; gap: .7rem; align-content: start; height: 100%; padding: 1.4rem 1.2rem; text-decoration: none; border-top: 2px solid #23294a; transition: border-color .2s, background .2s; }
+.loop li a::before { content: counter(step, decimal-leading-zero); color: var(--blue-hi); font-size: .8rem; }
+.loop li a::after { content: "→"; position: absolute; right: -.85rem; top: 1.25rem; color: #3a4170; }
+.loop li:last-child a::after { content: "↺"; }
+.loop li a:hover { border-color: var(--blue); background: rgba(19,64,255,.08); }
+.loop li b { font: 700 1.7rem/1 var(--display); text-transform: uppercase; }
+.loop li span { font-size: .9rem; color: rgba(255,255,255,.72); }
+.loop li small { font-size: .75rem; color: var(--blue-hi); }
+
+/* verify the by-laws in the browser */
+.verify { max-width: 30rem; }
+.hint { font-size: .82rem; color: var(--muted); margin: .7rem 0 0; }
+.match { margin: 0 0 1rem; padding: .8rem 1rem; font-weight: 500; border-left: 4px solid; }
+.match.ok { color: #0b6b36; background: #e8f7ee; border-color: var(--green); }
+.match.bad { color: #9b1c18; background: #fdecea; border-color: var(--red); }
+.hashes { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 0 0 1.2rem; font-size: .74rem; }
+.hashes dt { color: var(--muted); }
+.hashes dd { margin: 0; word-break: break-all; }
+.terms { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 0 0 1rem; background: var(--rule); border: 1px solid var(--rule); }
+.terms div { background: #fff; padding: .8rem 1rem; }
+.terms .wide { grid-column: 1 / -1; }
+.terms dt { font-size: .75rem; color: var(--muted); }
+.terms dd { margin: .2rem 0 0; font-weight: 600; }
+.verify details summary { cursor: pointer; color: var(--blue); font-size: .9rem; }
+.verify pre { white-space: pre-wrap; font-size: .76rem; background: #0b0f22; color: #d6dcf5; padding: 1rem; overflow: auto; max-height: 22rem; }
 
 /* by-laws */
 .versions { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
@@ -147,6 +181,7 @@ h2 .dim { color: var(--grey); }
 .verdict .seal { font: 800 1.5rem/1 var(--display); padding: .35rem .6rem; color: #fff; background: var(--green); }
 .verdict.owed .seal { background: var(--red); }
 .verdict p { margin: 0; font-size: .92rem; }
+.note { max-width: 28rem; margin: 1rem 0 0; font-size: .84rem; color: var(--muted); }
 
 /* profit share: plan cards, the members' part in blue */
 .plans { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
@@ -174,6 +209,17 @@ h2 .dim { color: var(--grey); }
 .foot .links { display: flex; flex-wrap: wrap; gap: 1.6rem; }
 .foot .links a { color: rgba(255,255,255,.85); }
 #net { grid-column: 1 / -1; font-size: .78rem; }
+.closing code { background: rgba(255,255,255,.1); color: #fff; }
+.join { list-style: none; margin: 0 auto 2.6rem; padding: 0; max-width: 68rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; text-align: left; counter-reset: j; }
+.join li { counter-increment: j; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; align-content: start; padding: 1.4rem; background: rgba(3,10,42,.6); border: 1px solid rgba(255,255,255,.14); }
+.join li::before { content: counter(j); display: grid; place-items: center; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--blue); font-weight: 600; font-size: .85rem; }
+.join b { font: 700 1.5rem/1 var(--display); text-transform: uppercase; }
+.join span { font-size: .88rem; color: rgba(255,255,255,.75); }
+.cmd { display: flex; gap: .5rem; align-items: stretch; margin-top: .3rem; }
+.cmd code { flex: 1; min-width: 0; padding: .6rem .7rem; font-size: .72rem; background: #000; border-radius: 0; overflow-x: auto; white-space: nowrap; }
+.copy { font: 500 .8rem var(--body); padding: 0 .9rem; background: var(--blue); color: #fff; border: 0; cursor: pointer; }
+.copy:hover { background: var(--blue-hi); }
+.small-link { font-size: .88rem; color: #9fb6ff; }
 
 /* one orchestrated moment: the hero assembles on load */
 @media (prefers-reduced-motion: no-preference) {
@@ -196,7 +242,11 @@ h2 .dim { color: var(--grey); }
   .plan.members { margin-top: 0; }
   .block { padding: 5rem 1.2rem 4rem 4.2rem; }
   .rail { left: 1rem; top: 5.3rem; }
-  .band { padding-left: 4.2rem; }
+  .status { grid-template-columns: 1fr 1fr; }
+  .loop { padding: 4.5rem 1.2rem; }
+  .loop ol { grid-template-columns: 1fr; }
+  .loop li a::after { display: none; }
+  .join { grid-template-columns: 1fr; }
   .bars { height: 20rem; }
   .stamp { right: -.4rem; bottom: -1.4rem; }
   .grid { font-size: .82rem; }
