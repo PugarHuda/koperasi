@@ -14,6 +14,9 @@ import { ROOT, DEPLOYMENT, account, call, sha256, view } from "../scripts/lib.mj
 import { market } from "./market.mjs";
 
 const NEARAI = "https://cloud-api.near.ai/v1";
+// ponytail: fixed output and brief limits keep one job's cost bounded before the call; tune with the model's price.
+const MAX_OUTPUT_TOKENS = 4000;
+const MAX_BRIEF_CHARS = 12000;
 const STATE = path.join(ROOT, "agent", ".state.json");
 
 export class ConfigMismatch extends Error {}
@@ -36,7 +39,7 @@ function loadState() {
 }
 const saveState = (s) => fs.writeFileSync(STATE, JSON.stringify(s));
 
-async function infer(config, job) {
+async function infer(config, job, capMicroUsd) {
   const key = process.env.NEARAI_API_KEY;
   if (!key) {
     return {
@@ -51,14 +54,16 @@ async function infer(config, job) {
       model: config.model,
       messages: [
         { role: "system", content: config.system_prompt },
-        { role: "user", content: `Job: ${job.title}\n\n${job.description}` },
+        { role: "user", content: `Job: ${job.title}\n\n${String(job.description).slice(0, MAX_BRIEF_CHARS)}` },
       ],
+      max_tokens: MAX_OUTPUT_TOKENS,
     }),
   });
   if (!res.ok) throw new Error(`NEAR AI Cloud ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const inferenceId = res.headers.get("inference-id");
   const out = await res.json();
-  let costMicroUsd = 0;
+  // Fail closed: a cost we cannot read is booked at the per-job cap, never as free.
+  let costMicroUsd = capMicroUsd;
   if (inferenceId) {
     const c = await fetch(`${NEARAI}/billing/costs`, {
       method: "POST",
@@ -102,23 +107,34 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
   }
 
   // work + mirror status
-  const receipts = await view(dep.contract, "get_receipts", { from: 0, limit: 500 });
+  const receipts = [];
+  for (let from = 0; ; from += 500) {
+    const page = await view(dep.contract, "get_receipts", { from, limit: 500 });
+    receipts.push(...page);
+    if (page.length < 500) break;
+  }
   const byJob = new Map(receipts.map((r) => [r.job_id, r]));
   const state = loadState();
+  const capJob = Math.round(config.limits.max_inference_per_job_usd * 1e6);
+  const capDay = Math.round(config.limits.max_inference_per_day_usd * 1e6);
+  let halted = false;
   const { assignments = [] } = await m.assignments();
   for (const { assignment: a, job } of assignments) {
     const r = byJob.get(a.assignmentId);
     if (a.status === "in_progress" && !r) {
-      const capDay = config.limits.max_inference_per_day_usd * 1e6;
-      if (state.spentMicroUsd >= capDay) {
-        log(`daily inference cap reached (${state.spentMicroUsd / 1e6} USD): skipping "${job.title}" until tomorrow`);
+      // a job may only start if even its worst case fits in today's budget
+      if (halted || state.spentMicroUsd + capJob > capDay) {
+        log(`inference budget left today: ${(capDay - state.spentMicroUsd) / 1e6} USD; not starting "${job.title}"`);
         continue;
       }
       await m.start(a.assignmentId);
-      const { text, costMicroUsd } = await infer(config, job);
+      const { text, costMicroUsd } = await infer(config, job, capJob);
       state.spentMicroUsd += costMicroUsd;
       saveState(state);
-      if (costMicroUsd > config.limits.max_inference_per_job_usd * 1e6) log(`warning: job cost ${costMicroUsd / 1e6} USD is over the per-job cap`);
+      if (costMicroUsd > capJob) {
+        halted = true; // the money is spent; deliver this job, start no other until the members look at it
+        log(`job cost ${costMicroUsd / 1e6} USD is over the per-job cap of ${capJob / 1e6} USD: no more jobs this run`);
+      }
       await m.submit(a.assignmentId, text);
       await call(agent, dep.contract, "record_receipt", {
         job_id: a.assignmentId,
