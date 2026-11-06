@@ -1,0 +1,11 @@
+{
+  "network": "testnet",
+  "tag": "mw4i2iwk",
+  "usdc": "usdc.fakes.testnet",
+  "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+  "steward": "kop-steward-mw4i2iwk.testnet",
+  "contract": "koperasi-mw4i2iwk.testnet",
+  "agent": "agent.koperasi-mw4i2iwk.testnet",
+  "configHash": "372ac6517fa3f2b4259f6c7bd5251ac71cd414a25955868e464afa7c3990636d",
+  "configUri": "config/config.v1.yaml"
+}

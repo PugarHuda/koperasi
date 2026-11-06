@@ -1,0 +1,13 @@
+target/
+node_modules/
+.env
+.env.*
+!.env.example
+.next/
+*.log
+.keys/
+deployment.*.local.json
+.funders/
+agent/.state.json
+PRD.md
+ANALISA_NEAR_HACKATHON.md

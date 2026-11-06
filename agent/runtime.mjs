@@ -1,0 +1,152 @@
+// Koperasi agent runtime. One pass (or --loop):
+//   1. load the by-laws (config) and refuse to work unless its sha256 equals the hash the DAO approved on-chain
+//   2. bid on board jobs that match the config's filter
+//   3. for each awarded assignment: start, do the work on NEAR AI Cloud (TEE), check the spend caps, submit,
+//      record a receipt on-chain with the config hash, the inference cost and the deliverable hash
+//   4. mirror accepted / cancelled / disputed assignments into the on-chain receipt status
+//
+// env: KOP_MARKET_URL (default https://market.near.ai), KOP_MARKET_TOKEN (aat_…),
+//      NEARAI_API_KEY (optional: without it the agent writes an offline draft and records 0 inference cost)
+import fs from "node:fs";
+import path from "node:path";
+import YAML from "yaml";
+import { ROOT, DEPLOYMENT, account, call, sha256, view } from "../scripts/lib.mjs";
+import { market } from "./market.mjs";
+
+const NEARAI = "https://cloud-api.near.ai/v1";
+const STATE = path.join(ROOT, "agent", ".state.json");
+
+export class ConfigMismatch extends Error {}
+
+/** Reads the config file and checks it against the hash on-chain. Throws ConfigMismatch if they differ. */
+export async function loadApprovedConfig(dep, file = dep.configUri) {
+  const raw = fs.readFileSync(path.join(ROOT, file));
+  const local = sha256(raw);
+  const onchain = await view(dep.contract, "get_config");
+  if (local !== onchain.hash) {
+    throw new ConfigMismatch(`config_mismatch: local ${local.slice(0, 12)}… ≠ approved v${onchain.version} ${onchain.hash.slice(0, 12)}…`);
+  }
+  return { config: YAML.parse(raw.toString()), hash: local, version: onchain.version };
+}
+
+function loadState() {
+  const today = new Date().toISOString().slice(0, 10);
+  const s = fs.existsSync(STATE) ? JSON.parse(fs.readFileSync(STATE, "utf8")) : {};
+  return s.day === today ? s : { day: today, spentMicroUsd: 0 };
+}
+const saveState = (s) => fs.writeFileSync(STATE, JSON.stringify(s));
+
+async function infer(config, job) {
+  const key = process.env.NEARAI_API_KEY;
+  if (!key) {
+    return {
+      text: `# ${job.title}\n\n_Offline draft (no NEARAI_API_KEY set): the brief was received and logged._\n\n> ${job.description}`,
+      costMicroUsd: 0,
+    };
+  }
+  const res = await fetch(`${NEARAI}/chat/completions`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: "system", content: config.system_prompt },
+        { role: "user", content: `Job: ${job.title}\n\n${job.description}` },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`NEAR AI Cloud ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const inferenceId = res.headers.get("inference-id");
+  const out = await res.json();
+  let costMicroUsd = 0;
+  if (inferenceId) {
+    const c = await fetch(`${NEARAI}/billing/costs`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ requestIds: [inferenceId] }),
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const nano = JSON.stringify(c ?? {}).match(/"costNanoUsd":\s*(\d+)/);
+    if (nano) costMicroUsd = Math.ceil(Number(nano[1]) / 1000);
+  }
+  return { text: out.choices[0].message.content, costMicroUsd, inferenceId };
+}
+
+const usdcUnits = (s) => BigInt(Math.round(Number(s) * 1e6));
+
+export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8")), log = console.log, configFile } = {}) {
+  const { config, hash, version } = await loadApprovedConfig(dep, configFile);
+  const info = await view(dep.contract, "get_info");
+  if (info.paused) {
+    log("koperasi is paused by the DAO: not working");
+    return;
+  }
+  log(`running by-laws v${version} (${hash.slice(0, 12)}…)`);
+  const m = market(process.env.KOP_MARKET_URL ?? "https://market.near.ai", process.env.KOP_MARKET_TOKEN);
+  const agent = account(dep.agent);
+
+  // bid
+  const { bids = [] } = (await m.myBids()) ?? {};
+  const bidOn = new Set(bids.map((b) => b.jobId));
+  const { jobs = [] } = await m.board();
+  const want = new Set(config.job_filter.tags_any.map((t) => t.toLowerCase()));
+  for (const job of jobs) {
+    if (bidOn.has(job.jobId)) continue;
+    const tagged = (job.tags ?? []).some((t) => want.has(t.toLowerCase()));
+    if (!tagged || Number(job.budgetAmount) < config.job_filter.min_price_usdc) continue;
+    await m.bid(job.jobId, {
+      amount: String(config.bid.price_usdc),
+      proposal: `Koperasi agent (config v${version}). ${config.vertical}. Sources cited, gaps stated.`,
+      slaSeconds: config.bid.sla_seconds,
+    });
+    log(`bid ${config.bid.price_usdc} USDC on "${job.title}"`);
+  }
+
+  // work + mirror status
+  const receipts = await view(dep.contract, "get_receipts", { from: 0, limit: 500 });
+  const byJob = new Map(receipts.map((r) => [r.job_id, r]));
+  const state = loadState();
+  const { assignments = [] } = await m.assignments();
+  for (const { assignment: a, job } of assignments) {
+    const r = byJob.get(a.assignmentId);
+    if (a.status === "in_progress" && !r) {
+      const capDay = config.limits.max_inference_per_day_usd * 1e6;
+      if (state.spentMicroUsd >= capDay) {
+        log(`daily inference cap reached (${state.spentMicroUsd / 1e6} USD): skipping "${job.title}" until tomorrow`);
+        continue;
+      }
+      await m.start(a.assignmentId);
+      const { text, costMicroUsd } = await infer(config, job);
+      state.spentMicroUsd += costMicroUsd;
+      saveState(state);
+      if (costMicroUsd > config.limits.max_inference_per_job_usd * 1e6) log(`warning: job cost ${costMicroUsd / 1e6} USD is over the per-job cap`);
+      await m.submit(a.assignmentId, text);
+      await call(agent, dep.contract, "record_receipt", {
+        job_id: a.assignmentId,
+        price: usdcUnits(a.escrowAmount).toString(),
+        inference_cost: String(costMicroUsd),
+        config_hash: hash,
+        deliverable_hash: sha256(text),
+      });
+      log(`delivered "${job.title}" for ${a.escrowAmount} USDC (inference ${costMicroUsd / 1e6} USD), receipt on-chain`);
+    } else if (r?.status === "Submitted" || r?.status === "Disputed") {
+      const next = { accepted: "Paid", cancelled: "Refunded", disputed: "Disputed" }[a.status];
+      if (next && next !== r.status) {
+        await call(agent, dep.contract, "update_receipt", { job_id: a.assignmentId, status: next });
+        log(`"${job.title}": ${r.status} → ${next}`);
+      }
+    }
+  }
+}
+
+if (process.argv[1]?.endsWith("runtime.mjs")) {
+  const loop = process.argv.includes("--loop");
+  do {
+    try {
+      await runOnce();
+    } catch (e) {
+      console.error(e instanceof ConfigMismatch ? `REFUSED: ${e.message}` : e);
+      if (e instanceof ConfigMismatch) process.exit(2);
+    }
+    if (loop) await new Promise((r) => setTimeout(r, 45_000));
+  } while (loop);
+}

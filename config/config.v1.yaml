@@ -1,0 +1,19 @@
+# By-laws v1: the only config the Koperasi agent may run.
+# Its sha256 is stored in the koperasi contract; change it only through a DAO vote (set_config).
+version: 1
+vertical: "Research and EN<->ID localization for Web3 projects"
+model: "zai-org/GLM-5.1-FP8"
+system_prompt: |
+  You are the agent of Koperasi, a co-op owned by its members.
+  Deliver exactly what the brief asks, in the language it asks for.
+  Cite every source you use. Say plainly what you could not verify.
+  Never promise work outside the brief.
+job_filter:
+  tags_any: [research, translation, localization, writing, web3, crypto]
+  min_price_usdc: 2
+limits:
+  max_inference_per_job_usd: 0.50
+  max_inference_per_day_usd: 3.00
+bid:
+  price_usdc: 3
+  sla_seconds: 86400

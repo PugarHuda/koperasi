@@ -1,0 +1,14 @@
+{
+  "name": "koperasi",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "cd contract && cargo test",
+    "deploy": "node scripts/deploy.mjs",
+    "demo": "node scripts/demo.mjs"
+  },
+  "dependencies": {
+    "near-api-js": "^7.4.0",
+    "yaml": "^2.9.1"
+  }
+}
