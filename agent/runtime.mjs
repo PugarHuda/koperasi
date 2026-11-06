@@ -54,7 +54,7 @@ async function infer(config, job, capMicroUsd) {
       model: config.model,
       messages: [
         { role: "system", content: config.system_prompt },
-        { role: "user", content: `Job: ${job.title}\n\n${String(job.description).slice(0, MAX_BRIEF_CHARS)}` },
+        { role: "user", content: `Job: ${String(job.title).slice(0, 300)}\n\n${String(job.description)}`.slice(0, MAX_BRIEF_CHARS) },
       ],
       max_tokens: MAX_OUTPUT_TOKENS,
     }),
