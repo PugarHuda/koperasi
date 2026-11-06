@@ -51,7 +51,6 @@
           <use class="rim glow" href="#head" filter="url(#soft)" />
           <use class="rim" href="#head" />
         </g>
-        <g class="net" id="nodes"></g>
       </svg>
 
       <div class="hero-text">
@@ -62,6 +61,26 @@
         <p class="lede">Indonesian villages have run <em>koperasi</em> for a century: members own the business, vote one each, and share the profit. Koperasi gives an AI agent the same rules on NEAR.</p>
         <a class="btn" href="#work">See the agent's work <span aria-hidden="true">→</span></a>
       </div>
+
+      <aside class="panel" aria-labelledby="panel-q">
+        <p class="panel-q" id="panel-q">Who controls this AI agent?</p>
+        <ol class="psteps">
+          <li>
+            <b>The members vote</b>
+            <ul class="voters" id="p-voters"><li class="muted">Reading the DAO…</li></ul>
+            <small id="p-tally"></small>
+          </li>
+          <li>
+            <b>Its instructions are locked</b>
+            <dl class="pterms" id="p-terms"></dl>
+            <a class="lock" id="p-lock" href="#bylaws"><span aria-hidden="true" class="lock-ico"></span>Changing these needs a new vote</a>
+          </li>
+          <li>
+            <b>The agent obeys</b>
+            <p id="p-agent">…</p>
+          </li>
+        </ol>
+      </aside>
     </section>
 
     <dl class="status" id="status" aria-live="polite">

@@ -43,31 +43,49 @@ code { font-size: .92em; background: #eceef6; padding: .05em .35em; border-radiu
 .top-actions { margin-left: auto; display: flex; gap: 1.6rem; align-items: center; font-size: .9rem; }
 .top .btn { padding: .65em 1.4em; }
 
-/* hero: the agent's mind, members wired into it */
+/* hero: headline on the left, "who controls this agent" panel on the right, the agent's mind behind */
 .hero {
   position: relative; overflow: hidden; min-height: min(100svh, 860px);
   background: radial-gradient(120% 90% at 50% 100%, #0a1c8c 0%, var(--navy) 45%, var(--black) 80%);
-  color: #fff; display: grid; place-items: end center; padding: 7rem 1.5rem 4.5rem; text-align: center;
+  color: #fff; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 27rem); gap: 3rem; align-items: end;
+  padding: 8rem clamp(1.2rem, 4vw, 3rem) 4.5rem;
 }
 .mind { position: absolute; inset: 0; width: 100%; height: 100%; }
-.mind .layers use, .net circle { transform-box: fill-box; transform-origin: center; }
-.net circle { fill: var(--blue-hi); }
-.net circle.core { fill: #fff; filter: drop-shadow(0 0 12px #3d6bff); }
-.net circle.core.off { fill: #6b7280; filter: none; }
-.net .seat { stroke-width: 1.5; }
-.net .seat.open { fill: rgba(255,255,255,.13); stroke: none; }
-.net .seat.member { fill: #3d6bff; stroke: #fff; }
-.net .seat.yes { fill: #fff; stroke: #9fb6ff; filter: drop-shadow(0 0 8px #3d6bff); }
-.net text { font-family: var(--body); }
-.net text.who { fill: #fff; font-size: 16px; font-weight: 600; }
-.net text.sub { fill: #8fa6ff; font-size: 12.5px; }
-.net text.cap { fill: #8fa6ff; font-size: 12px; letter-spacing: .02em; }
+.mind .layers use { transform-box: fill-box; transform-origin: center; }
 .hero-text { position: relative; max-width: 60rem; }
 .hero h1 { margin: 0; font-family: var(--display); text-transform: uppercase; line-height: .86; }
-.hero .big { display: block; font-weight: 800; font-size: clamp(5.5rem, 17vw, 13.5rem); letter-spacing: .01em; }
-.hero .line { display: block; font-weight: 300; font-size: clamp(1.9rem, 4.6vw, 3.7rem); margin-top: .25em; }
+.hero .big { display: block; font-weight: 800; font-size: clamp(5rem, 13vw, 12rem); letter-spacing: .01em; }
+.hero .line { display: block; font-weight: 300; font-size: clamp(1.8rem, 3.6vw, 3.3rem); margin-top: .25em; }
 .hero .line b { font-weight: 700; }
-.lede { text-shadow: 0 1px 12px rgba(0,0,20,.6); max-width: 34rem; margin: 1.6rem auto 2rem; color: rgba(255,255,255,.82); font-size: 1.02rem; }
+.lede { text-shadow: 0 1px 12px rgba(0,0,20,.6); max-width: 34rem; margin: 1.6rem 0 2rem; color: rgba(255,255,255,.82); font-size: 1.02rem; }
+
+/* the control panel: three plain steps, read top to bottom */
+.panel { position: relative; background: rgba(3, 8, 32, .78); backdrop-filter: blur(10px); border: 1px solid rgba(120, 150, 255, .28); border-radius: 8px; padding: 1.4rem 1.5rem 1.2rem; text-align: left; }
+.panel-q { margin: 0 0 1rem; font: 700 1.6rem/1 var(--display); text-transform: uppercase; }
+.psteps { list-style: none; margin: 0; padding: 0; counter-reset: ps; }
+.psteps > li { counter-increment: ps; position: relative; padding: 0 0 1.1rem 2.4rem; }
+.psteps > li::before { content: counter(ps); position: absolute; left: 0; top: 0; width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border-radius: 50%; background: var(--blue); font-size: .8rem; font-weight: 600; }
+.psteps > li:not(:last-child)::after { content: ""; position: absolute; left: .78rem; top: 1.9rem; bottom: .3rem; border-left: 2px dashed rgba(120, 150, 255, .45); }
+.psteps > li:last-child { padding-bottom: 0; }
+.psteps b { display: block; font-weight: 600; margin-bottom: .5rem; }
+.psteps small, .psteps p { display: block; margin: .5rem 0 0; font-size: .82rem; color: rgba(255,255,255,.7); line-height: 1.45; }
+.psteps small a { color: #9fb6ff; }
+.voters { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+.voters li { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; padding: .3rem .6rem .3rem .35rem; border-radius: 99px; background: rgba(255,255,255,.08); }
+.voters em { font-style: normal; color: rgba(255,255,255,.55); font-size: .74rem; }
+.voters .mark { display: grid; place-items: center; width: 1.15rem; height: 1.15rem; border-radius: 50%; font-size: .7rem; background: rgba(255,255,255,.18); }
+.voters .yes .mark { background: var(--green); }
+.pterms { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 0; background: rgba(120,150,255,.2); border: 1px solid rgba(120,150,255,.2); }
+.pterms div { background: rgba(3, 8, 32, .9); padding: .45rem .6rem; }
+.pterms dt { font-size: .68rem; color: rgba(255,255,255,.55); }
+.pterms dd { margin: .1rem 0 0; font-size: .82rem; font-weight: 600; }
+.lock { display: inline-flex; align-items: center; gap: .45rem; margin-top: .6rem; font-size: .8rem; color: #ffd27a; text-decoration: none; }
+.lock:hover { text-decoration: underline; }
+.lock-ico { width: .7rem; height: .55rem; border: 2px solid currentColor; border-radius: 2px; position: relative; margin-top: .3rem; }
+.lock-ico::before { content: ""; position: absolute; left: 50%; translate: -50% 0; bottom: 100%; width: .42rem; height: .38rem; border: 2px solid currentColor; border-bottom: 0; border-radius: .3rem .3rem 0 0; }
+.state { display: inline-block; font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; padding: .1rem .45rem; border-radius: 3px; margin-right: .35rem; color: #fff; }
+.state.on { background: var(--green); }
+.state.off { background: #6b7280; }
 
 /* sections: a numbered rail on the left, big condensed headings */
 .block { position: relative; padding: 7rem clamp(1.2rem, 4vw, 3rem) 6rem calc(clamp(1.2rem, 4vw, 3rem) + 6.5rem); }
@@ -237,24 +255,22 @@ h2 .dim { color: var(--grey); }
 .mind .rim { fill: none; stroke: #5b84ff; stroke-width: 2.5; opacity: calc(.9 - var(--p) * .6); }
 .mind .rim.glow { stroke-width: 10; stroke: #2a5bff; }
 .hero-text { translate: 0 calc(var(--p) * -70px); opacity: calc(1 - var(--p) * .7); }
-@media (max-width: 900px) { .net .caption { display: none; } }
 .hero .big { position: relative; }
 .hero .big::before, .hero .big::after { content: attr(data-text); position: absolute; inset: 0; opacity: 0; pointer-events: none; }
 
 @media (prefers-reduced-motion: no-preference) {
   .mind .rim { stroke-dasharray: 1; animation: draw 1.3s cubic-bezier(.5,0,.2,1) both; }
   .mind .layer use { animation: fill-in 1s calc(1s + var(--i) * .12s) cubic-bezier(.2,.7,.2,1) both; }
-  .net circle { animation: pop .4s calc(.5s + var(--n, 0) * .14s) both; }
-  .net circle.core { animation: pop .5s .4s both, pulse 2.8s 2.4s ease-in-out infinite; }
-  .net .seat { animation: pop .35s calc(.4s + var(--n, 0) * .045s) both; }
-  .net .seat.yes { animation: pop .35s calc(.4s + var(--n, 0) * .045s) both, lit .6s 1.9s both; }
-  .net .caption { animation: fade .6s calc(.4s + var(--n, 0) * .045s) both; }
   .hero .big > span { display: block; animation: slice .9s 1.3s steps(1, end) both; }
   .hero .big::before { animation: shard-a .9s 1.3s steps(1, end) forwards; }
   .hero .big::after { animation: shard-b .9s 1.3s steps(1, end) forwards; }
   .hero .line, .lede, .hero-text .btn { animation: up .7s 2s cubic-bezier(.2,.7,.2,1) both; }
   .lede { animation-delay: 2.1s; }
   .hero-text .btn { animation-delay: 2.2s; }
+  .panel { animation: up .7s 2.3s cubic-bezier(.2,.7,.2,1) both; }
+  .psteps > li { animation: up .5s calc(2.6s + var(--k, 0) * .25s) both; }
+  .psteps > li:nth-child(2) { --k: 1; }
+  .psteps > li:nth-child(3) { --k: 2; }
 }
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes fill-in { from { opacity: 0; translate: -30px 30px; } }
@@ -290,6 +306,7 @@ h2 .dim { color: var(--grey); }
 @keyframes ring { 50% { scale: 1.35; opacity: .5; } }
 
 @media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr; padding-top: 6.5rem; }
   .top nav { display: none; }
   .split, .plans { grid-template-columns: 1fr; }
   .plan.members { margin-top: 0; }

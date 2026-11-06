@@ -13,11 +13,6 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
   }, { passive: true });
 }
 
-// narrow screens crop the hero to its middle: centre the crop on the agent and its meeting instead
-const fitMind = () => document.querySelector(".mind").setAttribute("viewBox", innerWidth < 900 ? "120 0 1200 760" : "0 0 1200 760");
-fitMind();
-addEventListener("resize", fitMind);
-
 const dep = await (await fetch("deployment.json")).json();
 const testnet = dep.network !== "mainnet";
 const RPCS = testnet
@@ -84,8 +79,9 @@ try {
     setTimeout(() => { b.textContent = "Copy"; }, 1600);
   }));
 
-  // hero: a members' meeting around the agent. Each lit seat is a member who approved the by-laws the agent runs,
-  // read from the DAO proposal that set them; dim rings are open seats.
+  // hero panel: who controls this agent, in three plain steps, all read live
+  const nick = (a) => a === info.steward ? "steward" : a.replace(/\.(testnet|near)$/, "").replace(/^kop-/, "").replace(/-[a-z0-9]{8}$/, "");
+  const v = info.config.version;
   let approvedBy = null, proposalId = null;
   try {
     const last = await view(dep.dao, "get_last_proposal_id");
@@ -94,43 +90,32 @@ try {
       && JSON.parse(atob(x.args)).hash === info.config.hash));
     if (match) {
       proposalId = match.id;
-      approvedBy = new Set(Object.entries(match.votes).filter(([, v]) => v === "Approve").map(([k]) => k));
+      approvedBy = new Set(Object.entries(match.votes).filter(([, x]) => x === "Approve").map(([k]) => k));
     }
   } catch (e) { console.warn("could not read the DAO's proposals", e); }
-
-  // the meeting sits inside the agent's head, around the agent (the core) like a parliament around its chair
-  const c = { x: 720, y: 300 };
-  const seats = [[120, 7], [152, 9], [184, 11], [216, 13]].flatMap(([r, n]) => Array.from({ length: n }, (_, i) => {
-    const deg = 180 + (180 * i) / (n - 1);
-    const t = (deg * Math.PI) / 180;
-    return { x: c.x + r * Math.cos(t), y: c.y + r * Math.sin(t), deg };
-  }));
-  const byCentre = [...seats].sort((p, q) => Math.abs(p.deg - 270) - Math.abs(q.deg - 270));
-  const ordered = [...members].sort(([a], [b]) => (approvedBy?.has(b) ? 1 : 0) - (approvedBy?.has(a) ? 1 : 0));
-  ordered.slice(0, seats.length).forEach(([a], i) => { byCentre[i].who = a; });
-  const yes = approvedBy ? members.filter(([a]) => approvedBy.has(a)).length : members.length;
-  const seatSvg = [...seats].sort((p, q) => p.deg - q.deg).map((st, i) => {
-    const voted = st.who && (!approvedBy || approvedBy.has(st.who));
-    const cls = !st.who ? "seat open" : voted ? "seat yes" : "seat member";
-    const title = !st.who ? "Open seat: join the co-op" : `${st.who}: ${voted ? `approved by-laws v${info.config.version}` : "member, did not vote on these by-laws"}`;
-    return `<circle class="${cls}" style="--n:${i}" cx="${st.x.toFixed(1)}" cy="${st.y.toFixed(1)}" r="${st.who ? 9 : 7}"><title>${esc(title)}</title></circle>`;
-  }).join("");
-  const v = info.config.version;
-  $("nodes").innerHTML = seatSvg
-    + `<g class="caption" style="--n:26">
-         <text class="cap" x="150" y="400" text-anchor="middle">MEMBERS' MEETING</text>
-         <text class="who" x="150" y="426" text-anchor="middle">By-laws v${v}</text>
-         <text class="sub" x="150" y="446" text-anchor="middle">${yes} of ${members.length} approved${proposalId != null ? `, proposal #${proposalId}` : ""}</text>
-         <circle class="seat yes" cx="96" cy="476" r="5"/><text class="sub" x="106" y="480">voted</text>
-         <circle class="seat member" cx="152" cy="476" r="5"/><text class="sub" x="162" y="480">member</text>
-         <circle class="seat open" cx="96" cy="500" r="4"/><text class="sub" x="106" y="504">open seat, ${seats.length - Math.min(members.length, seats.length)} left</text>
-       </g>
-       <g class="caption" style="--n:28">
-         <text class="cap" x="1090" y="400" text-anchor="middle">THE AGENT</text>
-         <text class="who" x="1090" y="426" text-anchor="middle">${info.paused ? "Paused by vote" : `Runs v${v} only`}</text>
-         <text class="sub" x="1090" y="446" text-anchor="middle">sha256 ${esc(info.config.hash.slice(0, 10))}…</text>
-       </g>`
-    + `<circle class="core${info.paused ? " off" : ""}" cx="720" cy="300" r="10"><title>${esc(dep.agent)}</title></circle>`;
+  $("p-voters").innerHTML = members.slice(0, 6).map(([a]) => {
+    const yes = !approvedBy || approvedBy.has(a);
+    return `<li class="${yes ? "yes" : "no"}" title="${esc(a)}"><span class="mark" aria-hidden="true">${yes ? "✓" : "–"}</span>${esc(nick(a))}<em>${yes ? "voted yes" : "didn't vote"}</em></li>`;
+  }).join("") + (members.length > 6 ? `<li class="no">+${members.length - 6} more</li>` : "");
+  const yesCount = approvedBy ? members.filter(([a]) => approvedBy.has(a)).length : members.length;
+  $("p-tally").innerHTML = proposalId != null
+    ? `${yesCount} of ${members.length} members voted yes on <a href="${explorer(dep.dao)}">proposal #${proposalId}</a>: by-laws v${v}.`
+    : `By-laws v${v} were approved by a member vote.`;
+  $("p-lock").href = explorer(dep.dao);
+  const termsBox = $("p-terms");
+  termsBox.innerHTML = `<div><dt>Rule book</dt><dd>by-laws v${v}</dd></div><div><dt>Fingerprint</dt><dd>${short(info.config.hash)}</dd></div>`;
+  fetch(`${RAW}${info.config.uri}`).then((r) => r.arrayBuffer()).then(async (raw) => {
+    const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", raw))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    if (hex !== info.config.hash) return; // only show terms from the exact file the members approved
+    const text = new TextDecoder().decode(raw);
+    const get = (re) => esc(text.match(re)?.[1]?.trim() ?? "");
+    termsBox.innerHTML += `<div><dt>Charges per job</dt><dd>${get(/^\s+price_usdc:\s*([\d.]+)/m)} USDC</dd></div>`
+      + `<div><dt>AI spend cap</dt><dd>$${get(/max_inference_per_job_usd:\s*([\d.]+)/)} a job, $${get(/max_inference_per_day_usd:\s*([\d.]+)/)} a day</dd></div>`;
+  }).catch(() => {});
+  const paidJobs = receipts.filter((x) => x.status === "Paid").length;
+  $("p-agent").innerHTML = info.paused
+    ? `<span class="state off">Paused</span> The members voted to stop it.`
+    : `<span class="state on">Working</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${paidJobs} paid jobs so far.`;
 
   // passbook: the co-op's life as ledger lines, newest first
   const lines = [
