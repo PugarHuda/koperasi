@@ -55,6 +55,17 @@ code { font-size: .92em; background: #eceef6; padding: .05em .35em; border-radiu
 .net circle { fill: var(--blue-hi); }
 .net circle.ring { fill: none; stroke: var(--blue-hi); stroke-width: 1.5; }
 .net circle.core { fill: #fff; filter: drop-shadow(0 0 12px #3d6bff); }
+.net circle.core.off { fill: #6b7280; filter: none; }
+.net circle.pulse { fill: #fff; }
+.net line.vote { stroke-dasharray: 1; }
+.net line.pin { stroke: #fff; stroke-width: 2; opacity: .85; }
+.net line.work { stroke-dasharray: 1; opacity: .7; }
+.net text { font-family: var(--body); }
+.net text.who { fill: #fff; font-size: 16px; font-weight: 600; }
+.net text.sub { fill: #8fa6ff; font-size: 12.5px; }
+.net text.cap { fill: #8fa6ff; font-size: 12px; letter-spacing: .02em; }
+.net text.core-label { font-size: 14px; font-weight: 500; fill: #dfe6ff; }
+.net .seal rect { fill: rgba(3, 10, 42, .88); stroke: #5b84ff; stroke-width: 1.5; }
 .hero-text { position: relative; max-width: 60rem; }
 .hero h1 { margin: 0; font-family: var(--display); text-transform: uppercase; line-height: .86; }
 .hero .big { display: block; font-weight: 800; font-size: clamp(5.5rem, 17vw, 13.5rem); letter-spacing: .01em; }
@@ -231,6 +242,7 @@ h2 .dim { color: var(--grey); }
 .mind .rim.glow { stroke-width: 10; stroke: #2a5bff; }
 .hero-text { translate: 0 calc(var(--p) * -70px); opacity: calc(1 - var(--p) * .7); }
 .net line { stroke-dasharray: 1; }
+@media (max-width: 900px) { .net text, .net .seal { display: none; } }
 .hero .big { position: relative; }
 .hero .big::before, .hero .big::after { content: attr(data-text); position: absolute; inset: 0; opacity: 0; pointer-events: none; }
 
@@ -240,6 +252,8 @@ h2 .dim { color: var(--grey); }
   .net line { animation: draw .6s calc(.5s + var(--n, 0) * .14s) ease-out both; }
   .net circle { animation: pop .4s calc(.5s + var(--n, 0) * .14s) both; }
   .net circle.core { animation: pop .5s .4s both, pulse 2.8s 2.4s ease-in-out infinite; }
+  .net text, .net .seal { animation: fade .5s calc(.6s + var(--n, 0) * .14s) both; }
+  .net text.core-label { animation: fade .6s 2.4s both; }
   .net circle.ring { animation: pop .4s calc(.5s + var(--n, 0) * .14s) both, ring 3.4s 2.4s ease-in-out infinite; }
   .hero .big > span { display: block; animation: slice .9s 1.3s steps(1, end) both; }
   .hero .big::before { animation: shard-a .9s 1.3s steps(1, end) forwards; }

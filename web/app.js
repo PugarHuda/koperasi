@@ -79,16 +79,40 @@ try {
     setTimeout(() => { b.textContent = "Copy"; }, 1600);
   }));
 
-  // hero: one node per member, wired into the agent's mind
-  const core = { x: 720, y: 330 };
-  const shown = members.slice(0, 12);
-  $("nodes").innerHTML = shown.map((_, i) => {
-    const a = Math.PI * (1.08 + (0.84 * i) / Math.max(1, shown.length - 1));
-    const x = core.x + Math.cos(a) * 520, y = core.y + Math.sin(a) * 260 + 40;
-    // each member wires into the mind in turn: the line draws from the member to the core
-    return tag("line", { x1: x, y1: y, x2: core.x, y2: core.y, pathLength: 1, style: `--n:${i}` })
-      + `<circle class="${i % 2 ? "ring" : "dot"}" style="--n:${i}" cx="${x}" cy="${y}" r="${i % 2 ? 11 : 6}"><title>${esc(shown[i][0])}</title></circle>`;
-  }).join("") + tag("circle", { class: "core", cx: core.x, cy: core.y, r: 9 });
+  // hero: the DAO steers one agent. members vote → the by-laws seal → the agent's mind → paid work.
+  const moving = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const flow = (a, b, dur, begin) => moving
+    ? `<circle class="pulse" r="3"><animateMotion dur="${dur}s" begin="${begin}s" repeatCount="indefinite" path="M${a.x} ${a.y}L${b.x} ${b.y}"/></circle>` : "";
+  const nick = (a) => a === info.steward ? "steward" : a.replace(/\.(testnet|near)$/, "").replace(/^kop-/, "").replace(/-[a-z0-9]{8}$/, "");
+  const seal = { x: 430, y: 235 }, core = { x: 720, y: 300 }, market = { x: 1085, y: 235 };
+  const shown = members.slice(0, 6);
+  const step = 240 / Math.max(1, shown.length - 1);
+  const voters = shown.map(([a], i) => {
+    const m = { x: 150 + (i % 2) * 55, y: shown.length === 1 ? 235 : 150 + i * step };
+    return tag("line", { class: "vote", x1: m.x, y1: m.y, x2: seal.x - 90, y2: seal.y, pathLength: 1, style: `--n:${i}` })
+      + flow(m, { x: seal.x - 90, y: seal.y }, 2.2, 2.8 + i * 0.5)
+      + `<circle class="dot" style="--n:${i}" cx="${m.x}" cy="${m.y}" r="7"><title>${esc(a)}</title></circle>`
+      + `<text class="who" style="--n:${i}" x="${m.x - 16}" y="${m.y - 2}" text-anchor="end">${esc(nick(a))}</text>`
+      + `<text class="sub" style="--n:${i}" x="${m.x - 16}" y="${m.y + 15}" text-anchor="end">1 vote</text>`;
+  }).join("");
+  const more = members.length > shown.length ? `<text class="sub" x="150" y="425">+${members.length - shown.length} more members</text>` : "";
+  const paidJobs = receipts.filter((x) => x.status === "Paid").length;
+  $("nodes").innerHTML = voters + more
+    + `<g class="seal" style="--n:${shown.length}">
+         <rect x="${seal.x - 90}" y="${seal.y - 34}" width="180" height="68" rx="4"/>
+         <text class="who" x="${seal.x}" y="${seal.y - 6}" text-anchor="middle">BY-LAWS v${info.config.version}</text>
+         <text class="sub" x="${seal.x}" y="${seal.y + 14}" text-anchor="middle">sha256 ${esc(info.config.hash.slice(0, 10))}…</text>
+         <text class="cap" x="${seal.x}" y="${seal.y + 56}" text-anchor="middle">approved by vote</text>
+       </g>`
+    + tag("line", { class: "pin", x1: seal.x + 90, y1: seal.y, x2: core.x, y2: core.y, pathLength: 1, style: `--n:${shown.length + 1}` })
+    + flow({ x: seal.x + 90, y: seal.y }, core, 1.8, 3.2)
+    + tag("line", { class: "work", x1: core.x, y1: core.y, x2: market.x, y2: market.y, pathLength: 1, style: `--n:${shown.length + 2}` })
+    + flow(core, market, 2.4, 3.6)
+    + `<circle class="ring" style="--n:${shown.length + 3}" cx="${market.x}" cy="${market.y}" r="12"/>`
+    + `<text class="who" style="--n:${shown.length + 3}" x="${market.x}" y="${market.y - 26}" text-anchor="middle">Agent Market</text>`
+    + `<text class="sub" style="--n:${shown.length + 3}" x="${market.x}" y="${market.y + 36}" text-anchor="middle">${paidJobs} paid jobs</text>`
+    + `<circle class="core${info.paused ? " off" : ""}" cx="${core.x}" cy="${core.y}" r="10"/>`
+    + `<text class="who core-label" x="${core.x + 22}" y="${core.y + 32}">${info.paused ? "paused by vote" : `the agent runs v${info.config.version} only`}</text>`;
 
   // passbook: the co-op's life as ledger lines, newest first
   const lines = [
