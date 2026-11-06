@@ -7,98 +7,169 @@
   <meta name="description" content="An AI agent owned and governed by a co-op of its members on NEAR. One member, one vote. Its config changes only by vote; its earnings are shared with the members." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script type="module" src="app.js"></script>
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="#">Koperasi</a>
+    <a class="brand" href="#"><span class="brand-mark" aria-hidden="true"></span>Koperasi</a>
     <nav aria-label="Sections">
       <a href="#members">Members</a>
       <a href="#bylaws">By-laws</a>
-      <a href="#usaha">Work</a>
+      <a href="#work">Work</a>
       <a href="#audit">Audit</a>
       <a href="#shares">Profit shares</a>
     </nav>
+    <div class="top-actions">
+      <a class="quiet" href="https://github.com/PugarHuda/koperasi">Source</a>
+      <a class="btn" href="https://github.com/PugarHuda/koperasi#try-it">Run the demo</a>
+    </div>
   </header>
 
   <main>
-    <section class="hero">
-      <div class="hero-text">
-        <h1>An AI agent its members own, vote on, and share.</h1>
-        <p class="lede">
-          Indonesian villages have run <em>koperasi</em> for a century: members own the business, every member has one vote,
-          and the profit is shared by savings and by contribution. Koperasi gives an AI agent the same rules on NEAR.
-        </p>
-        <ul class="rules">
-          <li><strong>Savings never get spent.</strong> Members stake NEAR; only the staking yield pays the agent's private inference on NEAR AI Cloud.</li>
-          <li><strong>The members hold the agent's mind.</strong> Its prompt, tools, price and spend caps change only by a vote in a Sputnik DAO, and it refuses to work on any other config.</li>
-          <li><strong>The work is real.</strong> It takes paid jobs on NEAR AI Agent Market and leaves a receipt on-chain for each one.</li>
-        </ul>
-        <p class="links" id="links"></p>
-      </div>
+    <section class="hero" aria-labelledby="hero-title">
+      <svg class="mind" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+        <defs>
+          <radialGradient id="glow" cx="50%" cy="60%" r="55%">
+            <stop offset="0" stop-color="#1a4bff" stop-opacity=".55" />
+            <stop offset="1" stop-color="#1a4bff" stop-opacity="0" />
+          </radialGradient>
+          <linearGradient id="l1" x1="0" x2="1"><stop offset="0" stop-color="#05091f" /><stop offset="1" stop-color="#0b1c7a" /></linearGradient>
+          <linearGradient id="l2" x1="0" x2="1"><stop offset="0" stop-color="#0a1a6e" /><stop offset="1" stop-color="#1238d6" /></linearGradient>
+          <linearGradient id="l3" x1="0" x2="1"><stop offset="0" stop-color="#1131c4" /><stop offset="1" stop-color="#2b5cff" /></linearGradient>
+          <path id="head" d="M170 760C172 640 150 585 118 540 74 478 62 392 84 306 118 172 232 88 356 92c124 4 206 98 212 214 2 40-6 62 6 88l32 58c6 12-2 20-16 22l-16 3c6 15 1 26-8 31 8 10 6 21-4 28-4 24-9 45-35 52-36 8-66 3-76 30l-10 142z" />
+        </defs>
+        <rect width="1200" height="760" fill="url(#glow)" />
+        <g class="layers" transform="translate(330 0)">
+          <use href="#head" fill="url(#l1)" />
+          <use href="#head" fill="url(#l2)" transform="translate(60 76) scale(.9)" />
+          <use href="#head" fill="url(#l3)" transform="translate(125 167) scale(.78)" />
+          <use href="#head" fill="#3d6bff" opacity=".55" transform="translate(190 274) scale(.64)" />
+        </g>
+        <g class="net" id="nodes"></g>
+      </svg>
 
-      <figure class="passbook" aria-label="Live passbook of this koperasi">
-        <div class="passbook-head">
-          <span class="pb-title">Member passbook</span>
-          <span class="pb-id" id="pb-id">loading…</span>
-        </div>
-        <table class="ledger" id="passbook">
-          <thead><tr><th scope="col">Date</th><th scope="col">Entry</th><th scope="col" class="num">USDC</th></tr></thead>
-          <tbody><tr><td colspan="3" class="muted">Reading the contract on NEAR…</td></tr></tbody>
-        </table>
-        <div class="stamp" id="stamp" hidden></div>
-        <figcaption>Live from the contract. Every line is a transaction anyone can check.</figcaption>
-      </figure>
+      <div class="hero-text">
+        <h1 id="hero-title">
+          <span class="big">Co-own</span>
+          <span class="line"><b>An AI agent</b> one member, one vote</span>
+        </h1>
+        <p class="lede">Indonesian villages have run <em>koperasi</em> for a century: members own the business, vote one each, and share the profit. Koperasi gives an AI agent the same rules on NEAR.</p>
+        <a class="btn" href="#work">See the agent's work <span aria-hidden="true">→</span></a>
+      </div>
     </section>
 
     <section id="members" class="block">
-      <h2>Members</h2>
-      <p class="sub">Membership is the <code>member</code> role of the co-op's DAO. Savings are what each member staked for the agent's inference; contribution points are what they built for the agent this period.</p>
-      <table class="grid" id="member-table">
-        <thead><tr><th scope="col">Account</th><th scope="col" class="num">Savings staked (NEAR)</th><th scope="col" class="num">Contribution points</th><th scope="col" class="num">Share to claim (USDC)</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="rail"><span class="num">01</span><span class="tag">Members</span></div>
+      <div class="split">
+        <div>
+          <h2>Every member<br />holds <span class="dim">one vote.</span></h2>
+          <p class="sub">Membership is the <code>member</code> role of the co-op's Sputnik DAO; the contract reads it straight from the DAO. Savings are the NEAR each member staked for the agent's inference; contribution points are what they built for it this period.</p>
+          <label class="pick" for="member-pick">Select member
+            <select id="member-pick"></select>
+          </label>
+        </div>
+        <div class="meters" id="meters" aria-live="polite"></div>
+      </div>
+      <details class="all">
+        <summary>All members</summary>
+        <table class="grid" id="member-table">
+          <thead><tr><th scope="col">Account</th><th scope="col" class="num">Savings staked (NEAR)</th><th scope="col" class="num">Contribution points</th><th scope="col" class="num">Share to claim (USDC)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </details>
+    </section>
+
+    <section class="band" aria-label="What it runs on">
+      <p>Built on what NEAR<br />already runs.</p>
+      <ul>
+        <li>Sputnik DAO</li>
+        <li>NEAR AI Cloud</li>
+        <li>Agent Market</li>
+        <li>Trezu</li>
+        <li>USDC</li>
+      </ul>
     </section>
 
     <section id="bylaws" class="block">
-      <h2>By-laws</h2>
-      <p class="sub">The config the agent must run. A new version needs a member vote; the agent compares this hash with its config before every job.</p>
-      <ol class="versions" id="versions" reversed></ol>
+      <div class="rail"><span class="num">02</span><span class="tag">By-laws</span></div>
+      <div class="split">
+        <div>
+          <h2>The members<br />hold the <span class="dim">agent's mind.</span></h2>
+          <p class="sub">The agent's prompt, model, prices and spend caps are its by-laws. A new version needs a member vote. The agent compares this hash with its config before every job, and the contract refuses receipts under any other.</p>
+        </div>
+        <ol class="versions" id="versions" reversed></ol>
+      </div>
     </section>
 
-    <section id="usaha" class="block">
-      <h2>Work</h2>
-      <p class="sub">One receipt per job: price, what the inference cost, and which by-laws the agent was running.</p>
-      <table class="grid" id="receipts">
+    <section id="work" class="block dark">
+      <div class="rail"><span class="num">03</span><span class="tag">Work</span></div>
+      <div class="split">
+        <div>
+          <h2>One agent.<br /><span class="dim">Many owners.</span></h2>
+          <p class="sub">It takes paid jobs on NEAR AI Agent Market, runs its inference privately on NEAR AI Cloud, and leaves one receipt on-chain per job: price, inference cost, and which by-laws it ran.</p>
+          <div class="cta-row">
+            <a class="btn" href="https://github.com/PugarHuda/koperasi#try-it">Run the demo <span aria-hidden="true">→</span></a>
+            <a class="btn ghost" id="contract-link" href="#">Read the contract <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+        <figure class="phone" aria-label="Live passbook of this koperasi">
+          <div class="notch" aria-hidden="true"></div>
+          <div class="pb-head"><span>Member passbook</span><span class="pb-id" id="pb-id">loading…</span></div>
+          <table class="ledger" id="passbook">
+            <thead><tr><th scope="col">Date</th><th scope="col">Entry</th><th scope="col" class="num">USDC</th></tr></thead>
+            <tbody><tr><td colspan="3" class="muted">Reading the contract on NEAR…</td></tr></tbody>
+          </table>
+          <div class="stamp" id="stamp" hidden></div>
+          <figcaption>Live from the contract</figcaption>
+        </figure>
+      </div>
+      <table class="grid on-dark" id="receipts">
+        <caption>Receipts</caption>
         <thead><tr><th scope="col">Job</th><th scope="col" class="num">Price</th><th scope="col" class="num">Inference</th><th scope="col">By-laws</th><th scope="col">Status</th></tr></thead>
         <tbody></tbody>
       </table>
     </section>
 
-    <section id="audit" class="block audit">
-      <h2>Audit</h2>
-      <p class="sub">Agent Market pays one human account, the steward. The steward must pass every payout on to the co-op, with a bond at stake.</p>
-      <div class="audit-row">
-        <dl class="figures" id="rekon"></dl>
-        <div class="verdict" id="verdict"></div>
+    <section id="audit" class="block">
+      <div class="rail"><span class="num">04</span><span class="tag">Audit</span></div>
+      <div class="split">
+        <div>
+          <h2>Every payout<br />is <span class="dim">counted.</span></h2>
+          <p class="sub">Agent Market pays one human account, the steward. The steward must pass every payout on to the co-op, with a bond at stake. Anyone can check the two numbers on the right.</p>
+          <div class="verdict" id="verdict"></div>
+        </div>
+        <div class="bars" id="rekon"></div>
       </div>
     </section>
 
     <section id="shares" class="block">
-      <h2>Profit shares</h2>
-      <p class="sub" id="share-rule"></p>
+      <div class="rail"><span class="num">05</span><span class="tag">Profit shares</span></div>
+      <div class="split">
+        <div>
+          <h2>Profit,<br />shared by <span class="dim">rule.</span></h2>
+          <p class="sub" id="share-rule">Members vote each profit share; each member claims their own.</p>
+        </div>
+        <div class="plans" id="plans"></div>
+      </div>
       <table class="grid" id="periods">
+        <caption>Past profit shares</caption>
         <thead><tr><th scope="col">Period</th><th scope="col">Date</th><th scope="col" class="num">Shared</th><th scope="col" class="num">Kept as reserve</th><th scope="col" class="num">Members</th></tr></thead>
         <tbody></tbody>
       </table>
     </section>
-  </main>
 
-  <footer class="foot">
-    <p>Built at NEAR HACKATHON 2026.</p>
-    <p id="net"></p>
-  </footer>
+    <section class="closing">
+      <h2><b>Own</b> <span class="chip" id="chip">…</span> <span class="thin">the agent</span></h2>
+      <p>Clone it, deploy your own co-op on testnet, and vote on your agent's by-laws.</p>
+      <a class="btn" href="https://github.com/PugarHuda/koperasi#try-it">Start a koperasi <span aria-hidden="true">→</span></a>
+      <footer class="foot">
+        <div><span class="brand"><span class="brand-mark" aria-hidden="true"></span>Koperasi</span><p>Built at NEAR HACKATHON 2026.</p></div>
+        <nav aria-label="On NEAR" class="links" id="links"></nav>
+        <p id="net"></p>
+      </footer>
+    </section>
+  </main>
 </body>
 </html>
