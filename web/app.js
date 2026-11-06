@@ -13,34 +13,8 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
   }, { passive: true });
 }
 
-const dep = await (await fetch("deployment.json")).json();
-const testnet = dep.network !== "mainnet";
-const RPCS = testnet
-  ? ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.near.org"]
-  : ["https://free.rpc.fastnear.com", "https://near.drpc.org", "https://rpc.mainnet.near.org"];
-const RAW = "https://raw.githubusercontent.com/PugarHuda/koperasi/main/";
-const explorer = (id) => `https://${testnet ? "testnet." : ""}nearblocks.io/address/${id}`;
+import { dep, testnet, RAW, explorer, view, $, esc, usdc, nearAmt } from "./near.js";
 
-async function view(contract, method, args = {}) {
-  const body = JSON.stringify({
-    jsonrpc: "2.0", id: 1, method: "query",
-    params: { request_type: "call_function", finality: "optimistic", account_id: contract, method_name: method, args_base64: btoa(JSON.stringify(args)) },
-  });
-  let last;
-  for (const url of RPCS) {
-    try {
-      const r = await (await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body })).json();
-      if (r.error || r.result?.error) throw new Error(JSON.stringify(r.error ?? r.result.error));
-      return JSON.parse(new TextDecoder().decode(new Uint8Array(r.result.result)));
-    } catch (e) { last = e; }
-  }
-  throw last;
-}
-
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const usdc = (u) => (Number(u) / 1e6).toFixed(2);
-const nearAmt = (y) => (Number(BigInt(y) / 10n ** 21n) / 1000).toLocaleString("en", { maximumFractionDigits: 2 });
 const date = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 const short = (h) => `${h.slice(0, 10)}…`;
 const rows = (tbody, html) => { tbody.innerHTML = html || `<tr><td colspan="9" class="muted">Nothing yet.</td></tr>`; };
@@ -99,7 +73,7 @@ try {
   }).join("") + (members.length > 6 ? `<li class="no">+${members.length - 6} more</li>` : "");
   const yesCount = approvedBy ? members.filter(([a]) => approvedBy.has(a)).length : members.length;
   $("p-tally").innerHTML = proposalId != null
-    ? `${yesCount} of ${members.length} members voted yes on <a href="${explorer(dep.dao)}">proposal #${proposalId}</a>: by-laws v${v}.`
+    ? `<a href="${explorer(dep.dao)}">Proposal #${proposalId}</a> passed with ${yesCount} yes ${yesCount === 1 ? "vote" : "votes"}: by-laws v${v}.`
     : `By-laws v${v} were approved by a member vote.`;
   $("p-lock").href = explorer(dep.dao);
   const termsBox = $("p-terms");

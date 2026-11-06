@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script type="module" src="app.js"></script>
+  <script type="module" src="wallet.js"></script>
 </head>
 <body>
   <header class="top">
@@ -195,7 +196,10 @@
 
     <section class="closing">
       <h2><b>Own</b> <span class="chip" id="chip">…</span> <span class="thin">the agent</span></h2>
-      <p>Join this co-op on testnet in three steps, or deploy your own with <code>npm run demo</code>.</p>
+      <p>Join this co-op on testnet with your wallet, or deploy your own with <code>npm run demo</code>.</p>
+      <div class="joinapp" id="joinapp" aria-live="polite"><p class="muted">Loading the wallet panel…</p></div>
+      <details class="cli">
+      <summary>Prefer the command line?</summary>
       <ol class="join">
         <li><b>Pay the join deposit</b><span id="join-deposit">Refundable when you leave.</span>
           <div class="cmd"><code id="join-cmd">near call … join</code><button type="button" class="copy" data-copy="join-cmd">Copy</button></div></li>
@@ -204,6 +208,7 @@
         <li><b>Sync your membership</b><span>The contract reads the DAO's decision on-chain.</span>
           <div class="cmd"><code id="sync-cmd">near call … sync_member</code><button type="button" class="copy" data-copy="sync-cmd">Copy</button></div></li>
       </ol>
+      </details>
       <a class="btn" href="https://github.com/PugarHuda/koperasi#try-it">Start your own koperasi <span aria-hidden="true">→</span></a>
       <footer class="foot">
         <div><span class="brand"><span class="brand-mark" aria-hidden="true"></span>Koperasi</span><p>Built at NEAR HACKATHON 2026.</p></div>

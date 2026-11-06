@@ -236,7 +236,7 @@ h2 .dim { color: var(--grey); }
 .foot .links a { color: rgba(255,255,255,.85); }
 #net { grid-column: 1 / -1; font-size: .78rem; }
 .closing code { background: rgba(255,255,255,.1); color: #fff; }
-.join { list-style: none; margin: 0 auto 2.6rem; padding: 0; max-width: 68rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; text-align: left; counter-reset: j; }
+.join { list-style: none; margin: 0 auto; padding: 0; max-width: 68rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; text-align: left; counter-reset: j; }
 .join li { counter-increment: j; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; align-content: start; padding: 1.4rem; background: rgba(3,10,42,.6); border: 1px solid rgba(255,255,255,.14); }
 .join li::before { content: counter(j); display: grid; place-items: center; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--blue); font-weight: 600; font-size: .85rem; }
 .join b { font: 700 1.5rem/1 var(--display); text-transform: uppercase; }
@@ -246,6 +246,38 @@ h2 .dim { color: var(--grey); }
 .copy { font: 500 .8rem var(--body); padding: 0 .9rem; background: var(--blue); color: #fff; border: 0; cursor: pointer; }
 .copy:hover { background: var(--blue-hi); }
 .small-link { font-size: .88rem; color: #9fb6ff; }
+
+/* join from the page with a wallet */
+.joinapp { max-width: 40rem; margin: 0 auto 2rem; text-align: left; padding: 1.6rem; background: rgba(3,10,42,.7); border: 1px solid rgba(120,150,255,.3); border-radius: 8px; }
+.joinapp > p { margin: 0 0 1rem; color: rgba(255,255,255,.8); }
+.joinapp .err { color: #ff9a94; }
+.who-bar { display: flex; justify-content: space-between; gap: 1rem; align-items: center; font-size: .88rem; padding-bottom: .9rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(120,150,255,.2); overflow-wrap: anywhere; }
+.linkish { background: none; border: 0; padding: 0; color: #9fb6ff; font: inherit; text-decoration: underline; cursor: pointer; }
+.jsteps { list-style: none; margin: 0; padding: 0; counter-reset: js; display: grid; gap: .9rem; }
+.jsteps li { counter-increment: js; position: relative; padding-left: 2.4rem; }
+.jsteps li::before { content: counter(js); position: absolute; left: 0; top: 0; width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border-radius: 50%; font-size: .8rem; font-weight: 600; background: rgba(255,255,255,.12); }
+.jsteps li.now::before { background: var(--blue); }
+.jsteps li.done::before { content: "✓"; background: var(--green); }
+.jsteps li.todo { opacity: .5; }
+.jsteps b { display: block; }
+.jsteps div { font-size: .86rem; color: rgba(255,255,255,.75); margin-top: .3rem; }
+.jsteps .btn, .joinapp > .btn { margin-top: .6rem; }
+.jsteps a, .note-line a { color: #9fb6ff; }
+.small { font-size: .84rem; color: rgba(255,255,255,.7); }
+.note-line { margin: 1rem 0 0; font-size: .86rem; padding: .7rem .9rem; background: rgba(255,255,255,.06); border-left: 3px solid var(--blue-hi); }
+.me-card { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: rgba(120,150,255,.25); border: 1px solid rgba(120,150,255,.25); margin-bottom: 1rem; }
+.me-card div { background: rgba(3,8,32,.95); padding: .8rem 1rem; }
+.me-card span { display: block; font-size: .74rem; color: rgba(255,255,255,.6); }
+.me-card strong { font: 700 1.5rem/1.1 var(--display); }
+.jh { font: 700 1.3rem var(--display); text-transform: uppercase; margin: 1.4rem 0 .6rem; }
+.props { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.props li { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; padding: .6rem .8rem; background: rgba(255,255,255,.05); font-size: .86rem; }
+.props em { font-style: normal; color: #7fe0a6; font-size: .8rem; }
+.vote-btns { display: flex; gap: .4rem; }
+.btn.small { padding: .4em .9em; font-size: .82rem; }
+.cli { max-width: 68rem; margin: 0 auto 2.4rem; text-align: left; }
+.cli summary { cursor: pointer; color: #9fb6ff; text-align: center; margin-bottom: 1rem; }
+
 
 /* the hero tells the story in one sequence (about 2.6 s):
    the agent alone (a rim of light), members wire in one by one, the mind fills with their layers, CO-OWN assembles.
@@ -323,6 +355,8 @@ h2 .dim { color: var(--grey); }
   .grid { font-size: .82rem; }
 }
 @media (max-width: 560px) {
+  .me-card { grid-template-columns: 1fr; }
+  .who-bar { flex-direction: column; align-items: flex-start; }
   .top-actions .quiet { display: none; }
   .grid thead { display: none; }
   .grid tr { display: grid; grid-template-columns: 1fr 1fr; padding: .6rem 0; border-bottom: 1px solid var(--rule); }

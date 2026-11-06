@@ -84,9 +84,14 @@ Open http://localhost:5173 (or the live page). See:
   from the DAO proposal), the locked terms (price, AI spend caps), and whether the DAO allows the agent to work.
 - **Verify by-laws in your browser**: downloads the by-laws file from this repo, hashes it in your browser and compares
   it with the hash the members voted on. See: `Match.`
+- **Join with a testnet wallet** (Meteor, Intear, Nightly…, via NEAR Connect): pay the 0.5 NEAR join deposit, create
+  your own membership proposal in the DAO (0.1 NEAR bond, returned when decided), and sync once the members vote you in.
+  Members then see open proposals with Approve / Reject, their points and their share to claim. Tested on testnet:
+  `kop-guest-984702.testnet` joined this way (proposal #8) and the members voted it a welcome point (proposal #9).
+  The demo members' keys live with the builder; `node scripts/approve-requests.mjs` has them approve every request
+  from an account that paid the deposit.
 - The member passbook (approved by-laws, paid jobs, profit shares), members' savings and points, one receipt per job,
-  the audit (GREEN when every payout reached the co-op, RED with the missing amount when not), and the three calls to
-  join the co-op on testnet.
+  and the audit (GREEN when every payout reached the co-op, RED with the missing amount when not).
 
 The showcase co-op's audit is RED on purpose: the demo's last step has the steward keep a payout.
 
