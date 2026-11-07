@@ -272,7 +272,7 @@ try {
     const list = n ? await view(dep.dao, "get_bounties", { from_index: 0, limit: n }) : [];
     const taken = await Promise.all(list.map((b) => view(dep.dao, "get_bounty_number_of_claims", { id: b.id }).catch(() => 0)));
     rows($("bounties").tBodies[0], list.map((b, i) => `<tr><td>${esc(b.description)}</td>
-      <td class="num" data-label="Pays">${b.token ? `${usdc(b.amount)} USDC` : `${nearAmt(b.amount)} NEAR`}</td>
+      <td class="num" data-label="Pays">${!b.token ? `${nearAmt(b.amount)} NEAR` : b.token === dep.usdc ? `${usdc(b.amount)} USDC` : `${esc(b.amount)} of ${esc(b.token)} (not the co-op's USDC)`}</td>
       <td class="num" data-label="Left">${b.times}</td><td class="num" data-label="Taken">${taken[i]}</td></tr>`).join(""));
   }).catch(() => rows($("bounties").tBodies[0], ""));
   rows($("periods").tBodies[0], [...periods].reverse().map((p) => `<tr>

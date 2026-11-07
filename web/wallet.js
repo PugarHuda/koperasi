@@ -31,8 +31,13 @@ const argsOf = (b64) => {
 };
 // a proposal whose args we cannot show in full is not voted on from here
 const opaque = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.actions.some((a) => argsOf(a.args) === null)
-  || !["AddMemberToRole", "RemoveMemberFromRole", "Transfer", "FunctionCall", "AddBounty", "BountyDone"].includes(kindOf(p));
-const pays = (token, amount) => (token ? `${usdc(amount)} USDC (${token})` : `${nearAmt(amount)} NEAR`);
+  || !["AddMemberToRole", "RemoveMemberFromRole", "Transfer", "FunctionCall", "AddBounty", "BountyDone"].includes(kindOf(p))
+  || (kindOf(p) === "AddBounty" && !validToken(p.kind.AddBounty.bounty.token));
+// a NEAR account id (or "" for NEAR itself); anything else is not voted on from here
+const validToken = (t) => t === "" || /^(?=.{2,64}$)[a-z0-9]+([-_][a-z0-9]+)*(\.[a-z0-9]+([-_][a-z0-9]+)*)*$/.test(String(t));
+// only the co-op's own USDC contract is called USDC; any other token shows its raw contract id, flagged
+const pays = (token, amount) => (!token ? `${nearAmt(amount)} NEAR`
+  : token === dep.usdc ? `${usdc(amount)} USDC` : `${amount} base units of UNKNOWN token ${token}`);
 const DAY_NS = 86_400_000_000_000n;
 const describe = (p) => {
   const k = kindOf(p);
