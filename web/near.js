@@ -9,10 +9,13 @@ export const RPC_URLS = RPCS;
 let good = 0;
 async function rpc(body) {
   let last;
-  for (let k = 0; k < RPCS.length; k++) {
+  // two rounds over every RPC, a short pause between: public RPCs rate-limit in bursts
+  for (let k = 0; k < RPCS.length * 2; k++) {
+    if (k === RPCS.length) await new Promise((ok) => setTimeout(ok, 1500));
     const i = (good + k) % RPCS.length;
     try {
-      const r = await (await fetch(RPCS[i], { method: "POST", headers: { "content-type": "application/json" }, body })).json();
+      // a hung RPC must not hang the page: give up after 8 s and try the next one
+      const r = await (await fetch(RPCS[i], { method: "POST", headers: { "content-type": "application/json" }, body, signal: AbortSignal.timeout(8000) })).json();
       if (r.error || r.result?.error) throw new Error(JSON.stringify(r.error ?? r.result.error));
       good = i;
       return r.result;
