@@ -13,7 +13,7 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
   }, { passive: true });
 }
 
-import { dep, testnet, RAW, explorer, view, $, esc, usdc, nearAmt } from "./near.js";
+import { dep, testnet, RAW, explorer, view, query, $, esc, usdc, nearAmt } from "./near.js";
 
 const date = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 const short = (h) => `${h.slice(0, 10)}…`;
@@ -30,6 +30,8 @@ try {
     view(dep.contract, "get_periods"),
   ]);
   const claimable = await Promise.all(members.map(([a]) => view(dep.contract, "get_claimable", { account_id: a })));
+  const recent = [...receipts].reverse().slice(0, 12);
+  const proofs = await Promise.all(recent.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch(() => null)));
 
   $("links").innerHTML = [
     `<a href="${explorer(dep.contract)}">Contract on NEAR</a>`,
@@ -192,11 +194,19 @@ try {
     }
   };
 
-  rows($("receipts").tBodies[0], [...receipts].reverse().slice(0, 12).map((r) => `<tr>
+  const proofCell = (p) => {
+    if (!p) return `<span class="muted">none</span>`;
+    try {
+      const x = JSON.parse(p);
+      return `<span class="badge Paid" title="${esc(p)}">TEE-signed</span> <span class="muted">${esc(String(x.tee_signer ?? "").slice(0, 10))}…</span>`;
+    } catch { return `<span class="muted">${esc(p.slice(0, 16))}</span>`; }
+  };
+  rows($("receipts").tBodies[0], recent.map((r, i) => `<tr>
       <td>${esc(r.job_id.slice(0, 8))}… <span class="muted">${date(r.ts)}</span></td>
       <td class="num" data-label="Price">${usdc(r.price)}</td>
       <td class="num" data-label="Inference">$${(Number(r.inference_cost) / 1e6).toFixed(4)}</td>
       <td data-label="By-laws">v${r.config_version} <span class="muted">${short(r.config_hash)}</span></td>
+      <td data-label="Proof">${proofCell(proofs[i])}</td>
       <td data-label="Status"><span class="badge ${r.status}">${r.status}</span></td></tr>`).join(""));
 
   // audit: owed vs deposited, two bars on one scale
@@ -217,6 +227,29 @@ try {
     : `<span class="seal">GREEN</span><p>Every paid job has reached the co-op. Steward bond at stake: ${bond} NEAR.</p>`;
 
   $("audit-note").hidden = owed === 0n;
+  // the treasury, read from the token contract itself rather than from Koperasi's own counter
+  view(dep.usdc, "ft_balance_of", { account_id: dep.dao }).then((bal) => {
+    $("treasury").innerHTML = `The DAO treasury holds <strong>${usdc(bal)} USDC</strong> right now, read from <a href="${explorer(dep.usdc)}">${esc(dep.usdc)}</a>. Spending it takes a vote.`;
+  }).catch(() => {});
+
+  // who can change the contract's code: the code it runs, the vote that chose it, and any key that could skip the vote
+  Promise.all([
+    query({ request_type: "view_account", account_id: dep.contract }),
+    query({ request_type: "view_access_key_list", account_id: dep.contract }),
+    view(dep.dao, "get_last_proposal_id").then((last) => view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 100), limit: 100 })),
+  ]).then(([acct, keys, props]) => {
+    const code = acct.global_contract_hash ?? acct.code_hash;
+    const full = keys.keys.filter((k) => k.access_key.permission === "FullAccess").length;
+    const vote = [...props].reverse().find((p) => p.status === "Approved" && p.kind?.FunctionCall?.actions?.some((x) =>
+      x.method_name === "upgrade" && (() => { try { return JSON.parse(atob(x.args)).code_hash === code; } catch { return false; } })()));
+    const by = vote ? `approved in <a href="${explorer(dep.dao)}">proposal #${vote.id}</a>` : "not traced to a vote";
+    $("codegov").innerHTML = `<h3>Who can change the contract's code?</h3>
+      <p>It runs ${acct.global_contract_hash ? "the global contract" : "code"} <code>${esc(code.slice(0, 12))}…</code>, ${by}.
+      A new version is published as an immutable NEAR global contract and the members vote <code>upgrade({code_hash})</code>.</p>
+      <p class="match ${full ? "bad" : "ok"}">${full
+        ? `The contract account still has ${full} full-access key${full > 1 ? "s" : ""}: whoever holds it could change the code without a vote. Removing it is the next step (<code>scripts/upgrade.mjs --lock</code>).`
+        : "The contract account has no full-access key. Only a members' vote can change its code."}</p>`;
+  }).catch((e) => { $("codegov").innerHTML = `<p class="hint">Could not read the contract account: ${esc(e.message)}</p>`; });
 
   // live status under the hero
   const paid = receipts.filter((x) => x.status === "Paid").length;

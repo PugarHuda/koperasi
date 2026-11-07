@@ -61,6 +61,13 @@ export function startMockMarket({ port = 8787, acceptMs = 1500, jobs: seed = [] 
       return a;
     }],
     ["POST", /^\/v1\/assignments\/([^/]+)\/messages$/, () => [201, { ok: true }]],
+    ["POST", /^\/v1\/assignments\/([^/]+)\/decline$/, ([id]) => {
+      const a = assignments.get(id);
+      if (a?.status !== "in_progress") return [409, { error: "not_in_progress" }];
+      a.status = "cancelled"; // the real market refunds the buyer in full
+      return a;
+    }],
+    ["GET", /^\/v1\/platform\/config$/, () => ({ platform_fee_bps: 500 })],
     ["POST", /^\/_mock\/jobs$/, (_, body) => [201, addJob(body)]],
   ];
 

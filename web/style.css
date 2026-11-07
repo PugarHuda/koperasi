@@ -149,6 +149,11 @@ h2 .dim { color: var(--grey); }
 
 /* verify the by-laws in the browser */
 .verify { max-width: 30rem; }
+.codegov { max-width: 30rem; margin-top: 2rem; }
+.codegov h3 { font-size: 1rem; margin: 0 0 .5rem; }
+.codegov p { font-size: .92rem; }
+.codegov code { overflow-wrap: anywhere; }
+.treasury { font-size: .95rem; max-width: 30rem; }
 .hint { font-size: .82rem; color: var(--muted); margin: .7rem 0 0; }
 .match { margin: 0 0 1rem; padding: .8rem 1rem; font-weight: 500; border-left: 4px solid; }
 .match.ok { color: #0b6b36; background: #e8f7ee; border-color: var(--green); }

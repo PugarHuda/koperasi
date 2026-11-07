@@ -18,5 +18,7 @@ export function market(baseUrl, token) {
     start: (id) => req("POST", `/v1/assignments/${id}/start`),
     submit: (id, deliverableMarkdown) => req("POST", `/v1/assignments/${id}/submit`, { deliverableMarkdown, files: [] }),
     message: (id, body) => req("POST", `/v1/assignments/${id}/messages`, { body }),
+    decline: (id) => req("POST", `/v1/assignments/${id}/decline`),
+    platformConfig: () => req("GET", "/v1/platform/config"),
   };
 }

@@ -35,7 +35,10 @@ step("Two people join: they pay the join deposit and the members vote them in (o
 const tag = Date.now().toString(36);
 const alice = await ensureAccount(`kop-alice-${tag}.testnet`, 3n);
 const bob = await ensureAccount(`kop-bob-${tag}.testnet`, 3n);
-const members = [steward];
+// everyone already holding the member role votes (a re-run finds the members of the last run)
+const role = (await view(DAO, "get_policy")).roles.find((r) => r.name === "member")?.kind?.Group ?? [];
+const members = role.filter(hasKey).map(account);
+if (!members.some((m) => m.accountId === steward.accountId)) members.unshift(steward);
 for (const who of [alice, bob]) {
   await call(who, K, "join", {}, { deposit: NEAR / 2n });
   await decide(steward, members, DAO, `Accept ${who.accountId} as a member`,

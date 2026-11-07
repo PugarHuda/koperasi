@@ -140,6 +140,7 @@
           <h2>The members<br />hold the <span class="dim">agent's mind.</span></h2>
           <p class="sub">The agent's prompt, model, prices and spend caps are its by-laws. A new version needs a member vote. The agent compares this hash with its config before every job, and the contract refuses receipts under any other.</p>
           <div class="verify" id="verify" aria-live="polite"></div>
+          <div class="codegov" id="codegov" aria-live="polite"><p class="hint">Reading who can change the contract's code…</p></div>
         </div>
         <ol class="versions" id="versions" reversed></ol>
       </div>
@@ -169,7 +170,7 @@
       </div>
       <table class="grid on-dark" id="receipts">
         <caption>Receipts</caption>
-        <thead><tr><th scope="col">Job</th><th scope="col" class="num">Price</th><th scope="col" class="num">Inference</th><th scope="col">By-laws</th><th scope="col">Status</th></tr></thead>
+        <thead><tr><th scope="col">Job</th><th scope="col" class="num">Price</th><th scope="col" class="num">Inference</th><th scope="col">By-laws</th><th scope="col">Proof</th><th scope="col">Status</th></tr></thead>
         <tbody></tbody>
       </table>
     </section>
@@ -181,6 +182,7 @@
           <h2>Every payout<br />is <span class="dim">counted.</span></h2>
           <p class="sub">Agent Market pays one human account, the steward. The steward must pass every payout on to the co-op, with a bond at stake. Anyone can check the two numbers on the right.</p>
           <div class="verdict" id="verdict"></div>
+          <p class="treasury" id="treasury"></p>
           <p class="note" id="audit-note" hidden>This is the demo co-op. In the last step of <code>npm run demo</code> the steward keeps a payout on purpose, so the audit shows what members see when money goes missing.</p>
         </div>
         <div class="bars" id="rekon"></div>

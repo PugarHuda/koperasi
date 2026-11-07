@@ -5,8 +5,9 @@
 //      record a receipt on-chain with the config hash, the inference cost and the deliverable hash
 //   4. mirror accepted / cancelled / disputed assignments into the on-chain receipt status
 //
-// env: KOP_MARKET_URL (default https://market.near.ai), KOP_MARKET_TOKEN (aat_…),
-//      NEARAI_API_KEY (optional: without it the agent writes an offline draft and records 0 inference cost)
+// env: KOP_MARKET_URL (default https://market.near.ai), KOP_MARKET_TOKEN (aat_…), NEARAI_API_KEY (sk-…).
+// Without NEARAI_API_KEY the agent takes no work on the real market. Only against the local stand-in
+// (agent/mock-market.mjs, used by `npm run demo`) does it deliver a draft that says plainly no model wrote it.
 import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
@@ -24,6 +25,50 @@ const STATE = path.join(ROOT, "agent", ".state.json");
 export class ConfigMismatch extends Error {}
 /** The model's servers did not prove they are genuine TEEs, or a response was not signed by one: no job is sent. */
 export class NotVerified extends Error {}
+/** Even the cheapest answer would break the by-laws' per-job inference cap at the model's published prices. */
+export class OverBudget extends Error {}
+
+const MIN_OUTPUT_TOKENS = 256;
+/** The agent's market fee assumption; the contract's audit nets paid jobs by the same 5%. */
+const MARKET_FEE_BPS = 500;
+const isLocal = (url) => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url);
+
+/**
+ * The model as NEAR AI Cloud publishes it: it must be marked verifiable (served from TEEs), and its per-token prices
+ * (USD, amount × 10^-scale) give the worst case of a job before it is sent.
+ */
+export async function modelCard(model) {
+  const r = await fetch(`${NEARAI}/model/list`);
+  if (!r.ok) throw new NotVerified(`model list: HTTP ${r.status}`);
+  const card = (await r.json()).models?.find((m) => m.modelId === model);
+  if (!card) throw new NotVerified(`${model} is not served by NEAR AI Cloud`);
+  if (card.metadata?.verifiable !== true) throw new NotVerified(`${model} is not marked verifiable by NEAR AI Cloud`);
+  const micro = (p) => (p ? (p.amount * 10 ** 6) / 10 ** p.scale : 0); // micro-USD per token
+  return { inMicro: micro(card.inputCostPerToken), outMicro: micro(card.outputCostPerToken) };
+}
+
+/** Output tokens that keep the worst case (every input byte a token, every output token used) within the cap. */
+export function maxTokensWithin(capMicroUsd, inputBytes, { inMicro, outMicro }) {
+  const left = capMicroUsd - inputBytes * inMicro;
+  const n = outMicro > 0 ? Math.min(MAX_OUTPUT_TOKENS, Math.floor(left / outMicro)) : MAX_OUTPUT_TOKENS;
+  if (!(n >= MIN_OUTPUT_TOKENS)) throw new OverBudget(`a ${inputBytes}-byte brief cannot be answered within the $${capMicroUsd / 1e6} per-job cap`);
+  return n;
+}
+
+/** NEAR AI Cloud bills a request a few seconds after it ends: ask a few times before booking the cap instead. */
+async function billedMicroUsd(inferenceId, key, tries = 5) {
+  for (let i = 0; i < tries; i++) {
+    const c = await fetch(`${NEARAI}/billing/costs`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ requestIds: [inferenceId] }),
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const nano = JSON.stringify(c ?? {}).match(/"costNanoUsd":\s*(\d+)/);
+    if (nano) return Math.ceil(Number(nano[1]) / 1000);
+    await new Promise((ok) => setTimeout(ok, 2000 * (i + 1)));
+  }
+  return null;
+}
 
 /**
  * Can the co-op's NEAR AI organization pay for inference right now? A 1-token call: 402 means no credits (it costs
@@ -67,23 +112,24 @@ function loadState() {
 }
 const saveState = (s) => fs.writeFileSync(STATE, JSON.stringify(s));
 
-async function infer(config, job, capMicroUsd) {
+async function infer(config, job, capMicroUsd, { local = false } = {}) {
   const key = process.env.NEARAI_API_KEY;
   if (!key) {
+    if (!local) throw new NotVerified("no NEARAI_API_KEY: the agent does not deliver work no model did");
     return {
-      text: `# ${job.title}\n\n_Offline draft (no NEARAI_API_KEY set): the brief was received and logged._\n\n> ${job.description}`,
+      text: `# ${job.title}\n\n_Draft from the local demo market: no NEARAI_API_KEY was set, so no model wrote this._\n\n> ${job.description}`,
       costMicroUsd: 0,
+      proof: null,
     };
   }
   const tee = await verifiedTee(config.model); // no job leaves this machine for an unverified model
-  const body = JSON.stringify({
-    model: config.model,
-    messages: [
-      { role: "system", content: config.system_prompt },
-      { role: "user", content: `Job: ${String(job.title).slice(0, 300)}\n\n${String(job.description)}`.slice(0, MAX_BRIEF_CHARS) },
-    ],
-    max_tokens: MAX_OUTPUT_TOKENS,
-  });
+  const prices = await modelCard(config.model);
+  const messages = [
+    { role: "system", content: config.system_prompt },
+    { role: "user", content: `Job: ${String(job.title).slice(0, 300)}\n\n${String(job.description)}`.slice(0, MAX_BRIEF_CHARS) },
+  ];
+  const max_tokens = maxTokensWithin(capMicroUsd, Buffer.byteLength(JSON.stringify(messages)), prices);
+  const body = JSON.stringify({ model: config.model, messages, max_tokens });
   const res = await fetch(`${NEARAI}/chat/completions`, {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "accept-encoding": "identity" },
@@ -95,17 +141,13 @@ async function infer(config, job, capMicroUsd) {
   const out = JSON.parse(raw);
   const signature = await checkSignature(out.id, config.model, body, raw, tee, key);
   // Fail closed: a cost we cannot read is booked at the per-job cap, never as free.
-  let costMicroUsd = capMicroUsd;
-  if (inferenceId) {
-    const c = await fetch(`${NEARAI}/billing/costs`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({ requestIds: [inferenceId] }),
-    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    const nano = JSON.stringify(c ?? {}).match(/"costNanoUsd":\s*(\d+)/);
-    if (nano) costMicroUsd = Math.ceil(Number(nano[1]) / 1000);
-  }
-  return { text: out.choices[0].message.content, costMicroUsd, inferenceId, signature };
+  const billed = inferenceId ? await billedMicroUsd(inferenceId, key) : null;
+  const costMicroUsd = billed ?? capMicroUsd;
+  const proof = {
+    model: config.model, inference_id: inferenceId, chat_id: signature.chat_id, tee_signer: signature.signer,
+    tee_checked_at: tee.at, billed: billed !== null,
+  };
+  return { text: out.choices[0].message.content, costMicroUsd, proof };
 }
 
 /**
@@ -136,7 +178,17 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
     return;
   }
   log(`running by-laws v${version} (${hash.slice(0, 12)}…)`);
-  const m = market(process.env.KOP_MARKET_URL ?? "https://market.near.ai", process.env.KOP_MARKET_TOKEN);
+  const marketUrl = process.env.KOP_MARKET_URL ?? "https://market.near.ai";
+  const local = isLocal(marketUrl);
+  const m = market(marketUrl, process.env.KOP_MARKET_TOKEN);
+  if (!local) {
+    // the audit nets paid jobs by the market's fee; if the market changes it, the members must vote first
+    const fee = (await m.platformConfig())?.platform_fee_bps;
+    if (fee !== MARKET_FEE_BPS) {
+      log(`Agent Market fee is ${fee} bps, the co-op's audit assumes ${MARKET_FEE_BPS}: not working until the members update it`);
+      return;
+    }
+  }
   const agent = account(dep.agent);
 
   // bid
@@ -177,10 +229,12 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         log(`inference budget left today: ${(capDay - state.spentMicroUsd) / 1e6} USD; not starting "${job.title}"`);
         continue;
       }
-      if (process.env.NEARAI_API_KEY) {
+      if (process.env.NEARAI_API_KEY || !local) {
         try {
-          await verifiedTee(config.model); // prove the model runs in a TEE before accepting the work
-          const pay = await canPay(config.model); // and that the co-op can pay for it
+          if (!process.env.NEARAI_API_KEY) throw new NotVerified("no NEARAI_API_KEY");
+          await modelCard(config.model); // the model is published as verifiable,
+          await verifiedTee(config.model); // its servers prove they are TEEs,
+          const pay = await canPay(config.model); // and the co-op can pay for it
           if (!pay.ok) throw new NotVerified(`NEAR AI credits: ${pay.reason}`);
         } catch (e) {
           if (!(e instanceof NotVerified)) throw e;
@@ -190,7 +244,18 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         }
       }
       await m.start(a.assignmentId);
-      const { text, costMicroUsd } = await infer(config, job, capJob);
+      let done;
+      try {
+        done = await infer(config, job, capJob, { local });
+      } catch (e) {
+        // started but cannot deliver: tell the buyer and hand the job back instead of leaving it to time out
+        log(`could not deliver "${job.title}": ${e.message}`);
+        await m.message(a.assignmentId, "The Koperasi agent cannot deliver this job (its checks failed); handing it back.").catch(() => {});
+        await m.decline(a.assignmentId).catch((x) => log(`decline failed: ${x.message}`));
+        halted = true;
+        continue;
+      }
+      const { text, costMicroUsd, proof } = done;
       state.spentMicroUsd += costMicroUsd;
       saveState(state);
       if (costMicroUsd > capJob) {
@@ -204,6 +269,7 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         inference_cost: String(costMicroUsd),
         config_hash: hash,
         deliverable_hash: sha256(text),
+        proof: proof ? JSON.stringify(proof) : null,
       });
       log(`delivered "${job.title}" for ${a.escrowAmount} USDC (inference ${costMicroUsd / 1e6} USD), receipt on-chain`);
     } else if (r?.status === "Submitted" || r?.status === "Disputed") {

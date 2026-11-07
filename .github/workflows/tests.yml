@@ -1,0 +1,45 @@
+# The page, end to end in a real browser (desktop + mobile), against live NEAR testnet data:
+# on every push from the files in web/ served locally (including the wallet panel's ?as= previews),
+# and every day against the deployed page, so a broken deploy shows up as a failed run.
+name: tests
+on:
+  push:
+    branches: [main]
+  schedule: [{ cron: "41 4 * * *" }]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  page:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [local, live]
+        exclude:
+          - target: ${{ github.event_name == 'push' && 'live' || 'none' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Serve web/
+        if: matrix.target == 'local'
+        run: (cd web && python3 -m http.server 5173 >/dev/null 2>&1 &) && sleep 1
+      - name: Playwright
+        env:
+          BASE_URL: ${{ matrix.target == 'local' && 'http://localhost:5173' || 'https://koperasi-kohl.vercel.app' }}
+        run: npx playwright test --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: "playwright-${{ matrix.target }}", path: test-results, retention-days: 7 }
+  contract:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: contract }
+      - run: cd contract && cargo test

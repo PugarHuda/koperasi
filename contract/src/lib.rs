@@ -6,7 +6,7 @@
 //! agent must run, a receipt for every job, on-chain reconciliation of the steward's deposits, and the
 //! profit share split by savings + contribution points, with a reserve returned to the DAO.
 
-use near_sdk::json_types::{U128, U64};
+use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde_json::Value;
 use near_sdk::store::{IterableMap, LookupMap, Vector};
 use near_sdk::{
@@ -45,6 +45,13 @@ trait StakingPool {
 /// The staking pool members stake in for inference credits ("savings"), chosen by the DAO.
 // ponytail: kept in its own storage key instead of a struct field, so the upgrade needs no state migration.
 const KEY_STAKING_POOL: &[u8] = b"staking_pool";
+/// Per-job proof of the inference (NEAR AI inference id, attested TEE signer, signed hashes), keyed by job id.
+const PROOF_PREFIX: &[u8] = b"proof:";
+const MAX_PROOF_LEN: usize = 1024;
+
+fn proof_key(job_id: &str) -> Vec<u8> {
+    [PROOF_PREFIX, job_id.as_bytes()].concat()
+}
 
 #[derive(BorshStorageKey)]
 #[near]
@@ -436,6 +443,16 @@ impl Koperasi {
         self.paused = false;
     }
 
+    /// The only way to change this contract's code. Wasm is far too large to pass through a proposal, so a member
+    /// first publishes it as a NEAR global contract (immutable, addressed by its sha256); the members then vote a
+    /// FunctionCall `upgrade({code_hash})` and the contract switches itself to exactly that code. The contract
+    /// account keeps no full-access key, so nobody can deploy around the vote. New code must keep the state layout.
+    pub fn upgrade(&mut self, code_hash: Base58CryptoHash) -> Promise {
+        self.assert_dao();
+        log!("upgrade by vote to global contract code {}", String::from(&code_hash));
+        Promise::new(env::current_account_id()).use_global_contract(code_hash)
+    }
+
     // ---------- the agent (function-call key, no deposit) ----------
 
     pub fn record_receipt(
@@ -445,6 +462,7 @@ impl Koperasi {
         inference_cost: U128,
         config_hash: String,
         deliverable_hash: String,
+        proof: Option<String>,
     ) {
         self.assert_agent();
         require!(!self.paused, "koperasi is paused");
@@ -452,6 +470,10 @@ impl Koperasi {
         require!(!job_id.is_empty() && job_id.len() <= 128, "bad job_id");
         require!(deliverable_hash.len() <= 128, "bad deliverable_hash");
         require!(!self.receipt_index.contains_key(&job_id), "receipt exists");
+        if let Some(p) = proof {
+            require!(p.len() <= MAX_PROOF_LEN, "proof too long");
+            env::storage_write(&proof_key(&job_id), p.as_bytes());
+        }
         self.receipt_index.insert(job_id.clone(), self.receipts.len());
         self.receipts.push(Receipt {
             job_id,
@@ -628,6 +650,11 @@ impl Koperasi {
 
     pub fn get_receipts(&self, from: Option<u32>, limit: Option<u32>) -> Vec<Receipt> {
         self.receipts.iter().skip(from.unwrap_or(0) as usize).take(limit.unwrap_or(50) as usize).cloned().collect()
+    }
+
+    /// The inference proof the agent recorded with a job's receipt, if any (JSON text).
+    pub fn get_proof(&self, job_id: String) -> Option<String> {
+        env::storage_read(&proof_key(&job_id)).and_then(|b| String::from_utf8(b).ok())
     }
 
     pub fn get_periods(&self) -> Vec<Period> {

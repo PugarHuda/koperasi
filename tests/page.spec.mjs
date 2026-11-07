@@ -4,7 +4,9 @@ import { expect, test } from "@playwright/test";
 const ready = async (page) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  // the browser logs a public RPC's rate limit (429 without CORS headers) as an error; the page then uses the next RPC
+  const network = (t) => /blocked by CORS policy|Failed to load resource/.test(t);
+  page.on("console", (m) => { if (m.type() === "error" && !network(m.text())) errors.push(m.text()); });
   await page.goto("/");
   await expect(page.locator("#p-voters li").first()).not.toHaveText("Reading the DAO…");
   return errors;
@@ -75,9 +77,25 @@ test("no horizontal scrolling and every section anchor exists", async ({ page })
 test("outbound links resolve", async ({ page, request }) => {
   await ready(page);
   const links = await page.locator('a[href^="https://"]').evaluateAll((as) => [...new Set(as.map((a) => a.href))]);
-  for (const url of links.filter((u) => /github\.com|nearblocks\.io|raw\.githubusercontent/.test(u))) {
-    const r = await request.get(url, { maxRedirects: 5 });
+  for (const url of links.filter((u) => /github\.com|raw\.githubusercontent/.test(u))) {
+    let r = await request.get(url, { maxRedirects: 5 });
+    for (let i = 1; r.status() === 429 && i <= 3; i++) { // GitHub rate-limits repeated runs
+      await new Promise((ok) => setTimeout(ok, 5000 * i));
+      r = await request.get(url, { maxRedirects: 5 });
+    }
     expect(r.status(), url).toBeLessThan(400);
+  }
+  // nearblocks answers bots with 403; what makes its link right is that the account exists on-chain
+  for (const url of links.filter((u) => /nearblocks\.io\/address\//.test(u))) {
+    const id = url.split("/address/")[1];
+    let amount;
+    for (const rpc of ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.near.org"]) {
+      const r = await request.post(rpc, { data: { jsonrpc: "2.0", id: 1, method: "query",
+        params: { request_type: "view_account", finality: "final", account_id: id } } }).catch(() => null);
+      amount = (await r?.json().catch(() => null))?.result?.amount;
+      if (amount) break;
+    }
+    expect(amount, url).toBeTruthy();
   }
 });
 
@@ -96,4 +114,63 @@ test("keyboard users see where focus is", async ({ page, isMobile }) => {
   await page.keyboard.press("Tab");
   const outline = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
   expect(outline).not.toBe("none");
+});
+
+test("the page says who can change the contract's code, from the chain", async ({ page }) => {
+  await ready(page);
+  const box = page.locator("#codegov");
+  await expect(box).toContainText("Who can change the contract's code?");
+  await expect(box).toContainText(/approved in proposal #\d+/);
+  await expect(box.locator(".match")).toHaveText(/full-access key/);
+});
+
+test("receipts carry a proof column and the treasury is read from the token", async ({ page }) => {
+  await ready(page);
+  await expect(page.locator("#receipts thead")).toContainText("Proof");
+  await expect(page.locator("#receipts tbody tr").first().locator('td[data-label="Proof"]')).toBeVisible();
+  await expect(page.locator("#treasury")).toContainText(/holds \d+\.\d\d USDC/);
+});
+
+// the wallet panel in each state, previewed with ?as= (localhost only, no wallet needed)
+const local = (testInfo) => /localhost|127\.0\.0\.1/.test(testInfo.project.use.baseURL ?? process.env.BASE_URL ?? "");
+
+test("a newcomer is walked through joining", async ({ page }, testInfo) => {
+  test.skip(!local(testInfo), "?as= previews run on localhost only");
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/?as=nobody-koperasi-e2e.testnet");
+  const panel = page.locator("#joinapp");
+  await expect(panel).toContainText("Signed in as nobody-koperasi-e2e.testnet");
+  await expect(panel.locator("#w-join")).toHaveText(/Pay 0\.5 NEAR/);
+  await expect(panel.locator(".jsteps li")).toHaveCount(4);
+  expect(errors).toEqual([]);
+});
+
+test("a member sees their vote, savings and open proposals", async ({ page }, testInfo) => {
+  test.skip(!local(testInfo), "?as= previews run on localhost only");
+  await page.goto("/?as=kop-bob-mw4i3w8f.testnet");
+  const panel = page.locator("#joinapp");
+  await expect(panel.locator(".me-card").first()).toContainText(/Your vote\s*1 of \d+/);
+  await expect(panel).toContainText("Open proposals");
+  await expect(panel.locator("#w-stake")).toBeVisible();
+  // bob has a profit share waiting: either claim it or register for USDC first
+  await expect(panel.locator("#w-claim, #w-usdc")).toHaveCount(1);
+});
+
+test("a stake outside 1..1000 NEAR is refused before the wallet opens", async ({ page }, testInfo) => {
+  test.skip(!local(testInfo), "?as= previews run on localhost only");
+  await page.goto("/?as=kop-bob-mw4i3w8f.testnet");
+  for (const bad of ["0", "2.5", "5000"]) {
+    await page.locator("#w-amt").fill(bad);
+    await page.locator("#w-stake").click();
+    await expect(page.locator("#joinapp .note-line")).toContainText(`enter a whole number of NEAR, 1 to 1000 (got "${bad}")`);
+  }
+});
+
+test("the amount typed is the amount staked", async ({ page }, testInfo) => {
+  test.skip(!local(testInfo), "?as= previews run on localhost only");
+  await page.goto("/?as=kop-bob-mw4i3w8f.testnet");
+  await page.locator("#w-amt").fill("7");
+  await page.locator("#w-stake").click();
+  await expect(page.locator("#joinapp .note-line")).toContainText("Stake 7 NEAR");
 });

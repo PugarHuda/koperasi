@@ -166,11 +166,18 @@ async function render() {
   on("w-sync", "Sync membership", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
   on("w-cancel", "Cancel", () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));
   on("w-usdc", "USDC registration", () => send(dep.usdc, "storage_deposit", { account_id: me }, { deposit: 12_500_000_000_000_000_000_000n, tgas: 30 }));
-  on("w-stake", "Stake", () => {
-    const n = Math.floor(Number($("w-amt").value));
-    if (!(n >= 1 && n <= 1000)) throw new Error("stake a whole number of NEAR, 1 to 1000");
-    return send(s.pool, "deposit_and_stake", {}, { deposit: BigInt(n) * 10n ** 24n, tgas: 100 });
-  });
+  // read the amount on click: act() re-renders the panel (and this input) before the transaction runs
+  const stake = $("w-stake");
+  if (stake) stake.onclick = () => {
+    const raw = $("w-amt").value;
+    const n = Number(raw);
+    if (!(Number.isInteger(n) && n >= 1 && n <= 1000)) {
+      note = `<span class="err">Stake: enter a whole number of NEAR, 1 to 1000 (got "${esc(raw)}").</span>`;
+      render();
+      return;
+    }
+    act(`Stake ${n} NEAR`, () => send(s.pool, "deposit_and_stake", {}, { deposit: BigInt(n) * 10n ** 24n, tgas: 100 }));
+  };
   on("w-sync-sav", "Savings sync", () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
   on("w-claim", "Claim", () => send(dep.contract, "claim_share", {}, { tgas: 60 }));
   box.querySelectorAll("[data-vote]").forEach((b) => {

@@ -193,7 +193,7 @@ fn share_rule_must_sum_to_10000() {
 
 fn receipt(k: &mut Koperasi, job: &str, price: u128, hash: &str) {
     as_(&agent(), near(0));
-    k.record_receipt(job.into(), U128(price), U128(120_000), hash.into(), "deadbeef".into());
+    k.record_receipt(job.into(), U128(price), U128(120_000), hash.into(), "deadbeef".into(), None);
 }
 
 #[test]
@@ -226,7 +226,7 @@ fn old_config_is_refused_after_a_vote() {
 fn only_agent_records_receipts() {
     let mut k = setup();
     as_(&steward(), near(0));
-    k.record_receipt("job-1".into(), U128(1), U128(1), H1.into(), "x".into());
+    k.record_receipt("job-1".into(), U128(1), U128(1), H1.into(), "x".into(), None);
 }
 
 #[test]
@@ -552,4 +552,39 @@ fn savings_unchanged_when_the_pool_cannot_be_read() {
     with_members(&mut k, &["alice.testnet"]);
     as_(&acc("koperasi.testnet"), near(0));
     k.on_staked(acc("alice.testnet"), Err(PromiseError::Failed));
+}
+
+// ---------- proofs and upgrades ----------
+
+#[test]
+fn receipt_keeps_the_inference_proof() {
+    let mut k = setup();
+    as_(&agent(), near(0));
+    let proof = r#"{"inference_id":"abc","signer":"0x12"}"#;
+    k.record_receipt("job-p".into(), U128(1), U128(1), H1.into(), "d".into(), Some(proof.into()));
+    assert_eq!(k.get_proof("job-p".into()).as_deref(), Some(proof));
+    assert_eq!(k.get_proof("other".into()), None);
+}
+
+#[test]
+#[should_panic(expected = "proof too long")]
+fn oversized_proof_is_refused() {
+    let mut k = setup();
+    as_(&agent(), near(0));
+    k.record_receipt("job-p".into(), U128(1), U128(1), H1.into(), "d".into(), Some("x".repeat(1025)));
+}
+
+#[test]
+#[should_panic(expected = "only the DAO")]
+fn only_the_dao_upgrades_the_code() {
+    let mut k = setup();
+    as_(&steward(), near(0));
+    let _ = k.upgrade(Base58CryptoHash::from([7u8; 32]));
+}
+
+#[test]
+fn the_dao_upgrades_to_a_global_contract_hash() {
+    let mut k = setup();
+    as_(&dao(), near(0));
+    let _ = k.upgrade(Base58CryptoHash::from([7u8; 32]));
 }

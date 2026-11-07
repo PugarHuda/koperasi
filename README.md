@@ -38,12 +38,11 @@ Requirements: Node 22+. Rust + `cargo-near` only to rebuild the contract.
 cd contract && cargo test
 ```
 
-See: `44 passed`. They cover membership from the DAO policy, by-laws only by vote, receipts refused under an
+See: `48 passed`. They cover membership from the DAO policy, by-laws only by vote, receipts refused under an
 unapproved config, receipt status rules, the audit net of the 5% market fee, the profit share with no money lost to
 rounding, claim rollback, steward bond and slash, pause, `cancel_join` admitting (not refunding) someone the DAO already
-voted in, and savings read from the staking pool.
-
-> Windows without NASM: `AWS_LC_SYS_PREBUILT_NASM=1 cargo test`.
+voted in, savings read from the staking pool, code upgrades only by the DAO, and the inference proof kept with each
+receipt. (On Windows, `contract/.cargo/config.toml` uses aws-lc-sys's prebuilt NASM objects.)
 
 ### 2. The whole story on testnet (~3 min)
 
@@ -91,8 +90,14 @@ Open http://localhost:5173 (or the live page). See:
   `kop-guest-984702.testnet` joined this way (proposal #8) and the members voted it a welcome point (proposal #9).
   The demo members' keys live with the builder; `node scripts/approve-requests.mjs` has them approve every request
   from an account that paid the deposit.
-- The member passbook (approved by-laws, paid jobs, profit shares), members' savings and points, one receipt per job,
-  and the audit (GREEN when every payout reached the co-op, RED with the missing amount when not).
+- The member passbook (approved by-laws, paid jobs, profit shares), members' savings and points, one receipt per job
+  with its inference proof (TEE signer), and the audit (GREEN when every payout reached the co-op, RED with the missing
+  amount when not), next to the DAO's USDC balance read from the token contract itself.
+- **Who can change the contract's code?** The code the contract runs (a NEAR global contract hash), the DAO proposal
+  that approved it, and how many full-access keys the contract account still has, read from the chain.
+
+Browser tests: `npx playwright test` (live page) or `BASE_URL=http://localhost:5173 npx playwright test` (also previews
+the wallet panel as a newcomer and as a member). CI runs them on every push and daily against the live page.
 
 The showcase co-op's audit is RED on purpose: the demo's last step has the steward keep a payout.
 
@@ -110,11 +115,21 @@ Before it accepts any job it checks, and refuses on any failure:
    Intel TDX quotes of the gateway and the model servers verify against Intel's collateral (`@phala/dcap-qvl-node`),
    their `report_data` binds each server's signing address and a fresh 32-byte nonce, `sha256(app_compose)` matches
    `mr_config_id`, and NVIDIA NRAS passes the GPU evidence carrying the same nonce;
-3. the co-op's NEAR AI organization can pay (a 1-token call; 402 means no credits).
+3. NEAR AI Cloud publishes the model as `verifiable` (`GET /v1/model/list`); non-verifiable models are refused;
+4. the co-op's NEAR AI organization can pay (a 1-token call; 402 means no credits);
+5. Agent Market's fee (`GET /v1/platform/config`) is the 5% the contract's audit nets out.
+
+Each job's worst case (every brief byte a token, every output token used) is priced from the model's published
+per-token prices and `max_tokens` is cut to fit the by-laws' per-job cap before anything is sent. The billed cost
+(`POST /v1/billing/costs` by `inference-id`, polled while billing catches up) goes into the receipt, or the full cap if
+billing never answers. If a started job cannot be delivered, the agent tells the buyer and declines it
+(`POST /v1/assignments/{id}/decline`, a full refund) instead of letting it time out. Without `NEARAI_API_KEY` it takes no
+work on the real market; only the demo's local stand-in gets a draft, which says no model wrote it.
 
 After each inference it fetches the response signature and requires that the signed text ends with
 `sha256(request):sha256(response)` and that the EIP-191 signer is one of the attested signing addresses
-(`agent/sig.mjs`, with a self-check: `node agent/sig.mjs`).
+(`agent/sig.mjs`, with a self-check: `node agent/sig.mjs`). The receipt then carries the proof on-chain
+(`get_proof(job_id)`: model, inference id, chat id, the attested TEE signer).
 
 ```sh
 node agent/tee.mjs z-ai/glm-5.3-flash   # see: TDX UpToDate | binds address true | binds our nonce true | NVIDIA true → VERIFIED
@@ -130,7 +145,8 @@ The result is committed to [`evidence/`](evidence) and shown on the live page; a
 | Refresh every member's savings from the staking pool | `node scripts/sync-savings.mjs` | same workflow |
 | Re-prove the by-laws model runs in TEEs | `node agent/tee.mjs <model>` | `.github/workflows/tee.yml`, daily, commits `evidence/` |
 | Propose new by-laws | `node scripts/propose-bylaws.mjs config/config.vN.yaml <member> <points> "why" [voters…]` | by vote only |
-| Upgrade the contract code (state layout unchanged; checks members, receipts and by-laws survive) | `node scripts/upgrade.mjs` | no |
+| Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposal #12) |
+| One time: delete the contract account's full-access keys, so only a vote can change the code | `node scripts/upgrade.mjs --lock` | no |
 
 ## How it works
 
@@ -156,6 +172,7 @@ The result is committed to [`evidence/`](evidence) and shown on the live page; a
 | Contribution points | awarded by vote for by-law or tool work (`award_points`); reset after each profit share |
 | Audit | `get_audit`: paid jobs net of the 5% market fee vs. what the steward passed on |
 | Profit share | `ft_transfer_call(msg "share")` from the DAO: reserve back to the DAO, the rest credited per member (`claim_share`) |
+| Changing the contract | a NEAR global contract (immutable, addressed by its sha256) the members switch to by vote (`upgrade`); wasm is too large for a proposal's arguments (~48 Mgas a byte), a 32-byte hash is not |
 
 Contract: `contract/src/lib.rs`. Agent: `agent/runtime.mjs`. Deploy: `scripts/deploy.mjs`. Demo: `scripts/demo.mjs`.
 Rules in plain words: [`RULES.md`](RULES.md).
@@ -189,7 +206,10 @@ Rules in plain words: [`RULES.md`](RULES.md).
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
-4. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
+4. **The contract's code.** It runs a global contract the members approved (proposal #12), and `upgrade` only obeys the
+   DAO. Until `scripts/upgrade.mjs --lock` deletes it, the contract account still has the builder's full-access key, which
+   could deploy code without a vote; the live page shows how many such keys exist.
+5. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
    code. It is not listed for hire until the co-op's NEAR AI organization has credits, so no buyer can hire an agent
    that cannot deliver.
