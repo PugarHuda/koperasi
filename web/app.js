@@ -285,6 +285,17 @@ try {
       <td class="num" data-label="Shared">${usdc(BigInt(p.amount) - BigInt(p.reserve))}</td>
       <td class="num" data-label="Reserve">${usdc(p.reserve)}</td>
       <td class="num" data-label="Members">${p.members}</td></tr>`).join(""));
+
+  // a deep link (#audit…) lands before the chain data fills the sections above it, which then push it away: keep it in
+  // place while the page grows, until the reader scrolls, clicks or follows another link, or 8 s pass
+  const target = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
+  if (target) {
+    const stick = new ResizeObserver(() => target.scrollIntoView({ block: "start" }));
+    const stop = () => stick.disconnect();
+    stick.observe(document.body);
+    ["wheel", "touchstart", "keydown", "click", "hashchange"].forEach((ev) => addEventListener(ev, stop, { once: true, passive: true }));
+    setTimeout(stop, 8000);
+  }
 } catch (e) {
   console.error(e);
   rows($("passbook").tBodies[0], `<tr><td colspan="3">Could not read ${esc(dep.contract)} on ${esc(dep.network)}. Check your connection and reload.</td></tr>`);
