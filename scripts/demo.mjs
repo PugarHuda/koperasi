@@ -108,7 +108,7 @@ await decide(bob, members, DAO, "Savings for this period (NEAR staked for infere
   entries: [[dep.steward, (100n * NEAR).toString()], [alice.accountId, (50n * NEAR).toString()], [bob.accountId, (50n * NEAR).toString()]],
 }));
 await decide(steward, members, DAO, `Share ${usd(treasury)} with the members`,
-  fnCall(USDC, "ft_transfer_call", { receiver_id: K, amount: treasury, msg: "share" }, { deposit: 1, tgas: 200 }));
+  fnCall(USDC, "ft_transfer_call", { receiver_id: K, amount: treasury, msg: "share" }, { deposit: "1", tgas: 200 }));
 for (const a of members) {
   const c = await view(K, "get_claimable", { account_id: a.accountId });
   console.log(`   ${a.accountId.padEnd(34)} share ${usd(c)}`);

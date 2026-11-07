@@ -3,19 +3,28 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "cd contract && cargo test",
+    "test": "npm run lint && npm run typecheck && npm run test:unit && npm run test:contract",
+    "test:unit": "node --test tests/unit/agent.test.mjs",
+    "test:contract": "cd contract && cargo test",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "typecheck": "tsc -p jsconfig.json",
     "deploy": "node scripts/deploy.mjs",
-    "demo": "node scripts/demo.mjs",
-    "test:e2e": "playwright test"
+    "demo": "node scripts/demo.mjs"
   },
   "dependencies": {
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
-    "@phala/dcap-qvl-node": "^0.3.3",
+    "@phala/dcap-qvl": "^0.7.1",
     "near-api-js": "^7.4.0",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.65.0"
+    "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^22.20.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0",
+    "typescript": "^5.9.3"
   }
 }

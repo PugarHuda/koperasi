@@ -31,7 +31,7 @@ export class OverBudget extends Error {}
 const MIN_OUTPUT_TOKENS = 256;
 /** The agent's market fee assumption; the contract's audit nets paid jobs by the same 5%. */
 const MARKET_FEE_BPS = 500;
-const isLocal = (url) => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url);
+export const isLocal = (url) => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url);
 
 /**
  * The model as NEAR AI Cloud publishes it: it must be marked verifiable (served from TEEs), and its per-token prices
@@ -170,6 +170,10 @@ async function checkSignature(chatId, model, reqBody, respBody, tee, key) {
 
 const usdcUnits = (s) => BigInt(Math.round(Number(s) * 1e6));
 
+/**
+ * One pass of the agent.
+ * @param {{ dep?: any, log?: (msg: string) => void, configFile?: string }} [opts]
+ */
 export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8")), log = console.log, configFile } = {}) {
   const { config, hash, version } = await loadApprovedConfig(dep, configFile);
   const info = await view(dep.contract, "get_info");

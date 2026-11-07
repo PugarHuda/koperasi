@@ -18,7 +18,6 @@ import { dep, testnet, RAW, explorer, view, query, $, esc, usdc, nearAmt } from 
 const date = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 const short = (h) => `${h.slice(0, 10)}…`;
 const rows = (tbody, html) => { tbody.innerHTML = html || `<tr><td colspan="9" class="muted">Nothing yet.</td></tr>`; };
-const tag = (name, attrs) => `<${name} ${Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(" ")}/>`;
 
 try {
   const [info, members, versions, receipts, rekon, periods] = await Promise.all([
@@ -74,7 +73,7 @@ try {
     return `<li class="${yes ? "yes" : "no"}" title="${esc(a)}"><span class="mark" aria-hidden="true">${yes ? "✓" : "–"}</span>${esc(nick(a))}<em>${yes ? "voted yes" : "didn't vote"}</em></li>`;
   }).join("") + (members.length > 6 ? `<li class="no">+${members.length - 6} more</li>` : "");
   const yesCount = approvedBy ? members.filter(([a]) => approvedBy.has(a)).length : members.length;
-  $("p-tally").innerHTML = proposalId != null
+  $("p-tally").innerHTML = proposalId !== null
     ? `<a href="${explorer(dep.dao)}">Proposal #${proposalId}</a> passed with ${yesCount} yes ${yesCount === 1 ? "vote" : "votes"}: by-laws v${v}.`
     : `By-laws v${v} were approved by a member vote.`;
   $("p-lock").href = explorer(dep.dao);

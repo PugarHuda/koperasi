@@ -121,6 +121,7 @@ export async function ensureAccount(id, near = 8n) {
 
 // ---------- calls ----------
 
+/** A view call's JSON result; its shape is the contract method's (see contract/src/lib.rs). @returns {Promise<any>} */
 export async function view(contractId, method, args = {}) {
   return provider.callFunction({ contractId, method, args, blockQuery: { finality: "optimistic" } });
 }
@@ -135,6 +136,7 @@ const alreadyExecuted = (e) => [e, ...(e?.errors ?? [])].some((x) =>
   x?.name === "InvalidNonceError" || /InvalidNonce/.test(x?.constructor?.name ?? "")
     ? String(x.accessKeyNonce) === String(x.transactionNonce) : false);
 
+/** @returns {Promise<any>} the method's JSON result, or `landed` */
 export async function call(acct, contractId, method, args = {}, { deposit = 0n, tgas = 100 } = {}) {
   try {
     return await acct.callFunction({ contractId, methodName: method, args, deposit, gas: teraToGas(tgas) });

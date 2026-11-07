@@ -28,6 +28,7 @@ export function startMockMarket({ port = 8787, acceptMs = 1500, jobs: seed = [] 
   }
   seed.forEach(addJob);
 
+  /** @type {Array<[string, RegExp, (params: string[], body: any) => any]>} */
   const routes = [
     ["GET", /^\/v1\/jobs\/board$/, () => ({ jobs: [...jobs.values()].filter((j) => j.status === "open") })],
     ["GET", /^\/v1\/agents\/me\/bids$/, () => ({ bids: [...bids.values()] })],

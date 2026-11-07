@@ -11,10 +11,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { js_get_collateral, js_verify } from "@phala/dcap-qvl-node";
+// pure-JS port of Phala's dcap-qvl, a version that verifies the QE identity (GHSA-796p-j2gh-9m2q: the -node binding
+// <= 0.3.3 did not, and has no fix)
+import { getCollateralFromPcs, verify as verifyQuote } from "@phala/dcap-qvl";
 
 const API = "https://cloud-api.near.ai/v1";
-const PCCS = "https://api.trustedservices.intel.com/tdx/certification/v4";
 const NRAS = "https://nras.attestation.nvidia.com/v3/attest/gpu";
 const TDX_OK = new Set(["UpToDate", "OutOfDate"]);
 
@@ -30,13 +31,16 @@ async function getJson(url, init = {}, tries = 4) {
 
 async function checkTdx(att) {
   const quote = Buffer.from(att.intel_quote, "hex");
-  const collateral = await js_get_collateral(PCCS, quote);
-  const res = js_verify(quote, collateral, BigInt(Math.floor(Date.now() / 1000)));
-  const td = res?.report?.TD10 ?? res?.report?.TD15 ?? {};
-  return { status: res?.status, ok: TDX_OK.has(res?.status), reportData: (td.report_data ?? "").replace(/^0x/, ""), mrConfig: (td.mr_config_id ?? "").replace(/^0x/, "") };
+  const collateral = await getCollateralFromPcs(quote); // straight from Intel's PCS
+  const res = verifyQuote(quote, collateral, Math.floor(Date.now() / 1000));
+  const r = res?.report;
+  /** @type {any} */
+  const td = r?.asTd10?.() ?? r?.asTd15?.()?.base ?? r?.asTd15Ex?.()?.base ?? {};
+  const hex = (b) => (b ? Buffer.from(b).toString("hex") : "");
+  return { status: res?.status, ok: TDX_OK.has(res?.status), reportData: hex(td.reportData), mrConfig: hex(td.mrConfigId) };
 }
 
-function bindsAddressAndNonce(att, reportDataHex, nonce) {
+export function bindsAddressAndNonce(att, reportDataHex, nonce) {
   const rd = Buffer.from(reportDataHex, "hex");
   const algo = (att.signing_algo ?? "ecdsa").toLowerCase();
   const addr = Buffer.from(algo === "ecdsa" ? att.signing_address.replace(/^0x/, "") : att.signing_address, "hex");
@@ -46,7 +50,7 @@ function bindsAddressAndNonce(att, reportDataHex, nonce) {
   return { address: rd.subarray(0, 32).equals(first), nonce: rd.subarray(32, 64).equals(Buffer.from(nonce, "hex")) };
 }
 
-function composeMatches(att, mrConfigHex) {
+export function composeMatches(att, mrConfigHex) {
   const tcb = typeof att.info?.tcb_info === "string" ? JSON.parse(att.info.tcb_info) : att.info?.tcb_info;
   const compose = tcb?.app_compose;
   if (!compose) return { ok: false, hash: null };
