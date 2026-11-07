@@ -21,7 +21,8 @@ jobs:
       - name: Commit the evidence
         if: always()
         run: |
-          git config user.name "koperasi-ci"
-          git config user.email "koperasi-ci@users.noreply.github.com"
+          git config user.name "PugarHuda"
+          # the owner's noreply address: on a private repo Vercel deploys only commits GitHub ties to the owner
+          git config user.email "94729172+PugarHuda@users.noreply.github.com"
           git add evidence
           git diff --cached --quiet || (git commit -m "TEE evidence: daily re-check" && git push)
