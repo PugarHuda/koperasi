@@ -12,7 +12,7 @@ const preview = (amount, s) => {
 // a FunctionCall that sends the co-op's USDC to the contract as a profit share
 const shareCall = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.receiver_id === dep.usdc
   && p.kind.FunctionCall.actions.length === 1 && p.kind.FunctionCall.actions[0].method_name === "ft_transfer_call"
-  && (() => { const a = JSON.parse(argsOf(p.kind.FunctionCall.actions[0].args) ?? "{}"); return a.receiver_id === dep.contract && a.msg === "share" ? BigInt(a.amount) : null; })();
+  && (() => { const a = JSON.parse(argsOf(p.kind.FunctionCall.actions[0].args) ?? "{}"); return a.receiver_id === dep.contract && a.msg === "share" && typeof a.amount === "string" && /^\d{1,30}$/.test(a.amount) ? BigInt(a.amount) : null; })();
 
 const connector = new NearConnector({ network: dep.network, providers: { [dep.network]: RPC_URLS } });
 const box = $("joinapp");
@@ -78,6 +78,11 @@ const describe = (p, s) => {
     return f.actions.map((a) => `Call ${f.receiver_id} ${a.method_name}${yocto(a.deposit)}\n${argsOf(a.args) ?? "(binary args: inspect in the DAO)"}`).join("\n\n");
   }
   return `${k} (open the DAO to inspect)`;
+};
+
+// proposals are anyone's on-chain data: one malformed proposal must not take the panel down for every member
+const safeDescribe = (p, s) => {
+  try { return describe(p, s); } catch { return `${kindOf(p)} (malformed: inspect it in the DAO)`; }
 };
 
 async function load() {
@@ -208,7 +213,7 @@ async function render() {
       ${open.length ? `<ul class="props">${open.map((p) => {
         const mine = p.votes[me];
         const hidden = opaque(p);
-        return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(describe(p, s))}</pre>${p.description
+        return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(safeDescribe(p, s))}</pre>${p.description
           ? `<span class="claim">Proposer says: “${esc(p.description.slice(0, 200))}”</span>` : ""}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
           : hidden ? `<a class="small-link" href="${explorer(dep.dao)}">Inspect in the DAO to vote</a>`
           : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">Approve</button>

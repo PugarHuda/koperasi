@@ -127,3 +127,21 @@ test("the comparison with other ways to own an agent is on the page, readable on
   // the wide table scrolls inside its box; the page itself never scrolls sideways
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });
+
+test("a malformed share proposal cannot take the panel down", async ({ page }, testInfo) => {
+  onlyLocal(testInfo);
+  const { usdc, contract } = await (await page.request.get("/deployment.json")).json();
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64");
+  const call = (id, args) => ({ id, proposer: "x.testnet", description: "x", status: "InProgress", votes: {}, submission_time: "0", vote_counts: {},
+    kind: { FunctionCall: { receiver_id: usdc, actions: [{ method_name: "ft_transfer_call", args, deposit: "1", gas: "1" }] } } });
+  await answerViews(page, { get_last_proposal_id: 3, get_proposals: [
+    call(0, b64({ receiver_id: contract, amount: "abc", msg: "share" })),
+    call(1, b64({ receiver_id: contract, amount: { n: 1 }, msg: "share" })),
+    call(2, b64({ receiver_id: contract, amount: "1".repeat(40), msg: "share" })),
+  ] });
+  await page.goto("/?as=kop-bob-mw4i3w8f.testnet");
+  const items = page.locator("#joinapp .props:not(.tasks) > li");
+  await expect(items).toHaveCount(3);
+  await expect(page.locator("#joinapp")).toContainText("Your vote");
+  for (const t of await items.locator("pre.does").allTextContents()) expect(t).not.toContain("Profit share: send");
+});
