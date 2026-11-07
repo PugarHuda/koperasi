@@ -398,6 +398,18 @@ impl Koperasi {
         self.share_rule = rule;
     }
 
+    /// Move the co-op to another USDC contract (e.g. from a testnet stand-in to Circle's). Refused while any member
+    /// still has a profit share to claim or a transfer to the DAO is pending: those are owed in the current token.
+    pub fn set_usdc(&mut self, usdc_id: AccountId) {
+        self.assert_dao();
+        require!(usdc_id != self.usdc_id, "already this token");
+        require!(self.unforwarded == 0, "flush_to_dao first: USDC owed to the DAO in the current token");
+        let owed = self.members.keys().any(|a| self.claimable.get(a).is_some_and(|c| *c > 0));
+        require!(!owed, "members still have profit shares to claim in the current token");
+        log!("usdc: {} -> {}", self.usdc_id, usdc_id);
+        self.usdc_id = usdc_id;
+    }
+
     pub fn set_agent(&mut self, agent_id: AccountId) {
         self.assert_dao();
         self.agent_id = agent_id;

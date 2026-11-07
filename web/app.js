@@ -29,8 +29,12 @@ try {
     view(dep.contract, "get_periods"),
   ]);
   const claimable = await Promise.all(members.map(([a]) => view(dep.contract, "get_claimable", { account_id: a })));
-  const recent = [...receipts].reverse().slice(0, 12);
-  const proofs = await Promise.all(recent.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch(() => null)));
+  // a receipt with an inference proof was done by a TEE-verified model; one without came from `npm run demo`, where a
+  // local stand-in plays Agent Market (it has no testnet) and no model runs. The page says which is which.
+  const checked = [...receipts].reverse().slice(0, 50);
+  const proofs = await Promise.all(checked.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch(() => null)));
+  const recent = checked.slice(0, 12);
+  const proven = checked.filter((r, i) => proofs[i] && r.status === "Paid").length;
 
   $("links").innerHTML = [
     `<a href="${explorer(dep.contract)}">Contract on NEAR</a>`,
@@ -103,7 +107,9 @@ try {
   const paidJobs = receipts.filter((x) => x.status === "Paid").length;
   $("p-agent").innerHTML = info.paused
     ? `<span class="state off">Paused</span> The members voted to stop it.`
-    : `<span class="state on">Allowed to work</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${paidJobs} paid jobs so far.`;
+    : `<span class="state on">Allowed to work</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${proven
+      ? `${proven} paid ${proven === 1 ? "job" : "jobs"} done by a TEE-verified model.`
+      : `No real job yet: the ${paidJobs} paid receipts so far come from the testnet demo, where a local stand-in plays Agent Market and no model runs.`}`;
 
   // passbook: the co-op's life as ledger lines, newest first
   const lines = [
@@ -194,7 +200,7 @@ try {
   };
 
   const proofCell = (p) => {
-    if (!p) return `<span class="muted">none</span>`;
+    if (!p) return `<span class="muted" title="Recorded by npm run demo against a local stand-in for Agent Market; no model ran">Demo market, no model</span>`;
     try {
       const x = JSON.parse(p);
       return `<span class="badge Paid" title="${esc(p)}">TEE-signed</span> <span class="muted">${esc(String(x.tee_signer ?? "").slice(0, 10))}…</span>`;
@@ -255,7 +261,7 @@ try {
   $("status").innerHTML = [
     ["Agent", info.paused ? "Paused by vote" : "Allowed to work", info.paused ? "warn" : "ok"],
     ["Running by-laws", `v${info.config.version} <small>${short(info.config.hash)}</small>`, ""],
-    ["Jobs on-chain", `${receipts.length} <small>${paid} paid</small>`, ""],
+    ["Jobs on-chain", `${receipts.length} <small>${paid} paid, ${proven} with TEE proof</small>`, ""],
     ["Audit", owed > 0n ? `Red <small>${usdc(owed)} USDC missing</small>` : "Green <small>all passed on</small>", owed > 0n ? "warn" : "ok"],
   ].map(([k, v, c]) => `<div><dt>${k}</dt><dd class="${c}">${v}</dd></div>`).join("");
 

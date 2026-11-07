@@ -1,11 +1,13 @@
 // End-to-end checks of the live co-op page. Everything it asserts is read from NEAR testnet, GitHub and NEAR AI.
 import { expect, test } from "@playwright/test";
 
+// the browser logs a public RPC's rate limit (429 without CORS headers) as an error, and WebKit raises it from the
+// wallet library too; the page then uses the next RPC. Chromium, Firefox and WebKit word it differently.
+const network = (t) => /blocked by CORS policy|Failed to load resource|Cross-Origin Request Blocked|due to access control checks|Access-Control-Allow-Origin|NetworkError when attempting to fetch/.test(t);
+
 const ready = async (page) => {
   const errors = [];
-  page.on("pageerror", (e) => errors.push(e.message));
-  // the browser logs a public RPC's rate limit (429 without CORS headers) as an error; the page then uses the next RPC
-  const network = (t) => /blocked by CORS policy|Failed to load resource/.test(t);
+  page.on("pageerror", (e) => { if (!network(e.message)) errors.push(e.message); });
   page.on("console", (m) => { if (m.type() === "error" && !network(m.text())) errors.push(m.text()); });
   await page.goto("/");
   await expect(page.locator("#p-voters li").first()).not.toHaveText("Reading the DAO…");
@@ -137,7 +139,7 @@ const local = (testInfo) => /localhost|127\.0\.0\.1/.test(testInfo.project.use.b
 test("a newcomer is walked through joining", async ({ page }, testInfo) => {
   test.skip(!local(testInfo), "?as= previews run on localhost only");
   const errors = [];
-  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("pageerror", (e) => { if (!network(e.message)) errors.push(e.message); });
   await page.goto("/?as=nobody-koperasi-e2e.testnet");
   const panel = page.locator("#joinapp");
   await expect(panel).toContainText("Signed in as nobody-koperasi-e2e.testnet");

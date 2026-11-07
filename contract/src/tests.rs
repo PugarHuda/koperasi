@@ -588,3 +588,37 @@ fn the_dao_upgrades_to_a_global_contract_hash() {
     as_(&dao(), near(0));
     let _ = k.upgrade(Base58CryptoHash::from([7u8; 32]));
 }
+
+// ---------- moving to another USDC contract ----------
+
+#[test]
+#[should_panic(expected = "only the DAO")]
+fn only_the_dao_moves_the_token() {
+    let mut k = setup();
+    as_(&steward(), near(0));
+    k.set_usdc(acc("circle-usdc.testnet"));
+}
+
+#[test]
+fn the_dao_moves_the_token_and_only_the_new_one_counts() {
+    let mut k = setup();
+    as_(&dao(), near(0));
+    k.set_usdc(acc("circle-usdc.testnet"));
+    assert_eq!(k.get_info().usdc_id, acc("circle-usdc.testnet"));
+    // the old token is now a stranger: its transfers are returned
+    as_(&usdc(), near(0));
+    let back = k.ft_on_transfer(dao(), U128(5), "share".into());
+    assert!(matches!(back, PromiseOrValue::Value(U128(5))));
+}
+
+#[test]
+#[should_panic(expected = "members still have profit shares to claim")]
+fn the_token_cannot_move_while_shares_are_unclaimed() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    as_(&dao(), near(0));
+    k.award_points(acc("alice.testnet"), 1, "x".into());
+    share(&mut k, 1_000_000);
+    as_(&dao(), near(0));
+    k.set_usdc(acc("circle-usdc.testnet"));
+}

@@ -5,11 +5,11 @@
   --blue-hi: #3d6bff;
   --paper: #fafafa;
   --ink: #0d0d0d;
-  --grey: #8c8c8c;
+  --grey: #6b6b6b; /* 5.3:1 on the page background (WCAG AA) */
   --muted: #5e5e66;
   --rule: #e4e4e8;
   --red: #e5322d;
-  --green: #12a150;
+  --green: #0b7d3e; /* 5.2:1 with white text */
   --display: "Barlow Condensed", "Arial Narrow", sans-serif;
   --body: "Instrument Sans", system-ui, sans-serif;
 }
@@ -201,7 +201,7 @@ h2 .dim { color: var(--grey); }
 .ledger td { padding: .55rem .2rem; border-top: 1px solid #1a1e2e; }
 .ledger .num { color: #7fe0a6; }
 .ledger .num.out { color: #ff8a80; }
-.phone figcaption { position: absolute; bottom: 1rem; left: 0; right: 0; text-align: center; font-size: .72rem; color: #6c7396; }
+.phone figcaption { position: absolute; bottom: 1rem; left: 0; right: 0; text-align: center; font-size: .72rem; color: #a3aac8; }
 .stamp { position: absolute; right: -2rem; bottom: 4.5rem; rotate: -10deg; border: 3px solid var(--blue-hi); color: #fff; background: rgba(19,64,255,.85); padding: .5rem .9rem; font: 700 1rem/1.05 var(--display); text-transform: uppercase; text-align: center; }
 .stamp.red { background: rgba(229,50,45,.9); border-color: #ff7a74; }
 .grid.on-dark { margin-top: 5rem; }
@@ -294,7 +294,7 @@ h2 .dim { color: var(--grey); }
 .props .does { margin: 0; font-size: .74rem; background: rgba(0,0,0,.35); color: #dfe6ff; padding: .4rem .5rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow: auto; }
 .props .claim { font-size: .76rem; color: rgba(255,255,255,.55); }
 .vote-btns { display: flex; gap: .4rem; }
-.btn.small { padding: .4em .9em; font-size: .82rem; }
+.btn.small { padding: .4em .9em; font-size: .82rem; color: #fff; } /* .small (muted text) must not fade a button */
 .cli { max-width: 68rem; margin: 0 auto 2.4rem; text-align: left; }
 .cli summary { cursor: pointer; color: #9fb6ff; text-align: center; margin-bottom: 1rem; }
 
@@ -386,3 +386,7 @@ h2 .dim { color: var(--grey); }
   .grid.on-dark tr { border-color: #1b2142; }
   .foot { grid-template-columns: 1fr; }
 }
+
+/* 404 */
+.notfound { max-width: 40rem; margin: 0 auto; padding: 18vh 1.5rem 6rem; }
+.notfound h1 { font: 700 clamp(2.4rem, 7vw, 4.5rem)/1 var(--display); margin: 0 0 1rem; }
