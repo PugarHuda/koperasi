@@ -45,3 +45,13 @@ export const $ = (id) => document.getElementById(id);
 export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 export const usdc = (u) => (Number(u) / 1e6).toFixed(2);
 export const nearAmt = (y) => (Number(BigInt(y) / 10n ** 21n) / 1000).toLocaleString("en", { maximumFractionDigits: 2 });
+
+/** Every item of a paged view (get_members, get_receipts: `from`/`limit`), page by page. */
+export async function all(contract, method, size = 200) {
+  const out = [];
+  for (let from = 0; ; from += size) {
+    const page = await view(contract, method, { from, limit: size });
+    out.push(...page);
+    if (page.length < size) return out;
+  }
+}

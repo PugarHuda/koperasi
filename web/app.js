@@ -31,7 +31,7 @@ const rows = (tbody, html) => { tbody.innerHTML = html || `<tr><td colspan="9" c
 try {
   const [info, members, versions, receipts, rekon, periods] = await Promise.all([
     view(dep.contract, "get_info"),
-    view(dep.contract, "get_members", { from: 0, limit: 200 }),
+    view(dep.contract, "get_members", { from: 0, limit: 200 }), // ponytail: the passbook shows 200 (one claimable read each); page it past that
     view(dep.contract, "get_config_history", { from: 0, limit: 100 }),
     view(dep.contract, "get_receipts", { from: 0, limit: 500 }),
     view(dep.contract, "get_audit"),

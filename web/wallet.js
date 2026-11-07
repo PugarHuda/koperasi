@@ -1,7 +1,7 @@
 // Join the co-op from the page with a testnet wallet: pay the deposit, ask the members (a DAO proposal from your own
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "https://esm.sh/@hot-labs/near-connect@0.12.0";
-import { dep, view, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
+import { dep, view, all, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
 import { splitShare, usdcExact, usdcUnits } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
@@ -104,7 +104,8 @@ async function load() {
   const usdcReady = member ? await view(dep.usdc, "storage_balance_of", { account_id: me }).catch(() => null) : null;
   // what the token itself asks for a registration (NEP-145), not a guess
   const usdcStorage = member && !usdcReady ? BigInt((await view(dep.usdc, "storage_balance_bounds")).min) : 0n;
-  const roster = member ? await view(dep.contract, "get_members", { from: 0, limit: 500 }) : [];
+  // every member: the share preview splits among all of them
+  const roster = member ? await all(dep.contract, "get_members") : [];
   const treasury = member ? BigInt(await view(dep.usdc, "ft_balance_of", { account_id: dep.dao }).catch(() => "0")) : 0n;
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];

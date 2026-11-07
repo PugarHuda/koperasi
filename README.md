@@ -39,9 +39,12 @@ npm install
 npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `56 passed` for the contract and `pass 5` for the agent: response-signature recovery, the TDX quote binding the
-server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market check.
-The contract tests They cover membership from the DAO policy, by-laws only by vote, receipts refused under an
+See: `56 passed` for the contract and `pass 13` for the agent, scripts and page logic: response-signature recovery, the TDX quote
+binding the server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market
+check, the page's profit-share preview matching the contract's split to the last USDC unit, views that move past a
+rate-limited RPC, and the agent's money path when a job fails half-way (a billed inference that then fails is booked at
+the cap; a failed delivery or receipt is finished on the next pass without paying for the inference twice).
+The contract tests cover membership from the DAO policy, by-laws only by vote, receipts refused under an
 unapproved config, receipt status rules, the audit net of the 5% market fee, the profit share with no money lost to
 rounding, claim rollback, steward bond and slash, pause, `cancel_join` admitting (not refunding) someone the DAO already
 voted in, savings read from the staking pool, code upgrades only by the DAO, the inference proof kept with each
@@ -180,7 +183,7 @@ The result is committed to [`evidence/`](evidence) and shown on the live page; a
 | Refresh every member's savings from the staking pool | `node scripts/sync-savings.mjs` | same workflow |
 | Re-prove the by-laws model runs in TEEs | `node agent/tee.mjs <model>` | `.github/workflows/tee.yml`, daily, commits `evidence/` |
 | Propose new by-laws | `node scripts/propose-bylaws.mjs config/config.vN.yaml <member> <points> "why" [voters…]` | by vote only |
-| Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposal #12) |
+| Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposals #12, #16) |
 | One time: delete the contract account's full-access keys, so only a vote can change the code | `node scripts/upgrade.mjs --lock` | no (done on the demo co-op `koperasi-mw57ou3m.testnet`: 0 keys) |
 | Tasks the co-op pays for: post by vote, take, file the work, vote the payout | `node scripts/bounty.mjs post\|claim\|done\|vote\|list …` | by vote only |
 | Move the co-op to another USDC contract (claims every member's share in the old token first, registers the DAO and the contract with the new one) | `node scripts/switch-usdc.mjs [token id]` | by vote only (showcase: proposal #18) |
@@ -277,7 +280,7 @@ none on mainnet until the co-op's NEAR AI organization has credits).
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
-4. **The contract's code.** It runs a global contract the members approved (proposal #12), and `upgrade` only obeys the
+4. **The contract's code.** It runs a global contract the members approved (first #12, now #16), and `upgrade` only obeys the
    DAO. Both the showcase and the demo co-op are locked: their contract accounts have no full-access key left, so no
    one, the builder included, can deploy code without a vote; the live page shows the key count from the chain. Each upgrade publishes a global contract, which burns ~10x normal storage
    (about 26 NEAR for this 256 KB contract).
