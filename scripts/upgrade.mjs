@@ -8,7 +8,7 @@
 // that code. Either way the script checks that members, receipts and by-laws survive.
 import fs from "node:fs";
 import path from "node:path";
-import { ROOT, DEPLOYMENT, RPC, account, decide, fnCall, hasKey, sha256, view } from "./lib.mjs";
+import { ROOT, DEPLOYMENT, account, rawQuery, decide, fnCall, hasKey, sha256, view } from "./lib.mjs";
 
 const args = process.argv.slice(2);
 const flag = (n) => { const i = args.indexOf(n); return i < 0 ? null : args.splice(i, 2)[1]; };
@@ -19,12 +19,7 @@ const dep = JSON.parse(fs.readFileSync(fileArg ? path.resolve(fileArg) : DEPLOYM
 const wasm = fs.readFileSync(path.join(ROOT, "contract/target/near/koperasi.wasm"));
 const codeHash = bs58(sha256(wasm));
 const before = await view(dep.contract, "get_info");
-const rpc = async (params) => {
-  const r = await (await fetch(RPC, { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "query", params: { finality: "final", ...params } }) })).json();
-  if (r.error || r.result?.error) throw new Error(JSON.stringify(r.error ?? r.result.error).slice(0, 200));
-  return r.result;
-};
+const rpc = rawQuery;
 const fullAccess = async () => (await rpc({ request_type: "view_access_key_list", account_id: dep.contract })).keys
   .filter((k) => k.access_key.permission === "FullAccess");
 const running = async () => {

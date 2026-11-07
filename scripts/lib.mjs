@@ -16,6 +16,32 @@ export const provider = new FailoverRpcProvider(
   [RPC, ...RPCS[NETWORK].filter((u) => u !== RPC)].map((url) => new JsonRpcProvider({ url })),
 );
 export const NEAR = 10n ** 24n;
+
+/**
+ * Raw RPC `query` (access keys, account, global code) over every RPC, twice, with a pause between rounds:
+ * public RPCs rate-limit in bursts. A real answer (even an error such as "unknown account") is returned or thrown
+ * from the first RPC that gives one; only rate limits and network failures move on to the next.
+ */
+export async function rawQuery(params) {
+  const urls = [RPC, ...RPCS[NETWORK].filter((u) => u !== RPC)];
+  let last;
+  for (let k = 0; k < urls.length * 2; k++) {
+    if (k === urls.length) await sleep(3000);
+    try {
+      const r = await (await fetch(urls[k % urls.length], { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "query", params: { finality: "final", ...params } }),
+        signal: AbortSignal.timeout(10_000) })).json();
+      const err = r.error ?? r.result?.error;
+      if (err && /429|rate limit/i.test(JSON.stringify(err))) { last = new Error(JSON.stringify(err)); continue; }
+      if (err) throw Object.assign(new Error(JSON.stringify(err).slice(0, 300)), { rpcAnswer: true });
+      return r.result;
+    } catch (e) {
+      if (e.rpcAnswer) throw e;
+      last = e;
+    }
+  }
+  throw last;
+}
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const KEYS = path.join(ROOT, ".keys");
