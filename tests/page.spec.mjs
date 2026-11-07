@@ -79,7 +79,9 @@ test("no horizontal scrolling and every section anchor exists", async ({ page })
 test("outbound links resolve", async ({ page, request }) => {
   await ready(page);
   const links = await page.locator('a[href^="https://"]').evaluateAll((as) => [...new Set(as.map((a) => a.href))]);
-  for (const url of links.filter((u) => /github\.com|raw\.githubusercontent/.test(u))) {
+  // the repo stays private until just before judging; its links are checked once it is public
+  const repoPublic = (await request.get("https://api.github.com/repos/PugarHuda/koperasi")).ok();
+  for (const url of links.filter((u) => repoPublic && /github\.com/.test(u))) {
     let r = await request.get(url, { maxRedirects: 5 });
     for (let i = 1; r.status() === 429 && i <= 3; i++) { // GitHub rate-limits repeated runs
       await new Promise((ok) => setTimeout(ok, 5000 * i));

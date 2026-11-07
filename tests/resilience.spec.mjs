@@ -1,5 +1,5 @@
 // What the page does when things go wrong, odd input, navigation, accessibility and layout.
-// Failures are simulated by intercepting the page's own requests (NEAR RPCs, GitHub); everything else is live testnet.
+// Failures are simulated by intercepting the page's own requests (NEAR RPCs, the by-laws and evidence files); everything else is live testnet.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { RPC, answerViews, local, onlyLocal } from "./helpers.mjs";
@@ -23,10 +23,10 @@ test("RPCs answering 429 then recovering: the page still loads", async ({ page }
   expect(refused).toBeGreaterThan(3);
 });
 
-test("GitHub down: verifying the by-laws reports the failure", async ({ page }) => {
+test("by-laws file unreachable: verifying reports the failure", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#verify button")).toBeVisible();
-  await page.route(/raw\.githubusercontent\.com/, (route) => route.abort("internetdisconnected"));
+  await page.route(/\/(config|evidence)\//, (route) => route.abort("internetdisconnected"));
   await page.locator("#verify button").click();
   await expect(page.locator("#verify .match.bad")).toContainText("Could not download");
 });
@@ -34,14 +34,14 @@ test("GitHub down: verifying the by-laws reports the failure", async ({ page }) 
 test("a tampered by-laws file is reported as a mismatch", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#verify button")).toBeVisible();
-  await page.route(/raw\.githubusercontent\.com\/.*config\/.*\.yaml/, (route) =>
+  await page.route(/\/config\/.*\.yaml/, (route) =>
     route.fulfill({ contentType: "text/plain", body: 'version: 3\nmodel: "some-other-model"\n' }));
   await page.locator("#verify button").click();
   await expect(page.locator("#verify .match.bad")).toHaveText(/Mismatch/);
 });
 
 test("no TEE evidence published: the page says so, it does not claim verification", async ({ page }) => {
-  await page.route(/raw\.githubusercontent\.com\/.*evidence\//, (route) => route.fulfill({ status: 404, body: "404" }));
+  await page.route(/\/evidence\/.*\.json/, (route) => route.fulfill({ status: 404, body: "404" }));
   await page.goto("/");
   await expect(page.locator("#p-tee")).toContainText("No TEE check published yet");
   await expect(page.locator("#p-tee")).not.toContainText("TEE verified");

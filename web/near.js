@@ -23,7 +23,8 @@ async function rpc(body) {
   }
   throw last;
 }
-export const RAW = "https://raw.githubusercontent.com/PugarHuda/koperasi/main/";
+// config/ and evidence/ are copied next to the page at deploy (npm run web:files), so the page works while the repo is private
+export const RAW = "/";
 export const explorer = (id) => `https://${testnet ? "testnet." : ""}nearblocks.io/address/${id}`;
 export const txUrl = (hash) => `https://${testnet ? "testnet." : ""}nearblocks.io/txns/${hash}`;
 

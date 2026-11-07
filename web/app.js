@@ -114,7 +114,7 @@ try {
     const m = ev.models?.[0] ?? {};
     const when = new Date(ev.at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
     tee.innerHTML = ev.ok
-      ? `<span class="state on">TEE verified</span> ${esc(when)} UTC: Intel TDX ${esc(m.tdx_status ?? "")}, NVIDIA GPU ${m.gpu?.verdict === true ? "pass" : "unknown"}, bound to a fresh nonce. The agent re-checks before every job and refuses unverified models. <a href="https://github.com/PugarHuda/koperasi/blob/main/evidence/${esc(file)}">Evidence</a>`
+      ? `<span class="state on">TEE verified</span> ${esc(when)} UTC: Intel TDX ${esc(m.tdx_status ?? "")}, NVIDIA GPU ${m.gpu?.verdict === true ? "pass" : "unknown"}, bound to a fresh nonce. The agent re-checks before every job and refuses unverified models. <a href="/evidence/${esc(file)}">Evidence</a>`
       : `<span class="state off">TEE not verified</span> ${esc(when)} UTC: ${esc(ev.reason ?? "a check failed")}. The agent will not send jobs to this model.`;
   }).catch((e) => verdict("ck-bylaws", false, `Could not download the by-laws file (${esc(e.message)}). Reload to try again.`));
   const paidJobs = receipts.filter((x) => x.status === "Paid").length;

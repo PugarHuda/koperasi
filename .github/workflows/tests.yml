@@ -48,7 +48,7 @@ jobs:
       - run: npx playwright install --with-deps chromium firefox webkit
       - name: Serve web/
         if: matrix.target == 'local'
-        run: (cd web && python3 -m http.server 5173 >/dev/null 2>&1 &) && sleep 1
+        run: npm run web:files && (cd web && python3 -m http.server 5173 >/dev/null 2>&1 &) && sleep 1
       - name: Playwright
         env:
           BASE_URL: ${{ matrix.target == 'local' && 'http://localhost:5173' || 'https://koperasi-kohl.vercel.app' }}

@@ -60,7 +60,7 @@ test("NEAR AI Cloud down: the TEE check says so and does not pass", async ({ pag
 });
 
 test("a tampered by-laws file fails its check, and the TEE check cannot start from it", async ({ page }) => {
-  await page.route(/raw\.githubusercontent\.com\/.*config\/.*\.yaml/, (route) =>
+  await page.route(/\/config\/.*\.yaml/, (route) =>
     route.fulfill({ contentType: "text/plain", body: 'version: 3\nmodel: "attacker/model"\n' }));
   await go(page);
   await expect(page.locator("#ck-bylaws")).toHaveClass(/fail/);

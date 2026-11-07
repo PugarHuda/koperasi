@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -p jsconfig.json",
     "deploy": "node scripts/deploy.mjs",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "web:files": "node -e \"for (const d of ['config', 'evidence']) require('fs').cpSync(d, 'web/' + d, { recursive: true })\""
   },
   "dependencies": {
     "@noble/curves": "^2.2.0",
