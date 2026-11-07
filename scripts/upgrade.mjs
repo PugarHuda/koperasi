@@ -61,7 +61,10 @@ for (const k of ["members", "receipts", "periods"]) {
   if (before[k] !== after[k]) throw new Error(`state changed across the upgrade: ${k} ${before[k]} → ${after[k]}`);
 }
 if (after.config.hash !== before.config.hash) throw new Error("config changed across the upgrade");
-console.log(`${dep.contract} runs ${codeHash}; ${after.members} members, ${after.receipts} receipts, by-laws v${after.config.version} intact; full-access keys: ${(await fullAccess()).length}`);
+// an RPC can lag a block or two behind the key deletion: wait until the count settles
+let left = (await fullAccess()).length;
+for (let i = 0; lock && left && i < 10; i++) { await new Promise((ok) => setTimeout(ok, 1500)); left = (await fullAccess()).length; }
+console.log(`${dep.contract} runs ${codeHash}; ${after.members} members, ${after.receipts} receipts, by-laws v${after.config.version} intact; full-access keys: ${left}`);
 
 function bs58(hex) {
   const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

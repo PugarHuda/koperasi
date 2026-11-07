@@ -267,6 +267,14 @@ try {
       <ul><li>Back to the Sputnik DAO</li><li>Spent only by a vote</li><li>Readable by anyone on-chain</li></ul></div>
     <div class="plan members"><h3>Members'<br>share</h3><p class="for">Claimed by each member</p><span class="pct">${(r.savings_bps + r.points_bps) / 100}%</span>
       <ul><li>${r.savings_bps / 100}% by savings staked</li><li>${r.points_bps / 100}% by contribution points</li><li>No money lost to rounding</li></ul></div>`;
+  // tasks the co-op pays for: Sputnik bounties, paid from the treasury after a vote
+  view(dep.dao, "get_last_bounty_id").then(async (n) => {
+    const list = n ? await view(dep.dao, "get_bounties", { from_index: 0, limit: n }) : [];
+    const taken = await Promise.all(list.map((b) => view(dep.dao, "get_bounty_number_of_claims", { id: b.id }).catch(() => 0)));
+    rows($("bounties").tBodies[0], list.map((b, i) => `<tr><td>${esc(b.description)}</td>
+      <td class="num" data-label="Pays">${b.token ? `${usdc(b.amount)} USDC` : `${nearAmt(b.amount)} NEAR`}</td>
+      <td class="num" data-label="Left">${b.times}</td><td class="num" data-label="Taken">${taken[i]}</td></tr>`).join(""));
+  }).catch(() => rows($("bounties").tBodies[0], ""));
   rows($("periods").tBodies[0], [...periods].reverse().map((p) => `<tr>
       <td>Share ${p.id}</td><td data-label="Date">${date(p.ts)}</td>
       <td class="num" data-label="Shared">${usdc(BigInt(p.amount) - BigInt(p.reserve))}</td>

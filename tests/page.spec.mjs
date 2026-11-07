@@ -174,3 +174,18 @@ test("the amount typed is the amount staked", async ({ page }, testInfo) => {
   await page.locator("#w-stake").click();
   await expect(page.locator("#joinapp .note-line")).toContainText("Stake 7 NEAR");
 });
+
+test("the tasks the co-op pays for are listed from the DAO's bounties", async ({ page }) => {
+  await ready(page);
+  const row = page.locator("#bounties tbody tr").first();
+  await expect(row).toContainText("Bahasa Indonesia");
+  await expect(row.locator('td[data-label="Pays"]')).toHaveText(/\d+\.\d\d USDC/);
+});
+
+test("a member can take a task from the wallet panel", async ({ page }, testInfo) => {
+  test.skip(!local(testInfo), "?as= previews run on localhost only");
+  await page.goto("/?as=kop-bob-mw4i3w8f.testnet");
+  const panel = page.locator("#joinapp");
+  await expect(panel).toContainText("Tasks the co-op pays for");
+  await expect(panel.locator("[data-claim]").first()).toHaveText(/Take this task \(0\.1 NEAR bond\)/);
+});

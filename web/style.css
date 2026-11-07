@@ -150,6 +150,10 @@ h2 .dim { color: var(--grey); }
 /* verify the by-laws in the browser */
 .verify { max-width: 30rem; }
 .codegov { max-width: 30rem; margin-top: 2rem; }
+#bounties { margin-top: 2.5rem; }
+#bounties caption .muted { font-weight: 400; font-size: .85rem; }
+.task-done { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.task-done input { min-width: 0; flex: 1 1 12rem; padding: .45rem .6rem; border: 1px solid var(--rule); font: inherit; }
 .codegov h3 { font-size: 1rem; margin: 0 0 .5rem; }
 .codegov p { font-size: .92rem; }
 .codegov code { overflow-wrap: anywhere; }

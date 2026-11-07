@@ -93,6 +93,10 @@ Open http://localhost:5173 (or the live page). See:
 - The member passbook (approved by-laws, paid jobs, profit shares), members' savings and points, one receipt per job
   with its inference proof (TEE signer), and the audit (GREEN when every payout reached the co-op, RED with the missing
   amount when not), next to the DAO's USDC balance read from the token contract itself.
+- **Tasks the co-op pays for** (Sputnik DAO bounties): the members vote a task in with its USDC pay; a member takes it
+  from the wallet panel (0.1 NEAR bond), files a link to the work, and the members vote the payout from the treasury.
+  Live: task #0, translate this quick start into Bahasa Indonesia, 0.50 USDC × 2 (proposal #13). Tested end to end on
+  the demo co-op: taken, filed as proposal #22, approved, 0.50 USDC paid from its treasury.
 - **Who can change the contract's code?** The code the contract runs (a NEAR global contract hash), the DAO proposal
   that approved it, and how many full-access keys the contract account still has, read from the chain.
 
@@ -146,7 +150,8 @@ The result is committed to [`evidence/`](evidence) and shown on the live page; a
 | Re-prove the by-laws model runs in TEEs | `node agent/tee.mjs <model>` | `.github/workflows/tee.yml`, daily, commits `evidence/` |
 | Propose new by-laws | `node scripts/propose-bylaws.mjs config/config.vN.yaml <member> <points> "why" [voters…]` | by vote only |
 | Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposal #12) |
-| One time: delete the contract account's full-access keys, so only a vote can change the code | `node scripts/upgrade.mjs --lock` | no |
+| One time: delete the contract account's full-access keys, so only a vote can change the code | `node scripts/upgrade.mjs --lock` | no (done on the demo co-op `koperasi-mw57ou3m.testnet`: 0 keys) |
+| Tasks the co-op pays for: post by vote, take, file the work, vote the payout | `node scripts/bounty.mjs post\|claim\|done\|vote\|list …` | by vote only |
 
 ## How it works
 
@@ -181,7 +186,7 @@ Rules in plain words: [`RULES.md`](RULES.md).
 
 | Track | What the brief asks | Where it is here |
 |---|---|---|
-| **Social Money** | collective ownership, shared budgets, programmable rewards, reputation-based access, on Sputnik DAO and Trezu, without rebuilding the multisig | The DAO owns and steers the agent; membership is the DAO role; the profit share is a programmable reward by savings and contribution; contribution points trace to the proposal that awarded them; all money sits in the Sputnik treasury (demo steps 1, 2, 6) |
+| **Social Money** | collective ownership, shared budgets, programmable rewards, reputation-based access, on Sputnik DAO and Trezu, without rebuilding the multisig | The DAO owns and steers the agent; membership is the DAO role; the profit share is a programmable reward by savings and contribution; contribution points trace to the proposal that awarded them; members are paid for tasks through Sputnik bounties; even the contract's code changes only by vote; all money sits in the Sputnik treasury (demo steps 1, 2, 6) |
 | **Autonomous Business** | treasury, sales, procurement, revenue sharing; humans only set the constraints; no plaintext full-access key; public ledger; a short testnet loop | The agent sells work on Agent Market and buys its inference; the by-laws hold price, caps and kill switch (`pause`); the agent account has only a function-call key; receipts + audit are the public ledger (demo steps 3, 5, 7) |
 | **Agent Economy** | agents that earn, spend, pay for compute; a receipt per task | Bid → deliver → paid; inference cost per job from NEAR AI Cloud billing; one on-chain receipt per job (demo step 3) |
 
@@ -207,8 +212,10 @@ Rules in plain words: [`RULES.md`](RULES.md).
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
 4. **The contract's code.** It runs a global contract the members approved (proposal #12), and `upgrade` only obeys the
-   DAO. Until `scripts/upgrade.mjs --lock` deletes it, the contract account still has the builder's full-access key, which
-   could deploy code without a vote; the live page shows how many such keys exist.
+   DAO. The demo co-op is locked (no full-access key left). Until `scripts/upgrade.mjs --lock` runs on the showcase,
+   its contract account still has the builder's full-access key, which could deploy code without a vote; the live page
+   shows how many such keys exist. Each upgrade publishes a global contract, which burns ~10x normal storage
+   (about 26 NEAR for this 256 KB contract).
 5. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
    code. It is not listed for hire until the co-op's NEAR AI organization has credits, so no buyer can hire an agent

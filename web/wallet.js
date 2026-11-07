@@ -31,11 +31,18 @@ const argsOf = (b64) => {
 };
 // a proposal whose args we cannot show in full is not voted on from here
 const opaque = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.actions.some((a) => argsOf(a.args) === null)
-  || !["AddMemberToRole", "RemoveMemberFromRole", "Transfer", "FunctionCall"].includes(kindOf(p));
+  || !["AddMemberToRole", "RemoveMemberFromRole", "Transfer", "FunctionCall", "AddBounty", "BountyDone"].includes(kindOf(p));
+const pays = (token, amount) => (token ? `${usdc(amount)} USDC (${token})` : `${nearAmt(amount)} NEAR`);
+const DAY_NS = 86_400_000_000_000n;
 const describe = (p) => {
   const k = kindOf(p);
   if (k === "AddMemberToRole") return `Add ${p.kind.AddMemberToRole.member_id} to role ${p.kind.AddMemberToRole.role}`;
   if (k === "RemoveMemberFromRole") return `Remove ${p.kind.RemoveMemberFromRole.member_id} from role ${p.kind.RemoveMemberFromRole.role}`;
+  if (k === "AddBounty") {
+    const b = p.kind.AddBounty.bounty;
+    return `Open a task: "${b.description}", pays ${pays(b.token, b.amount)}, ${b.times} time(s), ${Number(BigInt(b.max_deadline) / DAY_NS)} days to deliver`;
+  }
+  if (k === "BountyDone") return `Pay task #${p.kind.BountyDone.bounty_id} to ${p.kind.BountyDone.receiver_id} from the treasury`;
   if (k === "Transfer") return `Transfer ${p.kind.Transfer.amount} of ${p.kind.Transfer.token_id || "NEAR"} to ${p.kind.Transfer.receiver_id}`;
   if (k === "FunctionCall") {
     const f = p.kind.FunctionCall;
@@ -61,7 +68,10 @@ async function load() {
   const pool = member ? await view(dep.contract, "get_staking_pool") : null;
   const staked = pool ? await view(pool, "get_account_staked_balance", { account_id: me }).catch(() => "0") : "0";
   const usdcReady = member ? await view(dep.usdc, "storage_balance_of", { account_id: me }).catch(() => null) : null;
-  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, pool, staked };
+  const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
+  const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
+  const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
+  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, pool, staked, bounties, myClaims };
 }
 
 // each button runs one transaction, then the panel re-reads the chain
@@ -143,6 +153,17 @@ async function render() {
       <div class="stake-row"><label>Stake <input id="w-amt" type="number" min="1" step="1" value="1" inputmode="numeric"> NEAR</label>
         <button type="button" class="btn" id="w-stake">Stake</button>
         <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}
+      <h3 class="jh">Tasks the co-op pays for</h3>
+      ${s.bounties.length ? `<ul class="props tasks">${s.bounties.map((b) => {
+        const mine = s.myClaims.find((c) => c.bounty_id === b.id);
+        const days = Number(BigInt(b.max_deadline) / DAY_NS);
+        return `<li><span><strong>#${b.id}</strong> ${esc(b.description)}<span class="claim">Pays ${esc(pays(b.token, b.amount))}; ${b.times} left; ${days} days to deliver once taken.</span></span>${mine
+          ? `<span class="task-done"><input id="w-work-${b.id}" type="text" maxlength="300" placeholder="Link to your work (PR, file…)" aria-label="Link to your work for task #${b.id}">
+             <button type="button" class="btn small" data-done="${b.id}">Ask to be paid</button>
+             <button type="button" class="btn ghost small" data-giveup="${b.id}">Give up</button></span>`
+          : `<button type="button" class="btn small" data-claim="${b.id}" data-days="${days}">Take this task (${nearAmt(s.policy.bounty_bond)} NEAR bond)</button>`}</li>`;
+      }).join("")}</ul>${s.usdcReady ? "" : `<p class="small">Payouts are in USDC: register for USDC first.</p>`}`
+        : `<p class="small">No open tasks right now.</p>`}
       <h3 class="jh">Open proposals</h3>
       ${open.length ? `<ul class="props">${open.map((p) => {
         const mine = p.votes[me];
@@ -180,6 +201,25 @@ async function render() {
   };
   on("w-sync-sav", "Savings sync", () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
   on("w-claim", "Claim", () => send(dep.contract, "claim_share", {}, { tgas: 60 }));
+  box.querySelectorAll("[data-claim]").forEach((b) => {
+    b.onclick = () => act(`Take task #${b.dataset.claim}`, () => send(dep.dao, "bounty_claim",
+      { id: Number(b.dataset.claim), deadline: String(BigInt(b.dataset.days) * DAY_NS) },
+      { deposit: BigInt(s.policy.bounty_bond), tgas: 50 }));
+  });
+  box.querySelectorAll("[data-giveup]").forEach((b) => {
+    b.onclick = () => act(`Give up task #${b.dataset.giveup}`, () => send(dep.dao, "bounty_giveup", { id: Number(b.dataset.giveup) }, { tgas: 50 }));
+  });
+  box.querySelectorAll("[data-done]").forEach((b) => {
+    b.onclick = () => {
+      const id = Number(b.dataset.done);
+      const work = $(`w-work-${id}`).value.trim(); // read before act() re-renders the panel
+      if (work.length < 4) { note = `<span class="err">Task #${id}: link to the work you delivered first.</span>`; render(); return; }
+      // Sputnik v2's bounty_done cannot succeed (no deposit, then ERR_MIN_BOND): file BountyDone as a proposal instead
+      act(`Ask to be paid for task #${id}`, () => send(dep.dao, "add_proposal",
+        { proposal: { description: `Task #${id} done: ${work}`, kind: { BountyDone: { bounty_id: id, receiver_id: me } } } },
+        { deposit: BigInt(s.policy.proposal_bond), tgas: 50 }));
+    };
+  });
   box.querySelectorAll("[data-vote]").forEach((b) => {
     b.onclick = () => act(b.dataset.vote === "VoteApprove" ? "Approve" : "Reject", async () => {
       const p = await view(dep.dao, "get_proposal", { id: Number(b.dataset.id) });
