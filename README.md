@@ -85,6 +85,14 @@ Open http://localhost:5173 (or the live page). See:
 
 - **Who controls this AI agent?** next to the headline: which members voted yes on the by-laws the agent runs (read
   from the DAO proposal), the locked terms (price, AI spend caps), and whether the DAO allows the agent to work.
+- **Don't trust us. Your browser checks.** Right under the headline, four checks run in your browser: the by-laws file
+  hashes to what the members voted; the contract account has no full-access key and runs the code a vote approved; the
+  audit (every paid job reached the treasury, or how much did not); and, on a click, **the model's TEEs verified with
+  your own nonce** (Intel TDX quotes, signing keys, attested compose, GPU nonce), with a table per server. Next to it, a
+  four-row comparison with token-launched agents and agent frameworks.
+- **Members' meeting: propose a profit share** (wallet panel, members): type an amount up to the treasury and see, before
+  anyone votes, what each member would receive and what stays as reserve, by the contract's own split. An open share
+  proposal shows voters the same preview.
 - **Verify by-laws in your browser**: downloads the by-laws file from this repo, hashes it in your browser and compares
   it with the hash the members voted on. See: `Match.`
 - **Join with a testnet wallet** (Meteor, Intear, Nightly…, via NEAR Connect): pay the 0.5 NEAR join deposit, create
@@ -216,12 +224,46 @@ Rules in plain words: [`RULES.md`](RULES.md).
 
 ## Prior art, and what is different
 
-| | Virtuals | Olas | Tontine (this hackathon) | **Koperasi** |
-|---|---|---|---|---|
-| Ownership | a token per agent | OLAS staking, DAO-operated services | 100 shares per market-making firm | DAO membership, **one member one vote** |
-| Control over the agent's behaviour | holders don't set it | partly | owner sets guardrails | **the by-laws (prompt, model, caps) only by vote, enforced by hash** |
-| Members' capital | rides the token price | stake | buys shares | **staked for inference; principal never spent** |
-| Income | mostly token trading | services | market-making spread | paid jobs on Agent Market |
+**Positioning.** For small communities that want to own the AI agent working for them, but on today's agent platforms
+get token speculation instead of control and profit, Koperasi is a member-owned AI co-op on NEAR where one member, one
+vote pins the agent's prompt, model and prices by hash, the model's TEE is checked before every job (and by any visitor,
+in their own browser), and members claim profit by rule. Token-launched agents such as Virtuals or ai16z leave control
+with insiders or large holders, and pay holders only through the token price.
+
+Competitor scan, 7 Nov 2026 (sources linked; "inferred" where we could not confirm from a primary source):
+
+| | What it is | Who decides the agent's behaviour | Proof of what runs | Where the money goes | Weakness |
+|---|---|---|---|---|---|
+| [Virtuals](https://www.virtuals.io) (agent tokens, ACP) | one token per agent; agent-to-agent commerce | developers; token-weighted | none shown to holders | buyback/burn, token price | holdings concentrated in whales (Nansen, via press) |
+| [ai16z / ElizaOS](https://decrypt.co/374958) | "AI-run VC DAO" | alleged insider control (lawsuit, settled) | none | token | founder, Aug 2026: "the token is dead" |
+| [Olas](https://olas.network/mech-marketplace) (Pearl, Mech Marketplace) | run your own agent; agents hire agents | the operator; veOLAS governance | none per job | operator; OLAS staking | each user owns a copy, nobody co-owns one agent |
+| [NEAR Verifiable AI DAO](https://docs.near.org/ai/shade-agents) (Shade tutorial) | a TEE agent votes on DAO proposals | the owner's manifesto | code hash registered on-chain | none | the agent governs the DAO, not the reverse; Shade is deprecated |
+| [Botto](https://docs.botto.com/details/governance) | AI artist steered by stakers | stake-weighted votes, a human guardian | none | NFT sales to treasury and voters | no proof of which model or prompt ran (inferred) |
+| [Agents With Benefits](https://devfolio.co/projects/agents-with-benefits-3569) (ETHDenver 2024) | DAOs co-own agents as NFTs, share revenue | the DAO | source code on the NFT | revenue share | prototype; no TEE, no audit of a human intermediary (inferred) |
+| [NEAR AI Agent Market](https://near.ai/blog/introducing-near-ai-agent-market) | where agents sell work (our channel) | one owner per agent | deliverable hash | the owner | no collective ownership |
+
+**What is the same** (parity, not a selling point): TEE inference and input hashes (NEAR AI, Shade), an agent that sells
+work (Olas Mech, Virtuals ACP), a DAO treasury and revenue share (Botto, Agents With Benefits), Sputnik bounties.
+
+**What others have that we do not:** agent-to-agent hiring (Olas, Virtuals: ours only sells); a liquid exit (tokens:
+ours is deliberate, a member leaves and gets the join deposit back, as in a koperasi); volume and track record (we have
+none on mainnet until the co-op's NEAR AI organization has credits).
+
+**What nobody else does, and Koperasi does now:**
+
+1. **Verify the AI yourself.** The page's *Don't trust us* strip asks NEAR AI Cloud for fresh attestations bound to a
+   nonce the visitor's browser made up, and verifies the Intel TDX quotes (Intel's collateral via Phala's public PCCS,
+   `@phala/dcap-qvl` in the browser), the signing-key binding, the attested docker compose and the GPU evidence's nonce.
+   Critics call TEE attestation "a signed promise" unless anchored ([DEV](https://dev.to/adityasingh2824/tee-attestation-isnt-trust-its-just-a-receipt-4maf));
+   here it is anchored to the visitor's own nonce and to by-laws the contract enforces. A replayed attestation is caught
+   (tested). Hard to copy: token agents have no pinned config to check against.
+2. **Rules no one can change alone.** The by-laws hash is checked by the agent and the contract; the contract's code
+   changes only by a members' vote (global contract, no full-access key, not even the builder's); the page checks both.
+3. **A members' meeting with the numbers in front of everyone.** A member proposes a profit share from the page and every
+   member sees what each of them would receive before voting, computed with the contract's own integer split
+   (`web/share.js`, tested against the contract's test). Open share proposals show the same preview to voters.
+4. **The human in the middle is bonded and audited.** The steward who holds the Agent Market account must pass every
+   payout on; the audit is on-chain and the bond is slashable by vote. We found no other project that audits its operator.
 
 ## Trust assumptions (read before you rely on it)
 
