@@ -48,6 +48,23 @@ const KEY_STAKING_POOL: &[u8] = b"staking_pool";
 /// Per-job proof of the inference (NEAR AI inference id, attested TEE signer, signed hashes), keyed by job id.
 const PROOF_PREFIX: &[u8] = b"proof:";
 const MAX_PROOF_LEN: usize = 1024;
+/// Σ profit shares credited and not yet claimed, by anyone (members and former members), in the current token.
+const KEY_OWED_SHARES: &[u8] = b"owed_shares";
+/// Σ USDC sent by ft_transfer whose callback has not come back yet (claims and transfers to the DAO).
+const KEY_IN_FLIGHT: &[u8] = b"in_flight";
+
+fn read_u128(key: &[u8]) -> Option<u128> {
+    env::storage_read(key).map(|b| u128::from_le_bytes(b.try_into().unwrap_or_else(|_| env::panic_str("bad counter"))))
+}
+fn write_u128(key: &[u8], v: u128) {
+    env::storage_write(key, &v.to_le_bytes());
+}
+/// Add to (or, with `sub`, take from) a counter. Counters exist from `new`, or from `init_ledger` on older co-ops.
+fn bump(key: &[u8], by: u128, sub: bool) {
+    if let Some(v) = read_u128(key) {
+        write_u128(key, if sub { v.saturating_sub(by) } else { v + by });
+    }
+}
 
 fn proof_key(job_id: &str) -> Vec<u8> {
     [PROOF_PREFIX, job_id.as_bytes()].concat()
@@ -223,6 +240,8 @@ impl Koperasi {
         };
         let mut config_history = Vector::new(Key::ConfigHistory);
         config_history.push(config.clone());
+        write_u128(KEY_OWED_SHARES, 0);
+        write_u128(KEY_IN_FLIGHT, 0);
         Self {
             dao_id,
             usdc_id,
@@ -404,10 +423,27 @@ impl Koperasi {
         self.assert_dao();
         require!(usdc_id != self.usdc_id, "already this token");
         require!(self.unforwarded == 0, "flush_to_dao first: USDC owed to the DAO in the current token");
-        let owed = self.members.keys().any(|a| self.claimable.get(a).is_some_and(|c| *c > 0));
-        require!(!owed, "members still have profit shares to claim in the current token");
+        let owed = read_u128(KEY_OWED_SHARES).unwrap_or_else(|| env::panic_str("call init_ledger first"));
+        require!(owed == 0, "profit shares are still to be claimed in the current token");
+        require!(read_u128(KEY_IN_FLIGHT) == Some(0), "a USDC transfer is still in flight");
         log!("usdc: {} -> {}", self.usdc_id, usdc_id);
         self.usdc_id = usdc_id;
+    }
+
+    /// Once, on a co-op deployed before the counters: start them from the current state. Exact when no former member
+    /// holds an unclaimed share (true when the DAO never removed a member who had one); the DAO decides when to call it.
+    pub fn init_ledger(&mut self) {
+        self.assert_dao();
+        require!(read_u128(KEY_OWED_SHARES).is_none(), "ledger already started");
+        let owed: u128 = self.members.keys().map(|a| self.claimable.get(a).copied().unwrap_or(0)).sum();
+        write_u128(KEY_OWED_SHARES, owed);
+        write_u128(KEY_IN_FLIGHT, 0);
+        log!("ledger started: {} owed in profit shares", owed);
+    }
+
+    /// (owed profit shares, USDC in flight); None before `init_ledger` on an older co-op.
+    pub fn get_ledger(&self) -> Option<(U128, U128)> {
+        Some((U128(read_u128(KEY_OWED_SHARES)?), U128(read_u128(KEY_IN_FLIGHT)?)))
     }
 
     pub fn set_agent(&mut self, agent_id: AccountId) {
@@ -560,6 +596,7 @@ impl Koperasi {
                 paid += share;
             }
         }
+        bump(KEY_OWED_SHARES, paid, false);
         let reserve = amount - paid;
         self.periods.push(Period {
             id: self.periods.len() + 1,
@@ -572,6 +609,7 @@ impl Koperasi {
     }
 
     fn forward_to_dao(&mut self, amount: u128) {
+        bump(KEY_IN_FLIGHT, amount, false);
         let _ = ext_ft::ext(self.usdc_id.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(GAS_FT_TRANSFER)
@@ -581,6 +619,7 @@ impl Koperasi {
 
     #[private]
     pub fn on_forwarded(&mut self, amount: U128, #[callback_result] r: Result<(), PromiseError>) {
+        bump(KEY_IN_FLIGHT, amount.0, true);
         if r.is_err() {
             self.unforwarded += amount.0;
         }
@@ -599,6 +638,8 @@ impl Koperasi {
         let who = env::predecessor_account_id();
         let amount = self.claimable.remove(&who).unwrap_or(0);
         require!(amount > 0, "nothing to claim");
+        bump(KEY_OWED_SHARES, amount, true);
+        bump(KEY_IN_FLIGHT, amount, false);
         ext_ft::ext(self.usdc_id.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(GAS_FT_TRANSFER)
@@ -608,7 +649,9 @@ impl Koperasi {
 
     #[private]
     pub fn on_claimed(&mut self, account_id: AccountId, amount: U128, #[callback_result] r: Result<(), PromiseError>) {
+        bump(KEY_IN_FLIGHT, amount.0, true);
         if r.is_err() {
+            bump(KEY_OWED_SHARES, amount.0, false);
             let c = self.claimable.get(&account_id).copied().unwrap_or(0);
             self.claimable.insert(account_id, c + amount.0);
         }

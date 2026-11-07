@@ -612,7 +612,7 @@ fn the_dao_moves_the_token_and_only_the_new_one_counts() {
 }
 
 #[test]
-#[should_panic(expected = "members still have profit shares to claim")]
+#[should_panic(expected = "profit shares are still to be claimed")]
 fn the_token_cannot_move_while_shares_are_unclaimed() {
     let mut k = setup();
     with_members(&mut k, &["alice.testnet"]);
@@ -621,4 +621,79 @@ fn the_token_cannot_move_while_shares_are_unclaimed() {
     share(&mut k, 1_000_000);
     as_(&dao(), near(0));
     k.set_usdc(acc("circle-usdc.testnet"));
+}
+
+#[test]
+#[should_panic(expected = "profit shares are still to be claimed")]
+fn a_former_members_unclaimed_share_also_blocks_the_move() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    as_(&dao(), near(0));
+    k.award_points(acc("alice.testnet"), 1, "x".into());
+    share(&mut k, 1_000_000);
+    k.apply_membership(acc("alice.testnet"), false); // removed by the DAO, share still unclaimed
+    as_(&dao(), near(0));
+    k.set_usdc(acc("circle-usdc.testnet"));
+}
+
+#[test]
+#[should_panic(expected = "a USDC transfer is still in flight")]
+fn the_token_cannot_move_while_a_claim_is_in_flight() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    as_(&dao(), near(0));
+    k.award_points(acc("alice.testnet"), 1, "x".into());
+    share(&mut k, 1_000_000);
+    as_(&acc("alice.testnet"), near(0));
+    let _ = k.claim_share(); // owed is now 0, but the transfer has not come back
+    as_(&dao(), near(0));
+    k.set_usdc(acc("circle-usdc.testnet"));
+}
+
+#[test]
+fn the_ledger_follows_shares_claims_and_failed_claims() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    as_(&dao(), near(0));
+    k.award_points(acc("alice.testnet"), 1, "x".into());
+    share(&mut k, 1_000_000);
+    // the reserve is on its way to the DAO
+    let (owed, reserve) = k.get_ledger().unwrap();
+    assert!(owed.0 > 0 && reserve.0 > 0);
+    assert_eq!(owed.0 + reserve.0, 1_000_000);
+    as_(&acc("koperasi.testnet"), near(0));
+    k.on_forwarded(reserve, Ok(()));
+    assert_eq!(k.get_ledger().unwrap(), (owed, U128(0)));
+    as_(&acc("alice.testnet"), near(0));
+    let _ = k.claim_share();
+    assert_eq!(k.get_ledger().unwrap(), (U128(0), owed));
+    // the transfer fails: the share is owed again and nothing is in flight
+    as_(&acc("koperasi.testnet"), near(0));
+    k.on_claimed(acc("alice.testnet"), owed, Err(PromiseError::Failed));
+    assert_eq!(k.get_ledger().unwrap(), (owed, U128(0)));
+}
+
+#[test]
+fn an_older_coop_starts_its_ledger_once_by_vote() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    as_(&dao(), near(0));
+    k.award_points(acc("alice.testnet"), 1, "x".into());
+    share(&mut k, 1_000_000);
+    let owed = k.get_ledger().unwrap().0;
+    // simulate a co-op from before the counters (its reserve transfer long since done)
+    env::storage_remove(KEY_OWED_SHARES);
+    env::storage_remove(KEY_IN_FLIGHT);
+    assert_eq!(k.get_ledger(), None);
+    as_(&dao(), near(0));
+    k.init_ledger();
+    assert_eq!(k.get_ledger().unwrap(), (owed, U128(0)));
+}
+
+#[test]
+#[should_panic(expected = "ledger already started")]
+fn the_ledger_starts_only_once() {
+    let mut k = setup();
+    as_(&dao(), near(0));
+    k.init_ledger();
 }
