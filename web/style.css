@@ -390,3 +390,29 @@ h2 .dim { color: var(--grey); }
 /* 404 */
 .notfound { max-width: 40rem; margin: 0 auto; padding: 18vh 1.5rem 6rem; }
 .notfound h1 { font: 700 clamp(2.4rem, 7vw, 4.5rem)/1 var(--display); margin: 0 0 1rem; }
+
+/* "Don't trust us": four checks the visitor's browser runs */
+.checks { padding: 5rem clamp(1.2rem, 4vw, 3rem); border-bottom: 1px solid var(--rule); }
+.checks h2 { font-size: clamp(2.4rem, 5.5vw, 4.2rem); }
+.checks .sub { max-width: 44rem; }
+.check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+.check-list > li { position: relative; padding: 1.3rem 1.3rem 1.3rem 3.1rem; background: #fff; border: 1px solid var(--rule); min-width: 0; }
+.check-list > li::before { content: "…"; position: absolute; left: 1.1rem; top: 1.2rem; width: 1.3rem; height: 1.3rem; border-radius: 50%;
+  display: grid; place-items: center; font-size: .8rem; color: #fff; background: var(--grey); }
+.check-list > li.pass { border-color: var(--green); box-shadow: inset 4px 0 0 var(--green); }
+.check-list > li.pass::before { content: "✓"; background: var(--green); }
+.check-list > li.fail { border-color: var(--red); box-shadow: inset 4px 0 0 var(--red); }
+.check-list > li.fail::before { content: "!"; background: #b3261e; }
+.check-list b { display: block; font: 700 1.35rem/1.1 var(--display); text-transform: uppercase; margin-bottom: .4rem; }
+.check-list p, .ck-out { font-size: .9rem; color: var(--muted); margin: 0 0 .6rem; overflow-wrap: anywhere; }
+.check-list .btn { font-size: .9rem; padding: .6em 1em; }
+#ck-tee { grid-column: 1 / -1; }
+.ck-scroll { overflow-x: auto; }
+.ck-table { border-collapse: collapse; font-size: .82rem; margin: .4rem 0; min-width: 32rem; }
+.ck-table th, .ck-table td { text-align: left; padding: .3rem .7rem .3rem 0; border-bottom: 1px solid var(--rule); }
+.ck-table td { font-variant-numeric: tabular-nums; }
+.versus { margin-top: 2.5rem; min-width: 46rem; background: #fff; }
+.versus th[scope="row"] { font-weight: 600; color: var(--ink); width: 14rem; }
+.versus td, .versus th { vertical-align: top; padding: .8rem .7rem; border-bottom: 1px solid var(--rule); font-size: .9rem; }
+.versus td:last-child { background: #f1f4ff; }
+.versus caption { text-align: left; font-weight: 600; padding-bottom: .6rem; }

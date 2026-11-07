@@ -66,3 +66,40 @@ test("only a local market counts as the demo stand-in", () => {
     assert.equal(isLocal(u), false, u);
   }
 });
+
+test("the page's profit-share preview matches the contract's split", async () => {
+  const { splitShare } = await import("../../web/share.js");
+  const NEAR = 10n ** 24n;
+  // the same co-op as the contract test share_splits_by_savings_and_points_and_nothing_is_lost
+  /** @type {Array<[string, { savings: string, points: number }]>} */
+  const members = [
+    ["alice.testnet", { savings: String(300n * NEAR), points: 0 }],
+    ["bob.testnet", { savings: String(100n * NEAR), points: 10 }],
+    ["carol.testnet", { savings: "0", points: 30 }],
+  ];
+  const { shares, reserve } = splitShare(100_000_000n, { reserve_bps: 2000, savings_bps: 4000, points_bps: 4000 }, members);
+  assert.deepEqual(shares.map((s) => s.share), [30_000_000n, 20_000_000n, 30_000_000n]);
+  assert.equal(reserve, 20_000_000n);
+  // rounding goes to the reserve, never lost: three equal members, 1 unit
+  const three = ["a", "b", "c"].map((a) => /** @type {[string, { savings: string, points: number }]} */ ([a, { savings: "0", points: 1 }]));
+  const r = splitShare(1n, { reserve_bps: 0, savings_bps: 0, points_bps: 10000 }, three);
+  assert.equal(r.shares.reduce((x, s) => x + s.share, 0n) + r.reserve, 1n);
+  // nobody with savings or points: everything stays in the DAO
+  assert.equal(splitShare(5_000_000n, { reserve_bps: 2000, savings_bps: 4000, points_bps: 4000 }, [["a", { savings: "0", points: 0 }]]).reserve, 5_000_000n);
+});
+
+test("USDC amounts typed by a member are parsed exactly, or refused", async () => {
+  const { usdcUnits } = await import("../../web/share.js");
+  assert.equal(usdcUnits("12.5"), 12_500_000n);
+  assert.equal(usdcUnits("0.000001"), 1n);
+  assert.equal(usdcUnits(" 3 "), 3_000_000n);
+  for (const bad of ["", "0", "0.0", "-1", "1.1234567", "1e3", "abc", "1,5", "1.", ".5", "9999999999999"]) assert.equal(usdcUnits(bad), null, bad);
+});
+
+test("exact USDC display keeps every unit", async () => {
+  const { usdcExact } = await import("../../web/share.js");
+  assert.equal(usdcExact(4_000_000n), "4.00");
+  assert.equal(usdcExact(1_333_333n), "1.333333");
+  assert.equal(usdcExact(1_500_000n), "1.50");
+  assert.equal(usdcExact(10n), "0.00001");
+});

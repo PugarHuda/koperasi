@@ -2,12 +2,30 @@
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "https://esm.sh/@hot-labs/near-connect@0.12.0";
 import { dep, view, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
+import { splitShare, usdcExact, usdcUnits } from "./share.js";
+
+// what each member would receive from a share of `amount`, by the contract's own rule
+const preview = (amount, s) => {
+  const { shares, reserve } = splitShare(amount, s.info.share_rule, s.roster);
+  return [...shares.filter((x) => x.share > 0n).map((x) => `${x.account}: ${usdcExact(x.share)} USDC`), `reserve back to the DAO: ${usdcExact(reserve)} USDC`];
+};
+// a FunctionCall that sends the co-op's USDC to the contract as a profit share
+const shareCall = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.receiver_id === dep.usdc
+  && p.kind.FunctionCall.actions.length === 1 && p.kind.FunctionCall.actions[0].method_name === "ft_transfer_call"
+  && (() => { const a = JSON.parse(argsOf(p.kind.FunctionCall.actions[0].args) ?? "{}"); return a.receiver_id === dep.contract && a.msg === "share" ? BigInt(a.amount) : null; })();
 
 const connector = new NearConnector({ network: dep.network, providers: { [dep.network]: RPC_URLS } });
 const box = $("joinapp");
 let me = "";
 let busy = false;
 let note = "";
+/** A validation message, shown in place: no re-render, so nothing the member is typing is lost. */
+function say(html) {
+  note = html;
+  let line = box.querySelector(".note-line");
+  if (!line) { line = document.createElement("p"); line.className = "note-line"; box.append(line); }
+  line.innerHTML = html;
+}
 
 async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } = {}) {
   const wallet = await connector.wallet();
@@ -39,8 +57,10 @@ const validToken = (t) => t === "" || /^(?=.{2,64}$)[a-z0-9]+([-_][a-z0-9]+)*(\.
 const pays = (token, amount) => (!token ? `${nearAmt(amount)} NEAR`
   : token === dep.usdc ? `${usdc(amount)} USDC` : `${amount} base units of UNKNOWN token ${token}`);
 const DAY_NS = 86_400_000_000_000n;
-const describe = (p) => {
+const describe = (p, s) => {
   const k = kindOf(p);
+  const shared = s && shareCall(p);
+  if (shared) return `Profit share: send ${usdc(shared)} USDC from the treasury to the co-op contract, split by its rule.\nIf approved now:\n  ${preview(shared, s).join("\n  ")}`;
   if (k === "AddMemberToRole") return `Add ${p.kind.AddMemberToRole.member_id} to role ${p.kind.AddMemberToRole.role}`;
   if (k === "RemoveMemberFromRole") return `Remove ${p.kind.RemoveMemberFromRole.member_id} from role ${p.kind.RemoveMemberFromRole.role}`;
   if (k === "AddBounty") {
@@ -79,10 +99,12 @@ async function load() {
   const usdcReady = member ? await view(dep.usdc, "storage_balance_of", { account_id: me }).catch(() => null) : null;
   // what the token itself asks for a registration (NEP-145), not a guess
   const usdcStorage = member && !usdcReady ? BigInt((await view(dep.usdc, "storage_balance_bounds")).min) : 0n;
+  const roster = member ? await view(dep.contract, "get_members", { from: 0, limit: 500 }) : [];
+  const treasury = member ? BigInt(await view(dep.usdc, "ft_balance_of", { account_id: dep.dao }).catch(() => "0")) : 0n;
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
   const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
-  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims };
+  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims, roster, treasury };
 }
 
 // each button runs one transaction, then the panel re-reads the chain
@@ -164,6 +186,13 @@ async function render() {
       <div class="stake-row"><label>Stake <input id="w-amt" type="number" min="1" step="1" value="1" inputmode="numeric"> NEAR</label>
         <button type="button" class="btn" id="w-stake">Stake</button>
         <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}
+      <h3 class="jh">Members' meeting: propose a profit share</h3>
+      ${s.treasury > 0n
+        ? `<p class="small">The treasury holds ${usdc(s.treasury)} USDC. Choose how much to share; everyone sees each member's part before voting.</p>
+           <div class="stake-row"><label>Share <input id="w-share-amt" type="text" inputmode="decimal" autocomplete="off" placeholder="${usdc(s.treasury)}" aria-label="USDC to share"> USDC</label>
+           <button type="button" class="btn" id="w-share">Propose this share</button></div>
+           <pre class="does" id="w-share-preview" aria-live="polite">Type an amount to see each member's part.</pre>`
+        : `<p class="small">The treasury holds 0.00 USDC of ${esc(dep.usdc.slice(0, 12))}…, so there is nothing to share yet.</p>`}
       <h3 class="jh">Tasks the co-op pays for</h3>
       ${s.bounties.length ? `<ul class="props tasks">${s.bounties.map((b) => {
         const mine = s.myClaims.find((c) => c.bounty_id === b.id);
@@ -179,7 +208,7 @@ async function render() {
       ${open.length ? `<ul class="props">${open.map((p) => {
         const mine = p.votes[me];
         const hidden = opaque(p);
-        return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(describe(p))}</pre>${p.description
+        return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(describe(p, s))}</pre>${p.description
           ? `<span class="claim">Proposer says: “${esc(p.description.slice(0, 200))}”</span>` : ""}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
           : hidden ? `<a class="small-link" href="${explorer(dep.dao)}">Inspect in the DAO to vote</a>`
           : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">Approve</button>
@@ -204,14 +233,37 @@ async function render() {
     const raw = $("w-amt").value;
     const n = Number(raw);
     if (!(Number.isInteger(n) && n >= 1 && n <= 1000)) {
-      note = `<span class="err">Stake: enter a whole number of NEAR, 1 to 1000 (got "${esc(raw)}").</span>`;
-      render();
+      say(`<span class="err">Stake: enter a whole number of NEAR, 1 to 1000 (got "${esc(raw)}").</span>`);
       return;
     }
     act(`Stake ${n} NEAR`, () => send(s.pool, "deposit_and_stake", {}, { deposit: BigInt(n) * 10n ** 24n, tgas: 100 }));
   };
   on("w-sync-sav", "Savings sync", () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
   on("w-claim", "Claim", () => send(dep.contract, "claim_share", {}, { tgas: 60 }));
+  const shareIn = $("w-share-amt");
+  if (shareIn) {
+    // the amount is read on click (act() re-renders the panel), and checked against the treasury before the wallet opens
+    const check = () => {
+      const units = usdcUnits(shareIn.value);
+      if (units === null) return { err: "a positive USDC amount, at most 6 decimals" };
+      if (units > s.treasury) return { err: `at most the ${usdc(s.treasury)} USDC the treasury holds` };
+      return { units };
+    };
+    shareIn.oninput = () => {
+      const c = check();
+      $("w-share-preview").textContent = c.err ? `Enter ${c.err}.` : `If the members approve:\n${preview(c.units, s).join("\n")}`;
+    };
+    $("w-share").onclick = () => {
+      const c = check();
+      if (c.err) { say(`<span class="err">Profit share: enter ${esc(c.err)}.</span>`); return; }
+      act(`Propose a ${usdc(c.units)} USDC profit share`, () => send(dep.dao, "add_proposal", { proposal: {
+        description: `Profit share of ${usdc(c.units)} USDC (proposed from the Koperasi page)`,
+        kind: { FunctionCall: { receiver_id: dep.usdc, actions: [{ method_name: "ft_transfer_call",
+          args: btoa(JSON.stringify({ receiver_id: dep.contract, amount: c.units.toString(), msg: "share" })),
+          deposit: "1", gas: (150n * 10n ** 12n).toString() }] } },
+      } }, { deposit: bond, tgas: 50 }));
+    };
+  }
   box.querySelectorAll("[data-claim]").forEach((b) => {
     b.onclick = () => act(`Take task #${b.dataset.claim}`, () => send(dep.dao, "bounty_claim",
       { id: Number(b.dataset.claim), deadline: String(BigInt(b.dataset.days) * DAY_NS) },
@@ -224,7 +276,7 @@ async function render() {
     b.onclick = () => {
       const id = Number(b.dataset.done);
       const work = $(`w-work-${id}`).value.trim(); // read before act() re-renders the panel
-      if (work.length < 4) { note = `<span class="err">Task #${id}: link to the work you delivered first.</span>`; render(); return; }
+      if (work.length < 4) { say(`<span class="err">Task #${id}: link to the work you delivered first.</span>`); return; }
       // Sputnik v2's bounty_done cannot succeed (no deposit, then ERR_MIN_BOND): file BountyDone as a proposal instead
       act(`Ask to be paid for task #${id}`, () => send(dep.dao, "add_proposal",
         { proposal: { description: `Task #${id} done: ${work}`, kind: { BountyDone: { bounty_id: id, receiver_id: me } } } },
@@ -242,6 +294,6 @@ async function render() {
 connector.on("wallet:signIn", (e) => { me = e?.accounts?.[0]?.accountId ?? ""; note = ""; render(); });
 connector.on("wallet:signOut", () => { me = ""; note = ""; render(); });
 // ponytail: ?as=<account> previews the panel for any account, on localhost only (to test each state without a wallet)
-const preview = location.hostname === "localhost" && new URLSearchParams(location.search).get("as");
+const previewAs = location.hostname === "localhost" && new URLSearchParams(location.search).get("as");
 connector.getConnectedWallet().then((w) => { me = w?.accounts?.[0]?.accountId ?? ""; }).catch(() => {})
-  .finally(() => { if (preview) me = preview; render(); });
+  .finally(() => { if (previewAs) me = previewAs; render(); });

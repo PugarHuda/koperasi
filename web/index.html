@@ -100,6 +100,32 @@
       <div><dt>Audit</dt><dd>…</dd></div>
     </dl>
 
+    <section class="checks" id="checks" aria-labelledby="checks-title">
+      <h2 id="checks-title">Don't trust us. <span class="dim">Your browser checks.</span></h2>
+      <p class="sub" id="checks-why">Token-launched agents give holders a price, not a say, and ask you to believe their "TEE" badge. Here every claim is checked from this page, against NEAR and Intel, without our servers in between.</p>
+      <ol class="check-list">
+        <li id="ck-tee"><b>The AI runs sealed in a TEE</b>
+          <p>NEAR AI Cloud proves its servers are genuine Intel TDX machines, bound to a random number only your browser knows.</p>
+          <button type="button" class="btn" id="ck-tee-run" disabled>Waiting for the by-laws (they name the model)…</button>
+          <div class="ck-out" id="ck-tee-out" aria-live="polite"></div></li>
+        <li id="ck-bylaws"><b>It runs only what members voted</b><p class="ck-out" aria-live="polite">Hashing the by-laws…</p></li>
+        <li id="ck-code"><b>No one changes the rules alone</b><p class="ck-out" aria-live="polite">Reading the contract account…</p></li>
+        <li id="ck-money"><b>Every payout is counted</b><p class="ck-out" aria-live="polite">Reading the audit…</p></li>
+      </ol>
+      <div class="ck-scroll" tabindex="0" role="region" aria-label="Comparison table, scrolls sideways">
+        <table class="grid versus" id="versus">
+          <caption>How this differs from other ways to own an AI agent <span class="muted">(sources in the README)</span></caption>
+          <thead><tr><th scope="col"></th><th scope="col">Token-launched agents<br><span class="muted">e.g. Virtuals, ai16z</span></th><th scope="col">Agent frameworks<br><span class="muted">e.g. Olas, NEAR Shade tutorial</span></th><th scope="col">Koperasi</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Who decides what the agent does</th><td>Developers; holders vote by token weight, if at all</td><td>Its operator</td><td><strong>Members, one vote each; the prompt, model and prices are pinned by hash</strong></td></tr>
+            <tr><th scope="row">Proof of what runs</th><td>A claim on a website</td><td>TEE attestation the operator checks</td><td><strong>Checked before every job by the agent, and by you, on this page, with your own nonce</strong></td></tr>
+            <tr><th scope="row">Where the money goes</th><td>To holders only through the token price</td><td>To the operator; staking rewards</td><td><strong>To the DAO treasury; each member claims a share by rule</strong></td></tr>
+            <tr><th scope="row">The human in the middle</th><td>Trusted</td><td>Trusted</td><td><strong>Bonded, audited on-chain, slashable by vote</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="loop" aria-labelledby="loop-title">
       <h2 id="loop-title">How the co-op<br /><span class="dim">runs its agent</span></h2>
       <ol>

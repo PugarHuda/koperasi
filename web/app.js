@@ -14,6 +14,15 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
 }
 
 import { dep, testnet, RAW, explorer, view, query, $, esc, usdc, nearAmt } from "./near.js";
+import { verifyInBrowser } from "./tee.js";
+
+// "Don't trust us": each check writes its verdict into its card
+const verdict = (id, ok, html) => {
+  const li = $(id);
+  li.classList.remove("pass", "fail");
+  if (ok !== null) li.classList.add(ok ? "pass" : "fail");
+  li.querySelector(".ck-out").innerHTML = html;
+};
 
 const date = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 const short = (h) => `${h.slice(0, 10)}…`;
@@ -83,8 +92,11 @@ try {
   $("p-lock").href = explorer(dep.dao);
   const termsBox = $("p-terms");
   termsBox.innerHTML = `<div><dt>Rule book</dt><dd>by-laws v${v}</dd></div><div><dt>Fingerprint</dt><dd>${short(info.config.hash)}</dd></div>`;
-  fetch(`${RAW}${info.config.uri}`).then((r) => r.arrayBuffer()).then(async (raw) => {
+  fetch(`${RAW}${info.config.uri}`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`)))).then(async (raw) => {
     const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", raw))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    verdict("ck-bylaws", hex === info.config.hash, hex === info.config.hash
+      ? `Your browser hashed <code>${esc(info.config.uri)}</code>: <code>${short(hex)}</code>, the hash the members voted for v${v}. The contract refuses receipts under any other.`
+      : `The published file hashes to <code>${short(hex)}</code>, not the approved <code>${short(info.config.hash)}</code>.`);
     if (hex !== info.config.hash) return; // only show terms from the exact file the members approved
     const text = new TextDecoder().decode(raw);
     const get = (re) => esc(text.match(re)?.[1]?.trim() ?? "");
@@ -94,6 +106,7 @@ try {
     // the latest proof that this model runs in genuine TEEs (agent/tee.mjs; re-checked by CI)
     const model = text.match(/^model:\s*"?([^"\n]+)/m)?.[1]?.trim();
     if (!model) return;
+    armTeeCheck(model);
     const file = `tee-${model.replace(/[^a-z0-9.-]/gi, "_")}.json`;
     const ev = await fetch(`${RAW}evidence/${file}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     const tee = $("p-tee");
@@ -103,7 +116,7 @@ try {
     tee.innerHTML = ev.ok
       ? `<span class="state on">TEE verified</span> ${esc(when)} UTC: Intel TDX ${esc(m.tdx_status ?? "")}, NVIDIA GPU ${m.gpu?.verdict === true ? "pass" : "unknown"}, bound to a fresh nonce. The agent re-checks before every job and refuses unverified models. <a href="https://github.com/PugarHuda/koperasi/blob/main/evidence/${esc(file)}">Evidence</a>`
       : `<span class="state off">TEE not verified</span> ${esc(when)} UTC: ${esc(ev.reason ?? "a check failed")}. The agent will not send jobs to this model.`;
-  }).catch(() => {});
+  }).catch((e) => verdict("ck-bylaws", false, `Could not download the by-laws file (${esc(e.message)}). Reload to try again.`));
   const paidJobs = receipts.filter((x) => x.status === "Paid").length;
   $("p-agent").innerHTML = info.paused
     ? `<span class="state off">Paused</span> The members voted to stop it.`
@@ -121,6 +134,9 @@ try {
     `<tr><td>${date(l.ts)}</td><td>${esc(l.text)}</td><td class="num${l.out ? " out" : ""}">${l.amt}</td></tr>`).join(""));
 
   const owed = BigInt(rekon.owed);
+  verdict("ck-money", owed === 0n, owed === 0n
+    ? `Every paid job (${usdc(rekon.expected)} USDC after the market's 5%) reached the co-op's DAO. The steward's bond stays at stake.`
+    : `<strong>${usdc(owed)} USDC</strong> of paid jobs has not reached the co-op. Members can vote to slash the steward's bond. (This demo co-op keeps it red on purpose.)`);
   const stamp = $("stamp");
   stamp.hidden = false;
   if (owed > 0n) {
@@ -254,7 +270,13 @@ try {
       <p class="match ${full ? "bad" : "ok"}">${full
         ? `The contract account still has ${full} full-access key${full > 1 ? "s" : ""}: whoever holds it could change the code without a vote. Removing it is the next step (<code>scripts/upgrade.mjs --lock</code>).`
         : "The contract account has no full-access key. Only a members' vote can change its code."}</p>`;
-  }).catch((e) => { $("codegov").innerHTML = `<p class="hint">Could not read the contract account: ${esc(e.message)}</p>`; });
+    verdict("ck-code", full === 0 && !!vote, full === 0
+      ? `The contract account holds <strong>no full-access key</strong>, not even the builder's. Its code is ${vote ? `the version members approved in proposal #${vote.id}` : "not traced to a vote"}; changing it takes another vote.`
+      : `The contract account still has ${full} full-access key${full > 1 ? "s" : ""}: someone could change the code without a vote.`);
+  }).catch((e) => {
+    $("codegov").innerHTML = `<p class="hint">Could not read the contract account: ${esc(e.message)}</p>`;
+    verdict("ck-code", null, `Could not read the contract account right now (${esc(e.message)}).`);
+  });
 
   // live status under the hero
   const paid = receipts.filter((x) => x.status === "Paid").length;
@@ -298,6 +320,35 @@ try {
   }
 } catch (e) {
   console.error(e);
+  for (const id of ["ck-bylaws", "ck-code", "ck-money"]) verdict(id, null, "Could not reach NEAR right now. Reload in a moment.");
   rows($("passbook").tBodies[0], `<tr><td colspan="3">Could not read ${esc(dep.contract)} on ${esc(dep.network)}. Check your connection and reload.</td></tr>`);
   $("p-voters").innerHTML = `<li class="no">Could not reach NEAR right now. Reload in a moment.</li>`;
+}
+
+// The visitor verifies the TEE themselves: fresh nonce, Intel's collateral, checked in this browser
+function armTeeCheck(model) {
+  const btn = $("ck-tee-run");
+  const out = $("ck-tee-out");
+  btn.textContent = `Verify ${model} with your own nonce`;
+  btn.disabled = false;
+  btn.onclick = async () => {
+    btn.disabled = true;
+    verdict("ck-tee", null, "");
+    const step = (t) => { out.innerHTML = `<p class="hint">${esc(t)}</p>`; };
+    const r = await verifyInBrowser(model, step);
+    btn.disabled = false;
+    btn.textContent = "Verify again with a new nonce";
+    if (r.reason) {
+      verdict("ck-tee", false, `<p>Not verified: ${esc(r.reason)}.</p>`);
+      return;
+    }
+    const yes = (b) => (b ? "yes" : "NO");
+    const row = (name, x) => `<tr><th scope="row">${name}</th><td>${esc(x.tdx ?? "-")}</td><td>${yes(x.nonce)}</td><td>${yes(x.address)}</td>`
+      + `<td>${yes(x.compose)}</td><td>${x.gpuNonce === null || x.gpuNonce === undefined ? "n/a" : yes(x.gpuNonce)}</td></tr>`;
+    verdict("ck-tee", r.ok, `<p><strong>${r.ok ? "Verified" : "Not verified"}</strong> in ${(r.ms / 1000).toFixed(1)} s with your nonce <code>${r.nonce.slice(0, 16)}…</code>.</p>
+      <div class="ck-scroll" tabindex="0" role="region" aria-label="TEE checks per server"><table class="ck-table"><thead><tr><th scope="col">Server</th><th scope="col">Intel TDX</th><th scope="col">Your nonce</th>
+        <th scope="col">Signing key</th><th scope="col">Attested code</th><th scope="col">GPU nonce</th></tr></thead>
+      <tbody>${row("Gateway", r.gateway)}${r.models.map((m, i) => row(`Model ${i + 1}`, m)).join("")}</tbody></table></div>
+      <p class="hint">NVIDIA's own verdict on the GPUs needs NVIDIA's service, which browsers cannot call: the agent checks it before every job and CI daily (above).</p>`);
+  };
 }
