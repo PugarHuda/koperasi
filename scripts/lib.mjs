@@ -7,8 +7,8 @@ import path from "node:path";
 export const ROOT = path.join(import.meta.dirname, "..");
 export const NETWORK = process.env.NEAR_NETWORK ?? "testnet";
 const RPCS = {
-  testnet: ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.near.org"],
-  mainnet: ["https://free.rpc.fastnear.com", "https://near.drpc.org", "https://rpc.mainnet.near.org"],
+  testnet: ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.fastnear.com"],
+  mainnet: ["https://free.rpc.fastnear.com", "https://near.drpc.org", "https://rpc.mainnet.fastnear.com"],
 };
 export const RPC = process.env.NEAR_RPC ?? RPCS[NETWORK][0];
 export const SPUTNIK_FACTORY = NETWORK === "mainnet" ? "sputnik-dao.near" : "sputnik-v2.testnet";
@@ -99,8 +99,24 @@ export async function view(contractId, method, args = {}) {
   return provider.callFunction({ contractId, method, args, blockQuery: { finality: "optimistic" } });
 }
 
+/**
+ * A transaction the failover sent to a second RPC after the first one already got it on-chain comes back as
+ * InvalidNonce with the access key's nonce equal to the transaction's: it executed. Never re-send it (a second
+ * ft_transfer_call would move money twice); return `landed` so the caller reads the outcome from state.
+ */
+export const landed = Symbol("landed on another RPC");
+const alreadyExecuted = (e) => [e, ...(e?.errors ?? [])].some((x) =>
+  x?.name === "InvalidNonceError" || /InvalidNonce/.test(x?.constructor?.name ?? "")
+    ? String(x.accessKeyNonce) === String(x.transactionNonce) : false);
+
 export async function call(acct, contractId, method, args = {}, { deposit = 0n, tgas = 100 } = {}) {
-  return acct.callFunction({ contractId, methodName: method, args, deposit, gas: teraToGas(tgas) });
+  try {
+    return await acct.callFunction({ contractId, methodName: method, args, deposit, gas: teraToGas(tgas) });
+  } catch (e) {
+    if (!alreadyExecuted(e)) throw e;
+    console.log(`   (${method} on ${contractId} reached the chain through another RPC)`);
+    return landed;
+  }
 }
 
 /** Full outcome, for logs and tx hashes. */
@@ -151,12 +167,21 @@ export async function propose(acct, daoId, description, kind) {
     deposit: BigInt(policy.proposal_bond),
     tgas: 50,
   });
-  return Number(id);
+  if (id !== landed) return Number(id);
+  // the return value was lost with the RPC: the newest proposal with this description is ours
+  const last = await view(daoId, "get_last_proposal_id");
+  const recent = await view(daoId, "get_proposals", { from_index: Math.max(0, last - 10), limit: 10 });
+  return recent.reverse().find((p) => p.description === description && p.proposer === acct.accountId).id;
 }
 
 export async function vote(acct, daoId, id, action = "VoteApprove") {
   const p = await view(daoId, "get_proposal", { id });
-  return callRaw(acct, daoId, "act_proposal", { id, action, proposal: p.kind }, { tgas: 300 });
+  try {
+    return await callRaw(acct, daoId, "act_proposal", { id, action, proposal: p.kind }, { tgas: 300 });
+  } catch (e) {
+    if (!alreadyExecuted(e)) throw e;
+    return landed;
+  }
 }
 
 /** Propose and let each voter approve until it passes. Returns the proposal status. */

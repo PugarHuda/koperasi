@@ -47,7 +47,7 @@ for (const who of [alice, bob]) {
   await call(who, USDC, "storage_deposit", { account_id: who.accountId }, { deposit: NEAR / 100n });
   members.push(who);
 }
-see(`${(await view(K, "get_info")).members} members; bob needed 2 of 2 votes, not just the founder's`);
+see(`${(await view(K, "get_info")).members} members; each was voted in by a majority of the members before them, not just the founder`);
 
 // ---------------------------------------------------------------------------------------------------------------
 step("A member rewrites the agent's by-laws (config v2); the members approve it and she earns contribution points");

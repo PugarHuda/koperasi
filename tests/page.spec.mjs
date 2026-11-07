@@ -89,7 +89,7 @@ test("outbound links resolve", async ({ page, request }) => {
   for (const url of links.filter((u) => /nearblocks\.io\/address\//.test(u))) {
     const id = url.split("/address/")[1];
     let amount;
-    for (const rpc of ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.near.org"]) {
+    for (const rpc of ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.fastnear.com"]) {
       const r = await request.post(rpc, { data: { jsonrpc: "2.0", id: 1, method: "query",
         params: { request_type: "view_account", finality: "final", account_id: id } } }).catch(() => null);
       amount = (await r?.json().catch(() => null))?.result?.amount;

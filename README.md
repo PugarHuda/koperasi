@@ -56,7 +56,7 @@ testnet accounts, so it never touches the showcase co-op the live page reads, an
 with the same REST paths and JSON as the real one (`agent/mock-market.mjs`). What you see:
 
 1. **Two people join.** They pay a refundable join deposit, a DAO proposal adds them to role `member`, and
-   `sync_member` reads the DAO policy on-chain. See: `3 members; bob needed 2 of 2 votes`.
+   `sync_member` reads the DAO policy on-chain. See: `3 members; each was voted in by a majority of the members before them`.
 2. **A member rewrites the agent's by-laws.** Alice proposes `config/config.v2.yaml`; the members approve; she earns
    10 contribution points. See: `by-laws v2 5eee1b31…, alice has 10 points`.
 3. **The agent works.** It bids on the jobs its by-laws allow, delivers, gets paid, records receipts on-chain.
