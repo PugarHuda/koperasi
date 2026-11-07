@@ -3,7 +3,8 @@
 //  - only accounts that already paid the join deposit are approved, at most MAX_PER_RUN per run;
 //  - right after approval the script syncs the membership, which locks the deposit as a member's deposit;
 //  - then it sweeps: anyone holding the DAO's member role without being a member of the contract (for example someone
-//    who cancelled their deposit between the vote and the sync) is proposed for removal and voted out.
+//    who cancelled their deposit between the vote and the sync) is proposed for removal and voted out; someone approved
+//    with the deposit still paid but not yet synced is synced instead.
 // ponytail: closing the vote→sync gap in the contract itself (refuse cancel_join while a request is open) needs a
 // contract upgrade; the sweep bounds it to "until the next run" instead.
 import fs from "node:fs";
@@ -15,6 +16,8 @@ const roleOf = async () => (await view(dep.dao, "get_policy")).roles.find((r) =>
 const voters = (await roleOf()).filter(hasKey);
 if (!voters.length) throw new Error("no member keys in .keys/");
 const isMember = async (who) => (await view(dep.contract, "get_member", { account_id: who })) !== null;
+const sync = (who) => call(account(voters[0]), dep.contract, "sync_member", { account_id: who }, { tgas: 60 })
+  .catch((e) => console.log(`sync ${who} failed: ${e.message}`));
 
 const last = await view(dep.dao, "get_last_proposal_id");
 const open = (await view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 100), limit: 100 }))
@@ -37,7 +40,7 @@ for (const p of open) {
   const status = (await view(dep.dao, "get_proposal", { id: p.id })).status;
   if (status === "Approved") {
     approved++;
-    await call(account(voters[0]), dep.contract, "sync_member", { account_id: who }, { tgas: 60 });
+    await sync(who); // if it fails, the sweep below tries again
   }
   console.log(`#${p.id} ${who}: ${status}${status === "Approved" ? `, member of the contract: ${await isMember(who)}` : ""}`);
 }
@@ -46,6 +49,12 @@ if (!open.length) console.log("no open requests to join");
 // sweep: the DAO role must match the contract's members
 for (const who of await roleOf()) {
   if (await isMember(who)) continue;
+  if (await view(dep.contract, "is_pending", { account_id: who })) {
+    // approved and the deposit is paid, only the sync is missing (voted in from the page, or a failed sync): finish it
+    await sync(who);
+    console.log(`${who}: approved with a paid deposit, synced: member of the contract: ${await isMember(who)}`);
+    continue;
+  }
   console.log(`${who} holds the member role but is not a member of the contract (no deposit): voting them out`);
   const members = (await roleOf()).filter(hasKey).map(account);
   await decide(members[0], members, dep.dao, `Remove ${who}: holds the member role without a join deposit`,

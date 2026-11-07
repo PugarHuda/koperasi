@@ -103,3 +103,10 @@ test("exact USDC display keeps every unit", async () => {
   assert.equal(usdcExact(1_500_000n), "1.50");
   assert.equal(usdcExact(10n), "0.00001");
 });
+
+test("views move to the next RPC on rate limits and network failures, never on a contract's own answer", async () => {
+  const { transient } = await import("../../scripts/lib.mjs");
+  for (const m of ["Rate limits exceeded", "fetch failed", "Request timed out", "HTTP 502"]) assert.ok(transient(new Error(m)), m);
+  assert.ok(transient(Object.assign(new Error("ProviderError"), { cause: 429 })));
+  for (const m of ["Smart contract panicked: not a member", "MethodNotFound", "account does not exist"]) assert.ok(!transient(new Error(m)), m);
+});

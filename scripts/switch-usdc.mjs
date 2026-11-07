@@ -6,7 +6,7 @@
 //  3. the members vote set_usdc; the deployment files the scripts and the page read are updated.
 import fs from "node:fs";
 import path from "node:path";
-import { ROOT, DEPLOYMENT, NEAR, account, call, decide, fnCall, hasKey, view } from "./lib.mjs";
+import { ROOT, DEPLOYMENT, NEAR, account, all, call, decide, fnCall, hasKey, view } from "./lib.mjs";
 
 const CIRCLE_TESTNET = "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af";
 const args = process.argv.slice(2);
@@ -40,7 +40,7 @@ if ((await view(dep.contract, "get_ledger")) === null) {
 }
 
 // 1. nothing owed in the old token
-for (const [who] of await view(dep.contract, "get_members", { from: 0, limit: 500 })) {
+for (const [who] of await all(dep.contract, "get_members")) {
   const c = BigInt(await view(dep.contract, "get_claimable", { account_id: who }));
   if (c === 0n) continue;
   if (!hasKey(who)) throw new Error(`${who} has ${Number(c) / 1e6} ${info.usdc_id} to claim; they must claim it before the move`);

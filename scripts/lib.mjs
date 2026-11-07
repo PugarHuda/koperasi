@@ -63,6 +63,10 @@ export function saveKey(accountId, keyPair) {
 
 export const hasKey = (id) => fs.existsSync(keyFile(id));
 
+/** The public key of an account's key in .keys/ (ed25519:…). */
+export const publicKeyOf = (accountId) =>
+  KeyPair.fromString(JSON.parse(fs.readFileSync(keyFile(accountId), "utf8")).private_key).getPublicKey().toString();
+
 export function account(accountId) {
   const { private_key } = JSON.parse(fs.readFileSync(keyFile(accountId), "utf8"));
   return new Account(accountId, provider, private_key);
@@ -121,9 +125,24 @@ export async function ensureAccount(id, near = 8n) {
 
 // ---------- calls ----------
 
+// FailoverRpcProvider does not move on when an RPC answers a JSON-RPC rate-limit error (FastNEAR's -429), so views
+// walk the RPCs themselves, like rawQuery: only rate limits, network failures and 5xx move on; a contract's answer
+// (a panic, an unknown method) is thrown at once.
+const viewers = [RPC, ...RPCS[NETWORK].filter((u) => u !== RPC)].map((url) => new JsonRpcProvider({ url }));
+export const transient = (e) => /429|rate limit|fetch failed|timed? ?out|ECONN|ENOTFOUND|socket|50[234]/i.test(`${e?.message} ${e?.cause}`);
 /** A view call's JSON result; its shape is the contract method's (see contract/src/lib.rs). @returns {Promise<any>} */
 export async function view(contractId, method, args = {}) {
-  return provider.callFunction({ contractId, method, args, blockQuery: { finality: "optimistic" } });
+  let last;
+  for (let k = 0; k < viewers.length * 2; k++) {
+    if (k === viewers.length) await sleep(3000);
+    try {
+      return await viewers[k % viewers.length].callFunction({ contractId, method, args, blockQuery: { finality: "optimistic" } });
+    } catch (e) {
+      if (!transient(e)) throw e;
+      last = e;
+    }
+  }
+  throw last;
 }
 
 /**
@@ -135,6 +154,17 @@ export const landed = Symbol("landed on another RPC");
 const alreadyExecuted = (e) => [e, ...(e?.errors ?? [])].some((x) =>
   x?.name === "InvalidNonceError" || /InvalidNonce/.test(x?.constructor?.name ?? "")
     ? String(x.accessKeyNonce) === String(x.transactionNonce) : false);
+
+/** Every item of a paged view (get_members, get_receipts: `from`/`limit`), page by page. */
+/** @returns {Promise<any[]>} */
+export async function all(contract, method, size = 200) {
+  const out = [];
+  for (let from = 0; ; from += size) {
+    const page = await view(contract, method, { from, limit: size });
+    out.push(...page);
+    if (page.length < size) return out;
+  }
+}
 
 /** @returns {Promise<any>} the method's JSON result, or `landed` */
 export async function call(acct, contractId, method, args = {}, { deposit = 0n, tgas = 100 } = {}) {

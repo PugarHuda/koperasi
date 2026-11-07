@@ -8,7 +8,8 @@
 // that code. Either way the script checks that members, receipts and by-laws survive.
 import fs from "node:fs";
 import path from "node:path";
-import { ROOT, DEPLOYMENT, account, rawQuery, decide, fnCall, hasKey, sha256, view } from "./lib.mjs";
+import { baseEncode } from "near-api-js";
+import { ROOT, DEPLOYMENT, account, rawQuery, decide, fnCall, hasKey, publicKeyOf, sha256, view } from "./lib.mjs";
 
 const args = process.argv.slice(2);
 const flag = (n) => { const i = args.indexOf(n); return i < 0 ? null : args.splice(i, 2)[1]; };
@@ -17,7 +18,7 @@ const lock = args.includes("--lock");
 const fileArg = args.find((a) => !a.startsWith("--"));
 const dep = JSON.parse(fs.readFileSync(fileArg ? path.resolve(fileArg) : DEPLOYMENT, "utf8"));
 const wasm = fs.readFileSync(path.join(ROOT, "contract/target/near/koperasi.wasm"));
-const codeHash = bs58(sha256(wasm));
+const codeHash = baseEncode(Buffer.from(sha256(wasm), "hex")); // base58 keeps leading zero bytes as '1'
 const before = await view(dep.contract, "get_info");
 const rpc = rawQuery;
 const fullAccess = async () => (await rpc({ request_type: "view_access_key_list", account_id: dep.contract })).keys
@@ -32,7 +33,15 @@ if (lock) {
   if (!keys.length) throw new Error(`${dep.contract} has no full-access key left: upgrade by vote instead`);
   const c = account(dep.contract);
   if ((await running()) !== codeHash) await c.deployContract(new Uint8Array(wasm));
-  for (const k of keys) await c.deleteKey(k.public_key);
+  // the keys go only once the new code is proven to read the old state; this script's own key goes last
+  const check = await view(dep.contract, "get_info");
+  for (const k of ["members", "receipts", "periods"]) {
+    if (before[k] !== check[k]) throw new Error(`new code reads ${k} ${check[k]}, was ${before[k]}: keys kept, fix the code first`);
+  }
+  const mine = publicKeyOf(dep.contract);
+  for (const k of [...keys.filter((x) => x.public_key !== mine), ...keys.filter((x) => x.public_key === mine)]) {
+    await c.deleteKey(k.public_key);
+  }
   console.log(`${dep.contract}: code ${codeHash}, deleted ${keys.length} full-access key(s); from now on only a vote upgrades it`);
 } else {
   const published = await rpc({ request_type: "view_global_contract_code", code_hash: codeHash }).then(() => true, () => false);
@@ -66,11 +75,3 @@ if (after.config.hash !== before.config.hash) throw new Error("config changed ac
 let left = (await fullAccess()).length;
 for (let i = 0; lock && left && i < 10; i++) { await new Promise((ok) => setTimeout(ok, 1500)); left = (await fullAccess()).length; }
 console.log(`${dep.contract} runs ${codeHash}; ${after.members} members, ${after.receipts} receipts, by-laws v${after.config.version} intact; full-access keys: ${left}`);
-
-function bs58(hex) {
-  const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let n = BigInt(`0x${hex}`);
-  let out = "";
-  while (n > 0n) { out = A[Number(n % 58n)] + out; n /= 58n; }
-  return out;
-}
