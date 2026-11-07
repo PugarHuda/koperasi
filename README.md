@@ -193,8 +193,6 @@ Rules in plain words: [`RULES.md`](RULES.md).
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
    code. It is not listed for hire until the co-op's NEAR AI organization has credits, so no buyer can hire an agent
    that cannot deliver.
-4. **Demand.** Agent Market is young. The demo uses a local stand-in with the same API; the agent is listed on the
-   real market and talks to the real API with the same code.
 
 ## Built with
 
