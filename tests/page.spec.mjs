@@ -155,8 +155,9 @@ test("a member sees their vote, savings and open proposals", async ({ page }, te
   await expect(panel.locator(".me-card").first()).toContainText(/Your vote\s*1 of \d+/);
   await expect(panel).toContainText("Open proposals");
   await expect(panel.locator("#w-stake")).toBeVisible();
-  // bob has a profit share waiting: either claim it or register for USDC first
-  await expect(panel.locator("#w-claim, #w-usdc")).toHaveCount(1);
+  // a share waiting means one button (claim it, or register for USDC first); none waiting, none shown
+  const share = await panel.locator(".me-card div", { hasText: "Share to claim" }).locator("strong").textContent();
+  await expect(panel.locator("#w-claim, #w-usdc")).toHaveCount(Number.parseFloat(share) > 0 ? 1 : 0);
 });
 
 test("a stake outside 1..1000 NEAR is refused before the wallet opens", async ({ page }, testInfo) => {
@@ -181,7 +182,8 @@ test("the tasks the co-op pays for are listed from the DAO's bounties", async ({
   await ready(page);
   const row = page.locator("#bounties tbody tr").first();
   await expect(row).toContainText("Bahasa Indonesia");
-  await expect(row.locator('td[data-label="Pays"]')).toHaveText(/\d+\.\d\d USDC/);
+  // the co-op's own USDC reads as USDC; a task funded in another token names that token
+  await expect(row.locator('td[data-label="Pays"]')).toHaveText(/\d+\.\d\d USDC|of [a-z0-9.-]+ \(not the co-op's USDC\)/);
 });
 
 test("a member can take a task from the wallet panel", async ({ page }, testInfo) => {

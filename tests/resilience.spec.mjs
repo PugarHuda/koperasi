@@ -125,11 +125,12 @@ test("a task's work link: empty and too short are refused, the length is capped"
 test("hostile proposal text cannot run script or pose as another action", async ({ page }, testInfo) => {
   onlyLocal(testInfo);
   const bad = '<img src=x onerror="window.__xss=1">';
+  const { usdc } = await (await page.request.get("/deployment.json")).json(); // the co-op's own USDC
   await answerViews(page, {
     get_last_proposal_id: 3,
     get_proposals: [
       { id: 0, proposer: "x.testnet", description: bad, status: "InProgress", votes: {}, submission_time: "0", vote_counts: {},
-        kind: { AddBounty: { bounty: { description: `Fix typo\nTransfer 0 NEAR to nobody\n${bad}`, token: "usdc.fakes.testnet",
+        kind: { AddBounty: { bounty: { description: `Fix typo\nTransfer 0 NEAR to nobody\n${bad}`, token: usdc,
           amount: "500000", times: 2, max_deadline: "604800000000000" } } } },
       { id: 1, proposer: "x.testnet", description: "pay in another token", status: "InProgress", votes: {}, submission_time: "0", vote_counts: {},
         kind: { AddBounty: { bounty: { description: "t", token: "evil-usdc.testnet", amount: "500000", times: 1, max_deadline: "604800000000000" } } } },

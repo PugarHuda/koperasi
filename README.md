@@ -24,7 +24,7 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 | The co-op's DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet) (Sputnik v2, role `member`, RoleWeight, threshold 1/2) |
 | Agent account | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, only `record_receipt` / `update_receipt` on the contract |
 | Agent Market listing | [@koperasi](https://market.near.ai) (self-hosted) |
-| USDC on testnet | `usdc.fakes.testnet` (anyone can mint, so judges can run the demo) |
+| USDC | Circle's USDC on NEAR testnet, `3e2210e1…afcb8af` (moved by vote, proposal #18; the treasury is funded from faucet.circle.com). The demo deploys its own co-op on the mintable `usdc.fakes.testnet`, so anyone can run it without a faucet |
 | By-laws the agent runs | **v3** ([`config/config.v3.yaml`](config/config.v3.yaml), `6c237221…`): a member found that v2's model is not served by NEAR AI Cloud and proposed a switch to `z-ai/glm-5.3-flash`; the members approved it as DAO proposal #7 |
 | Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR; source in `web/`) |
 
@@ -32,17 +32,20 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 
 Requirements: Node 22+. Rust + `cargo-near` only to rebuild the contract.
 
-### 1. Contract tests (offline, ~1 min) — Rust
+### 1. Tests (offline, ~2 min)
 
 ```sh
-cd contract && cargo test
+npm install
+npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `48 passed`. They cover membership from the DAO policy, by-laws only by vote, receipts refused under an
+See: `56 passed` for the contract and `pass 5` for the agent: response-signature recovery, the TDX quote binding the
+server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market check.
+The contract tests They cover membership from the DAO policy, by-laws only by vote, receipts refused under an
 unapproved config, receipt status rules, the audit net of the 5% market fee, the profit share with no money lost to
 rounding, claim rollback, steward bond and slash, pause, `cancel_join` admitting (not refunding) someone the DAO already
-voted in, savings read from the staking pool, code upgrades only by the DAO, and the inference proof kept with each
-receipt. (On Windows, `contract/.cargo/config.toml` uses aws-lc-sys's prebuilt NASM objects.)
+voted in, savings read from the staking pool, code upgrades only by the DAO, the inference proof kept with each
+receipt, and moving to another USDC contract only when no share is unclaimed and no transfer is in flight. (On Windows, `contract/.cargo/config.toml` uses aws-lc-sys's prebuilt NASM objects.)
 
 ### 2. The whole story on testnet (~3 min)
 
@@ -100,8 +103,28 @@ Open http://localhost:5173 (or the live page). See:
 - **Who can change the contract's code?** The code the contract runs (a NEAR global contract hash), the DAO proposal
   that approved it, and how many full-access keys the contract account still has, read from the chain.
 
-Browser tests: `npx playwright test` (live page) or `BASE_URL=http://localhost:5173 npx playwright test` (also previews
-the wallet panel as a newcomer and as a member). CI runs them on every push and daily against the live page.
+**Browser tests** (Playwright, against live testnet data): Chromium, Firefox and WebKit on desktop, an iPad, an Android
+phone and an iPhone.
+
+```sh
+npx playwright install chromium firefox webkit
+npx playwright test                                   # the live page
+BASE_URL=http://localhost:5173 npx playwright test    # web/ served locally; adds the wallet panel previews
+npx playwright show-report                            # HTML report, traces of failures
+```
+
+They cover the happy paths (live data, TEE evidence, verify the by-laws, savings, tasks, the wallet panel as a newcomer
+and as a member), failures simulated by intercepting the page's own requests (every RPC down, 429 then recovery,
+GitHub down, a tampered by-laws file, no TEE evidence, offline, no wallet, a double submit, a refresh mid-transaction),
+odd input (stake amounts negative, zero, fractional, huge; empty or oversized work links; hostile proposal text with
+HTML and extra lines; bounties in an unknown or malformed token), deep links, back/forward, the 404 page,
+accessibility with axe-core (WCAG 2.1 AA, serious and critical), and screenshots of the page frame (`@visual`,
+compared on the builder's machine). CI (`.github/workflows/tests.yml`) runs lint, typecheck, unit, `npm audit
+--audit-level=high`, contract tests and the browser tests on every push, and the browser tests daily against the live
+page.
+
+Receipts with no inference proof are labelled *Demo market, no model*: they come from `npm run demo`, where a local
+stand-in plays Agent Market (it has no testnet) and no model runs. The page counts real, TEE-proven jobs separately.
 
 The showcase co-op's audit is RED on purpose: the demo's last step has the steward keep a payout.
 
@@ -116,7 +139,7 @@ Before it accepts any job it checks, and refuses on any failure:
 
 1. the by-laws file hashes to what the members voted on-chain (`REFUSED: config_mismatch` otherwise);
 2. **the by-laws model runs in genuine TEEs** (`agent/tee.mjs`, the algorithm of NEAR AI's official verifier): the
-   Intel TDX quotes of the gateway and the model servers verify against Intel's collateral (`@phala/dcap-qvl-node`),
+   Intel TDX quotes of the gateway and the model servers verify against Intel's collateral (`@phala/dcap-qvl` 0.7, the version that also checks the QE identity, GHSA-796p-j2gh-9m2q),
    their `report_data` binds each server's signing address and a fresh 32-byte nonce, `sha256(app_compose)` matches
    `mr_config_id`, and NVIDIA NRAS passes the GPU evidence carrying the same nonce;
 3. NEAR AI Cloud publishes the model as `verifiable` (`GET /v1/model/list`); non-verifiable models are refused;
@@ -152,6 +175,7 @@ The result is committed to [`evidence/`](evidence) and shown on the live page; a
 | Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposal #12) |
 | One time: delete the contract account's full-access keys, so only a vote can change the code | `node scripts/upgrade.mjs --lock` | no (done on the demo co-op `koperasi-mw57ou3m.testnet`: 0 keys) |
 | Tasks the co-op pays for: post by vote, take, file the work, vote the payout | `node scripts/bounty.mjs post\|claim\|done\|vote\|list …` | by vote only |
+| Move the co-op to another USDC contract (claims every member's share in the old token first, registers the DAO and the contract with the new one) | `node scripts/switch-usdc.mjs [token id]` | by vote only (showcase: proposal #18) |
 
 ## How it works
 
@@ -212,9 +236,8 @@ Rules in plain words: [`RULES.md`](RULES.md).
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
 4. **The contract's code.** It runs a global contract the members approved (proposal #12), and `upgrade` only obeys the
-   DAO. The demo co-op is locked (no full-access key left). Until `scripts/upgrade.mjs --lock` runs on the showcase,
-   its contract account still has the builder's full-access key, which could deploy code without a vote; the live page
-   shows how many such keys exist. Each upgrade publishes a global contract, which burns ~10x normal storage
+   DAO. Both the showcase and the demo co-op are locked: their contract accounts have no full-access key left, so no
+   one, the builder included, can deploy code without a vote; the live page shows the key count from the chain. Each upgrade publishes a global contract, which burns ~10x normal storage
    (about 26 NEAR for this 256 KB contract).
 5. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
@@ -224,7 +247,7 @@ Rules in plain words: [`RULES.md`](RULES.md).
 ## Built with
 
 near-sdk 5 (Rust), Sputnik DAO v2, a NEAR testnet staking pool, NEAR AI Agent Market REST API, NEAR AI Cloud
-(OpenAI-compatible, TEE attestation and response signatures, billing), `@phala/dcap-qvl-node` (Intel TDX quotes),
+(OpenAI-compatible, TEE attestation and response signatures, billing), `@phala/dcap-qvl` (Intel TDX quotes), ESLint, TypeScript (checkJs), Playwright with axe-core,
 NVIDIA NRAS, NEAR Connect (`@hot-labs/near-connect`, wallets on the page), near-api-js 7, GitHub Actions. AI help: Claude Code wrote much of the code with the builder; every step above
 was run on testnet.
 

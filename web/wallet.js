@@ -77,10 +77,12 @@ async function load() {
   const pool = member ? await view(dep.contract, "get_staking_pool") : null;
   const staked = pool ? await view(pool, "get_account_staked_balance", { account_id: me }).catch(() => "0") : "0";
   const usdcReady = member ? await view(dep.usdc, "storage_balance_of", { account_id: me }).catch(() => null) : null;
+  // what the token itself asks for a registration (NEP-145), not a guess
+  const usdcStorage = member && !usdcReady ? BigInt((await view(dep.usdc, "storage_balance_bounds")).min) : 0n;
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
   const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
-  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, pool, staked, bounties, myClaims };
+  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims };
 }
 
 // each button runs one transaction, then the panel re-reads the chain
@@ -150,7 +152,7 @@ async function render() {
       </div>
       ${BigInt(s.claimable) > 0n ? (s.usdcReady
         ? `<button type="button" class="btn" id="w-claim">Claim ${usdc(s.claimable)} USDC</button>`
-        : `<p class="small">To receive USDC, register your account with the token first (a one-time 0.0125 NEAR storage deposit).</p>
+        : `<p class="small">To receive USDC, register your account with the token first (a one-time ${(Number(s.usdcStorage) / 1e24).toLocaleString("en", { maximumFractionDigits: 6 })} NEAR storage deposit).</p>
            <button type="button" class="btn" id="w-usdc">Register for USDC</button>`) : ""}
       ${s.pool ? `<h3 class="jh">Savings: your stake for the agent's inference</h3>
       <p class="small">The members chose <a href="${explorer(s.pool)}">${esc(s.pool)}</a>. Your stake there is your savings: it weighs your
@@ -195,7 +197,7 @@ async function render() {
   }, { deposit: bond, tgas: 50 }));
   on("w-sync", "Sync membership", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
   on("w-cancel", "Cancel", () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));
-  on("w-usdc", "USDC registration", () => send(dep.usdc, "storage_deposit", { account_id: me }, { deposit: 12_500_000_000_000_000_000_000n, tgas: 30 }));
+  on("w-usdc", "USDC registration", () => send(dep.usdc, "storage_deposit", { account_id: me, registration_only: true }, { deposit: s.usdcStorage, tgas: 30 }));
   // read the amount on click: act() re-renders the panel (and this input) before the transaction runs
   const stake = $("w-stake");
   if (stake) stake.onclick = () => {

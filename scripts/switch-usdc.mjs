@@ -21,6 +21,24 @@ if (meta.decimals !== 6) throw new Error(`${token} has ${meta.decimals} decimals
 const voters = (await view(dep.dao, "get_policy")).roles.find((r) => r.name === "member")?.kind?.Group.filter(hasKey).map(account) ?? [];
 if (!voters.length) throw new Error("no member keys in .keys/");
 
+// 0. a co-op from before the owed-shares counters starts them once, by vote (exact when the DAO never removed a member
+//    who still had a share to claim: checked here against the DAO's proposals)
+if ((await view(dep.contract, "get_ledger")) === null) {
+  const last = await view(dep.dao, "get_last_proposal_id");
+  const removed = [];
+  for (let from = 0; from < last; from += 100) {
+    for (const p of await view(dep.dao, "get_proposals", { from_index: from, limit: 100 })) {
+      if (p.status === "Approved" && p.kind.RemoveMemberFromRole) removed.push(p.kind.RemoveMemberFromRole.member_id);
+    }
+  }
+  for (const who of removed) {
+    const c = BigInt(await view(dep.contract, "get_claimable", { account_id: who }));
+    if (c > 0n) throw new Error(`former member ${who} still has ${Number(c) / 1e6} to claim; init_ledger would not count it`);
+  }
+  const { id } = await decide(voters[0], voters, dep.dao, "Start the ledger of owed profit shares (init_ledger)", fnCall(dep.contract, "init_ledger", {}));
+  console.log(`proposal #${id}: ledger started ${JSON.stringify(await view(dep.contract, "get_ledger"))}`);
+}
+
 // 1. nothing owed in the old token
 for (const [who] of await view(dep.contract, "get_members", { from: 0, limit: 500 })) {
   const c = BigInt(await view(dep.contract, "get_claimable", { account_id: who }));

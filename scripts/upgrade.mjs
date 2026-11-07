@@ -41,6 +41,12 @@ if (lock) {
     await account(publisher).deployGlobalContract(new Uint8Array(wasm), "codeHash");
     console.log(`${publisher} published global contract ${codeHash} (${wasm.length} bytes)`);
   }
+  // global code reaches every shard a few blocks after it is published; a vote executed before that does nothing
+  for (let i = 0; ; i++) {
+    if (await rpc({ request_type: "view_global_contract_code", code_hash: codeHash }).then(() => true, () => false)) break;
+    if (i === 30) throw new Error(`global contract ${codeHash} is not readable yet; run again in a minute`);
+    await new Promise((ok) => setTimeout(ok, 2000));
+  }
   const policy = await view(dep.dao, "get_policy");
   const voters = (policy.roles.find((r) => r.name === "member")?.kind?.Group ?? []).filter(hasKey).map(account);
   if (!voters.length) throw new Error("no member keys in .keys/ to propose and vote");
