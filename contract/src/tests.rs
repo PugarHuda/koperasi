@@ -747,7 +747,7 @@ fn deliver(k: &mut Koperasi, amount: u128) -> (u32, bool) {
 fn dao_says(k: &mut Koperasi, id: u32, status: &str) {
     as_(&me(), near(0));
     let _ = k.on_payout_proposed(id, Ok(100 + id as u64));
-    k.on_payout_checked(id, Ok(json!({ "status": status })));
+    k.on_payout_checked(id, true, Ok(json!({ "status": status })));
 }
 
 fn approve(k: &mut Koperasi, id: u32) {
@@ -835,7 +835,15 @@ fn a_member_who_finishes_a_task_earns_contribution_points_for_the_profit_share()
     k.on_approve_policy(id, acc("dave.testnet"), Ok(policy(&["alice.testnet", "bob.testnet", "dave.testnet"])));
     assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 0, "nothing before the DAO pays");
     dao_says(&mut k, id, "Approved");
-    assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 5);
+    assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 0, "0.05 of 0.5 NEAR earns 5 × 0.1 = 0 points");
+    // points follow the pay: a 0.5 NEAR task earns the full 5, a 0.2 NEAR task 2
+    for (amount, total) in [(500, 5), (200, 7)] {
+        let (id, _) = deliver_by(&mut k, "alice.testnet", "bob.testnet", amount * MILLI);
+        as_(&me(), near(0));
+        k.on_approve_policy(id, acc("dave.testnet"), Ok(policy(&["alice.testnet", "bob.testnet", "dave.testnet"])));
+        dao_says(&mut k, id, "Approved");
+        assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, total);
+    }
     // a non-member contributor gets the record, not points (and nothing panics)
     let (id, _) = deliver(&mut k, 50 * MILLI);
     approve(&mut k, id);
@@ -844,17 +852,25 @@ fn a_member_who_finishes_a_task_earns_contribution_points_for_the_profit_share()
 }
 
 #[test]
-fn a_payout_the_dao_did_not_make_goes_back_to_the_budget_and_earns_nothing() {
+fn a_payout_the_dao_did_not_make_goes_back_to_the_budget_earns_nothing_and_is_not_filed_again() {
     let mut k = board();
     for status in ["Rejected", "Removed", "Failed", "Expired"] {
         let (id, _) = deliver(&mut k, 50 * MILLI);
         approve(&mut k, id);
         dao_says(&mut k, id, status);
         assert_eq!(k.get_board().budget.0, 1000 * MILLI, "{status}");
-        assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Submitted);
-        assert_eq!(k.get_payout_proposal(id), None);
+        assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Cancelled, "the members said no: no retry");
+        assert_eq!(k.get_payout_proposal(id), Some(100 + id as u64), "the proposal stays named");
         assert!(k.get_record(acc("carol.testnet")).is_none());
     }
+    // approved, but Sputnik's transfer bounced (it leaves the proposal Approved): not paid
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, id);
+    as_(&me(), near(0));
+    let _ = k.on_payout_proposed(id, Ok(100 + id as u64));
+    k.on_payout_checked(id, false, Ok(json!({ "status": "Approved" })));
+    assert_eq!((k.get_tasks(None, None)[id as usize].status, k.get_board().budget.0), (TaskStatus::Cancelled, 1000 * MILLI));
+    assert!(k.get_record(acc("carol.testnet")).is_none());
     // Sputnik refused the proposal itself (e.g. the bond): same
     let (id, _) = deliver(&mut k, 50 * MILLI);
     approve(&mut k, id);
@@ -874,9 +890,9 @@ fn a_payout_still_open_in_the_dao_waits_and_settles_once() {
     as_(&acc("anyone.testnet"), near(0));
     let _ = k.settle_task(id);
     as_(&me(), near(0));
-    k.on_payout_checked(id, Ok(json!({ "status": "Approved" })));
+    k.on_payout_checked(id, true, Ok(json!({ "status": "Approved" })));
     assert_eq!(k.get_tasks(None, None)[0].status, TaskStatus::Paid);
-    let again = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.on_payout_checked(id, Ok(json!({ "status": "Approved" })))));
+    let again = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.on_payout_checked(id, true, Ok(json!({ "status": "Approved" })))));
     assert!(again.is_err(), "counted once");
     assert_eq!(k.get_record(acc("carol.testnet")).unwrap().done, 1);
 }

@@ -10,7 +10,8 @@
 //! add and approve `transfer` proposals. A payout is a Transfer proposal from the treasury that the contract files and
 //! approves itself, so every payout is a DAO proposal anyone can read, and the role is visible in the DAO policy.
 //! The members vote how much the contract may pay out in total (`set_task_budget`), the rule, and can cancel any task.
-//! A finished task by a member also earns the contribution points the members voted, so it raises their profit share.
+//! A finished task by a member also earns contribution points in proportion to its pay, so it raises their profit share;
+//! the points can grow only as fast as the treasury pays out under the members' budget.
 //!
 //! State lives under its own storage keys (not struct fields), so the upgrade needs no state migration.
 
@@ -33,7 +34,8 @@ pub const PAYOUT_BOND: NearToken = NearToken::from_millinear(100);
 const DAY_NS: u64 = 86_400_000_000_000;
 const GAS_PROPOSE: Gas = Gas::from_tgas(15);
 const GAS_ACT: Gas = Gas::from_tgas(50);
-const GAS_PROPOSED: Gas = Gas::from_tgas(90);
+const GAS_PROPOSED: Gas = Gas::from_tgas(100);
+const GAS_VOTED: Gas = Gas::from_tgas(30);
 const GAS_CHECKED: Gas = Gas::from_tgas(15);
 
 #[ext_contract(ext_dao_proposals)]
@@ -55,7 +57,8 @@ pub struct TrustRule {
     pub trusted_after: u32,
     /// yoctoNEAR one poster may pay out with no vote per UTC day; more waits for one other member.
     pub poster_daily_auto: U128,
-    /// contribution points a member earns per finished task or DAO bounty (they weigh the profit share).
+    /// contribution points a member earns for a task paying `one_vote_max` (smaller tasks earn in proportion, floored)
+    /// or for a DAO bounty; they weigh the profit share.
     pub points: u64,
 }
 
@@ -307,60 +310,78 @@ impl Koperasi {
     pub fn on_payout_proposed(&mut self, id: u32, #[callback_result] pid: Result<u64, PromiseError>) -> PromiseOrValue<()> {
         let t = task(id);
         let Ok(pid) = pid else {
-            self.unpay(t);
+            // nothing was filed (and the bond came back): the poster can accept again
+            self.unpay(t, TaskStatus::Submitted);
             return PromiseOrValue::Value(());
         };
         write_u128(&payout_key(id), pid as u128);
-        let dao = ext_dao_proposals::ext(self.dao_id.clone());
         PromiseOrValue::Promise(
-            dao.with_static_gas(GAS_ACT).act_proposal(pid, "VoteApprove".into(), payout_kind(&t), None)
-                .then(ext_dao_proposals::ext(self.dao_id.clone()).with_static_gas(GAS_VIEW).get_proposal(pid))
-                .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id)),
+            ext_dao_proposals::ext(self.dao_id.clone()).with_static_gas(GAS_ACT)
+                .act_proposal(pid, "VoteApprove".into(), payout_kind(&t), None)
+                .then(Self::ext(env::current_account_id()).with_static_gas(GAS_VOTED).on_payout_voted(id, pid)),
         )
     }
 
+    /// Sputnik's `act_proposal` returns the transfer's own promise once the vote passes, and marks nothing when the
+    /// transfer bounces (the proposal stays Approved). So the money moved only if that result succeeded.
+    #[private]
+    pub fn on_payout_voted(&mut self, id: u32, pid: u64) -> Promise {
+        let moved = matches!(env::promise_result(0), near_sdk::PromiseResult::Successful(_));
+        ext_dao_proposals::ext(self.dao_id.clone())
+            .with_static_gas(GAS_VIEW)
+            .get_proposal(pid)
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id, moved))
+    }
+
     /// Anyone: re-read a payout's DAO proposal (e.g. one the members approved or rejected by hand) and settle the task.
+    // ponytail: a payout the members approved by hand is taken as moved; their own vote transaction shows the transfer
     pub fn settle_task(&mut self, id: u32) -> Promise {
         require!(task(id).status == TaskStatus::Paying, "no payout in flight");
         let pid = read_u128(&payout_key(id)).unwrap_or_else(|| env::panic_str("no payout proposal yet")) as u64;
         ext_dao_proposals::ext(self.dao_id.clone())
             .with_static_gas(GAS_VIEW)
             .get_proposal(pid)
-            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id, true))
     }
 
-    /// Paid only when the DAO says the Transfer proposal is Approved (Sputnik marks a bounced transfer Failed).
+    /// Paid only when the DAO's Transfer proposal is Approved and its transfer went through.
     #[private]
-    pub fn on_payout_checked(&mut self, id: u32, #[callback_result] p: Result<Value, PromiseError>) {
+    pub fn on_payout_checked(&mut self, id: u32, moved: bool, #[callback_result] p: Result<Value, PromiseError>) {
         let mut t = task(id);
         require!(t.status == TaskStatus::Paying, "no payout in flight");
         let status = p.ok().and_then(|p| p["status"].as_str().map(String::from)).unwrap_or_default();
         match status.as_str() {
-            "Approved" => {
+            "Approved" if moved => {
                 t.status = TaskStatus::Paid;
                 t.paid_at = Some(U64(env::block_timestamp()));
                 save(&task_key(id), &t);
-                self.credit(t.contributor.as_ref().unwrap(), format!("task:{id}"), t.amount.0);
+                let points = load::<TrustRule>(KEY_TRUST)
+                    .map_or(0, |r| (r.points as u128 * t.amount.0 / r.one_vote_max.0.max(1)) as u64);
+                self.credit(t.contributor.as_ref().unwrap(), format!("task:{id}"), t.amount.0, points);
             }
             // still open (e.g. the role is missing from the policy) or unreadable: the members can vote it by hand,
             // then anyone calls settle_task
             "InProgress" | "" => log!("task #{}: payout proposal not approved yet", id),
-            _ => self.unpay(t),
+            // rejected, removed, expired, failed, or approved but the transfer bounced: the members or the chain said no,
+            // so the contract must not file and approve it again on its own; only a new task (or a DAO bounty) pays it
+            _ => self.unpay(t, TaskStatus::Cancelled),
         }
     }
 
-    /// The payout did not happen: money back in the budget, the poster can accept again.
-    fn unpay(&mut self, mut t: Task) {
+    /// The payout did not happen: the money stays in the treasury and in the budget.
+    fn unpay(&mut self, mut t: Task, status: TaskStatus) {
         write_u128(KEY_BUDGET, budget() + t.amount.0);
-        env::storage_remove(&payout_key(t.id));
-        t.status = TaskStatus::Submitted;
+        if status == TaskStatus::Submitted {
+            env::storage_remove(&payout_key(t.id));
+        }
+        t.status = status;
         t.approved_by = None;
-        log!("task #{}: payout failed, back to submitted", t.id);
+        log!("task #{}: not paid, now {:?}", t.id, status);
         save(&task_key(t.id), &t);
     }
 
-    /// One more point on `who`'s record, from `source`; a member also earns the voted contribution points.
-    fn credit(&mut self, who: &AccountId, source: String, earned: u128) {
+    /// One more point on `who`'s record, from `source`; a member also earns `points` contribution points.
+    fn credit(&mut self, who: &AccountId, source: String, earned: u128, points: u64) {
         let mut r: Record = load(&record_key(who)).unwrap_or_else(|| {
             let mut all: Vec<AccountId> = load(KEY_CONTRIBUTORS).unwrap_or_default();
             all.push(who.clone());
@@ -372,7 +393,6 @@ impl Koperasi {
         log!("trust: +1 for {} from {}", who, source);
         r.refs.push(source);
         save(&record_key(who), &r);
-        let points = load::<TrustRule>(KEY_TRUST).map_or(0, |r| r.points);
         if points > 0 && self.members.contains_key(who) {
             self.add_points(who, points);
             log!("+{} contribution points for {}", points, who);
@@ -399,7 +419,8 @@ impl Koperasi {
         let key = format!("credited:{proposal_id}");
         require!(env::storage_read(key.as_bytes()).is_none(), "already counted");
         env::storage_write(key.as_bytes(), &[1]);
-        self.credit(&receiver, format!("dao-proposal:{proposal_id}"), 0);
+        let points = load::<TrustRule>(KEY_TRUST).map_or(0, |r| r.points);
+        self.credit(&receiver, format!("dao-proposal:{proposal_id}"), 0, points);
     }
 
     // ---------- views ----------
