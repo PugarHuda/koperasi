@@ -877,3 +877,27 @@ fn an_approved_dao_bounty_counts_once_on_the_receivers_record() {
     // trusted through the DAO bounty: a small task is paid on acceptance
     assert!(deliver(&mut k, 50 * MILLI).1);
 }
+
+#[test]
+#[should_panic(expected = "the poster is no longer a member")]
+fn a_poster_the_members_removed_cannot_pay_on_trust() {
+    let mut k = board();
+    as_(&me(), near(0));
+    k.on_dao_proposal(7, Ok(json!({ "status": "Approved", "kind": { "BountyDone": { "bounty_id": 0, "receiver_id": "carol.testnet" } } })));
+    as_(&acc("alice.testnet"), TASK_FEE);
+    let id = k.post_task("t".into(), U128(MILLI));
+    as_(&acc("carol.testnet"), near(0));
+    k.claim_task(id);
+    k.submit_task(id, "w".into());
+    k.apply_membership(acc("alice.testnet"), false); // the DAO removed alice, and the contract synced it
+    as_(&acc("alice.testnet"), near(0));
+    k.accept_task(id);
+}
+
+#[test]
+#[should_panic(expected = "trust is earned")]
+fn trust_needs_at_least_one_finished_task() {
+    let mut k = board();
+    as_(&dao(), near(0));
+    k.set_trust(TrustRule { auto_max: U128(MILLI), one_vote_max: U128(MILLI), trusted_after: 0 });
+}

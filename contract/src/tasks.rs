@@ -4,6 +4,7 @@
 //!   - up to `one_vote_max`: paid once one other member (not the poster, not the contributor) approves;
 //!   - larger: not posted here at all; it is a normal DAO proposal (a Sputnik bounty) and `credit_dao_bounty`
 //!     adds it to the contributor's record once the members approved it.
+//!
 //! Every point of a record names the task or DAO proposal it came from. Custody and the budget stay with the DAO:
 //! only a vote funds the budget, sets the rule, cancels any task or takes the budget back.
 //!
@@ -129,6 +130,7 @@ impl Koperasi {
     pub fn set_trust(&mut self, rule: TrustRule) {
         self.assert_dao();
         require!(rule.auto_max.0 <= rule.one_vote_max.0, "auto_max must not exceed one_vote_max");
+        require!(rule.trusted_after >= 1, "trusted_after must be at least 1: trust is earned");
         save(KEY_TRUST, &rule);
     }
 
@@ -214,6 +216,8 @@ impl Koperasi {
         let mut t = task(id);
         require!(t.status == TaskStatus::Submitted, "nothing submitted");
         require!(t.poster == env::predecessor_account_id(), "only the poster accepts");
+        // a poster the members removed cannot spend the budget; their open tasks are the DAO's to cancel
+        require!(self.members.contains_key(&t.poster), "the poster is no longer a member");
         let rule: TrustRule = load(KEY_TRUST).unwrap_or_else(|| env::panic_str("no trust rule"));
         let who = t.contributor.clone().unwrap();
         let done = load::<Record>(&record_key(&who)).map_or(0, |r| r.done);
