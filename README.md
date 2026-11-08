@@ -30,6 +30,14 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 | By-laws the agent runs | **v3** ([`config/config.v3.yaml`](config/config.v3.yaml), `6c237221…`): a member found that v2's model is not served by NEAR AI Cloud and proposed a switch to `z-ai/glm-5.3-flash`; the members approved it as DAO proposal #7 |
 | Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR; source in `web/`) |
 
+## Check it in 2 minutes (no wallet, no keys)
+
+| Do | See |
+|---|---|
+| Open **https://koperasi-kohl.vercel.app** | Under the headline, *Don't trust us*: the by-laws file hashes to what the members voted, the contract has 0 full-access keys and runs the code a vote approved, the audit. Click *Verify z-ai/glm-5.3-flash with your own nonce* for the model's Intel TDX + GPU attestation checked with your browser's own nonce |
+| Scroll to **06 Tasks & trust** | The three tiers the members voted (auto ≤ 0.1 NEAR after 1 finished task, one other member ≤ 0.5 NEAR, above that a DAO bounty), every task with who approved it, each contributor's record linked to its sources |
+| `npm install && npm run verify` | Every claim in this README read from testnet, read-only: by-laws = proposal #7, code = proposal #25, 0 full-access keys, the agent's key scoped to `record_receipt`, members = the DAO role, each record point traced to a paid task or an approved DAO bounty. Ends `every claim checks out`. CI runs it on every push and daily |
+
 ## Try it
 
 Requirements: Node 22+. Rust + `cargo-near` only to rebuild the contract: without a local build, `npm run demo` deploys the

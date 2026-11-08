@@ -1,5 +1,6 @@
 # Every push and PR: lint, typecheck, agent unit tests, contract tests, and the page end to end in Chromium, Firefox and
 # WebKit (desktop, tablet and phones) against live NEAR testnet data, from the files in web/ served locally.
+# Every push and every day: `npm run verify` checks the README's claims against the chain.
 # Every day: the same browser tests against the deployed page, so a broken deploy shows up as a failed run.
 name: tests
 on:
@@ -23,6 +24,16 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
       - run: npm audit --audit-level=high
+
+  # every push and every day: the README's claims about the showcase co-op, read from testnet (no keys)
+  chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run verify
 
   contract:
     if: github.event_name != 'schedule'
