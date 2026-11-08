@@ -2,7 +2,7 @@
 
 Per-phase detail is in [`docs/reports/`](reports): [01 audit](reports/01-audit.md) · [02 strategy](reports/02-strategi.md) ·
 [03 contract](reports/03-kontrak.md) · [04 dApp](reports/04-dapp.md) · [05 security](reports/05-keamanan.md) ·
-[06 QA](reports/06-qa.md) · [submission materials](submission.md).
+[06 QA](reports/06-qa.md) · [09 improvements toward the top 3](reports/09-peningkatan.md) · [submission materials](submission.md).
 
 ## 1. Judges' scorecard and checklist
 
@@ -31,7 +31,8 @@ with testnet evidence in [02](reports/02-strategi.md#social-money-checklist-the-
 | S1–S5 | High/Medium (prevented) | self-approval, stale member, bounced payout, approval race, double credit | safe from the start, each with a test |
 | S10 | Medium | a removed poster could still pay on trust | **fixed**, proposal #25 |
 | S11 | Medium | `trusted_after = 0` made everyone trusted | **fixed**, proposal #25 |
-| S6 | Medium | collusion between two members up to `one_vote_max`, capped by the voted budget | known issue |
+| S6 | Medium | collusion between two members up to `one_vote_max`, capped by the voted budget | **mitigated** (#27/#32): trust needs different posters, a daily no-vote limit per poster, points follow the pay; three colluding members remain a known limit |
+| S12–S14 | High/Medium | points farmed with tiny tasks; a bounced transfer left Approved by Sputnik counted as paid; a rejected payout refiled | **fixed**, proposal #32, bounce proven on testnet ([09](reports/09-peningkatan.md)) |
 | S8, S9 | Low | `TASK_FEE` slightly below the largest task's storage; contributor protection goes through the DAO | known issue |
 
 Scanners:
@@ -43,9 +44,9 @@ Scanners:
 
 | | Before | After |
 |---|---|---|
-| Sputnik DAO | Deep | Deeper: approval rights from `get_policy` at the moment of approval; `BountyDone` read through `get_proposal` onto the record; budget and rule only by `FunctionCall` proposals; bounties in NEAR |
+| Sputnik DAO | Deep | Deeper: the contract is a member of the DAO through role `tasks` (transfer proposals only), so every task payout is a Transfer from the treasury it files and approves under the members' rule; approval rights from `get_policy`; `BountyDone` read through `get_proposal` onto the record; budget and rule only by `FunctionCall` proposals |
 | Trezu | Shallow (displays the treasury on mainnet) | Unchanged; the tiers are what its single Finance threshold lacks |
-| NEAR AI Cloud, Agent Market, global contracts | Deep | Unchanged; global contracts were used twice for vote-only upgrades (#19, #25) |
+| NEAR AI Cloud, Agent Market, global contracts | Deep | Unchanged; global contracts were used for vote-only upgrades (#19, #25, #27, #32) |
 
 ## 4. Competitors and positioning
 
