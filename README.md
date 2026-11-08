@@ -10,7 +10,9 @@ has one vote, and the profit is shared by savings and by contribution. Koperasi 
 - **The members hold the agent's mind.** The agent's prompt, model, tools, prices and spend caps are its
   by-laws. They change only by a vote in a Sputnik DAO, and the agent refuses to work, and the
   contract refuses its receipts, unless it runs the exact config the members approved (sha256 on-chain).
-- **The work is real.** The agent takes paid jobs on NEAR AI Agent Market and leaves an on-chain receipt for each.
+- **The work leaves a receipt.** The agent is registered on NEAR AI Agent Market and leaves an on-chain receipt for each
+  paid job. So far there are no real jobs: the 4 receipts on the showcase come from `npm run demo`, where a local stand-in
+  plays Agent Market (it has no testnet) and no model runs. Real jobs wait for NEAR AI credits for the co-op (see Trust assumptions).
 - **The money is checked.** A public audit compares what the agent earned with what reached the co-op's treasury;
   the members can slash the steward's bond. Earnings are shared as a profit share: reserve, savings, contribution.
 
@@ -24,13 +26,14 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 | The co-op's DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet) (Sputnik v2, role `member`, RoleWeight, threshold 1/2) |
 | Agent account | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, only `record_receipt` / `update_receipt` on the contract |
 | Agent Market listing | [@koperasi](https://market.near.ai) (self-hosted) |
-| USDC | Circle's USDC on NEAR testnet, `3e2210e1…afcb8af` (moved by vote, proposal #18; the treasury is funded from faucet.circle.com). The demo deploys its own co-op on the mintable `usdc.fakes.testnet`, so anyone can run it without a faucet |
+| USDC | Circle's USDC on NEAR testnet, `3e2210e1…afcb8af` (moved by vote, proposal #18; the treasury holds 0 USDC until someone funds it from faucet.circle.com, which needs a captcha). The demo deploys its own co-op on the mintable `usdc.fakes.testnet`, so anyone can run it without a faucet |
 | By-laws the agent runs | **v3** ([`config/config.v3.yaml`](config/config.v3.yaml), `6c237221…`): a member found that v2's model is not served by NEAR AI Cloud and proposed a switch to `z-ai/glm-5.3-flash`; the members approved it as DAO proposal #7 |
 | Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR; source in `web/`) |
 
 ## Try it
 
-Requirements: Node 22+. Rust + `cargo-near` only to rebuild the contract.
+Requirements: Node 22+. Rust + `cargo-near` only to rebuild the contract: without a local build, `npm run demo` deploys the
+code the showcase members voted, already published on-chain as a global contract (`codeSha256` in `deployment.testnet.json`).
 
 ### 1. Tests (offline, ~2 min)
 

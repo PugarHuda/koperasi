@@ -7,5 +7,6 @@
   "contract": "koperasi-mw4i2iwk.testnet",
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "6c237221b16948190895ff89528c5da394e09dd1715594752424d9fee186adc3",
-  "configUri": "config/config.v3.yaml"
+  "configUri": "config/config.v3.yaml",
+  "codeSha256": "2b99e48c2cdacf594ba9f80915b80220499f8cdc82de600951c155cdecffab2a"
 }

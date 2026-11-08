@@ -76,4 +76,7 @@ if (after.config.hash !== before.config.hash) throw new Error("config changed ac
 // an RPC can lag a block or two behind the key deletion: wait until the count settles
 let left = (await fullAccess()).length;
 for (let i = 0; lock && left && i < 10; i++) { await new Promise((ok) => setTimeout(ok, 1500)); left = (await fullAccess()).length; }
+// new co-ops (scripts/deploy.mjs without a local build) start from the code these members voted
+if (!fileArg) fs.writeFileSync(DEPLOYMENT, `${JSON.stringify({ ...dep, codeSha256: sha256(wasm) }, null, 2)}
+`);
 console.log(`${dep.contract} runs ${codeHash}; ${after.members} members, ${after.receipts} receipts, by-laws v${after.config.version} intact; full-access keys: ${left}`);

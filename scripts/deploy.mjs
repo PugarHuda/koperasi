@@ -31,8 +31,17 @@ const daoId = await createDao(steward, `koperasi-${tag}`, "Koperasi: an AI agent
 console.log(`  ${daoId}`);
 
 step("deploy koperasi contract");
-const wasm = fs.readFileSync(path.join(ROOT, "contract/target/near/koperasi.wasm"));
-await kop.deployContract(new Uint8Array(wasm));
+// a local build if there is one; otherwise the code the showcase co-op's members voted, already published on-chain as a
+// global contract (its sha256 is in deployment.testnet.json), so the demo needs Node only
+const wasmFile = path.join(ROOT, "contract/target/near/koperasi.wasm");
+if (fs.existsSync(wasmFile)) {
+  await kop.deployContract(new Uint8Array(fs.readFileSync(wasmFile)));
+} else {
+  const { codeSha256 } = JSON.parse(fs.readFileSync(path.join(ROOT, `deployment.${NETWORK}.json`), "utf8"));
+  if (!codeSha256) throw new Error("no contract/target/near/koperasi.wasm and no published codeSha256: build with cargo near build");
+  await kop.useGlobalContract({ codeHash: codeSha256 });
+  console.log(`  global contract sha256 ${codeSha256}`);
+}
 const configFile = "config/config.v1.yaml";
 const configHash = sha256(fs.readFileSync(path.join(ROOT, configFile)));
 await call(kop, ids.contract, "new", {
