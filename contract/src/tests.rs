@@ -836,8 +836,20 @@ fn a_member_who_finishes_a_task_earns_contribution_points_for_the_profit_share()
     assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 0, "nothing before the DAO pays");
     dao_says(&mut k, id, "Approved");
     assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 0, "0.05 of 0.5 NEAR earns 5 × 0.1 = 0 points");
+    // a task posted before the members lowered one_vote_max still earns at most `points`
+    let (big, _) = deliver_by(&mut k, "alice.testnet", "bob.testnet", 500 * MILLI);
+    as_(&dao(), near(0));
+    k.set_trust(TrustRule { auto_max: U128(MILLI), one_vote_max: U128(MILLI), ..trust(1) });
+    as_(&me(), near(0));
+    k.on_approve_policy(big, acc("dave.testnet"), Ok(policy(&["alice.testnet", "bob.testnet", "dave.testnet"])));
+    dao_says(&mut k, big, "Approved");
+    assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 5, "clamped to points");
+    as_(&dao(), near(0));
+    k.set_trust(trust(1));
+    k.set_task_budget(U128(1000 * MILLI));
+    let base = 5;
     // points follow the pay: a 0.5 NEAR task earns the full 5, a 0.2 NEAR task 2
-    for (amount, total) in [(500, 5), (200, 7)] {
+    for (amount, total) in [(500, base + 5), (200, base + 7)] {
         let (id, _) = deliver_by(&mut k, "alice.testnet", "bob.testnet", amount * MILLI);
         as_(&me(), near(0));
         k.on_approve_policy(id, acc("dave.testnet"), Ok(policy(&["alice.testnet", "bob.testnet", "dave.testnet"])));
@@ -884,7 +896,13 @@ fn a_payout_still_open_in_the_dao_waits_and_settles_once() {
     let mut k = board();
     let (id, _) = deliver(&mut k, 50 * MILLI);
     approve(&mut k, id);
-    dao_says(&mut k, id, "InProgress"); // e.g. the `tasks` role is missing: the members vote it by hand
+    // while the contract's own vote and check run, nobody can settle in between
+    as_(&me(), near(0));
+    let _ = k.on_payout_proposed(id, Ok(100 + id as u64));
+    as_(&acc("anyone.testnet"), near(0));
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let _ = k.settle_task(id); })).is_err());
+    as_(&me(), near(0));
+    k.on_payout_checked(id, true, Ok(json!({ "status": "InProgress" }))); // e.g. the `tasks` role is missing
     assert_eq!(k.get_tasks(None, None)[0].status, TaskStatus::Paying);
     assert_eq!(k.get_board().budget.0, 950 * MILLI);
     as_(&acc("anyone.testnet"), near(0));

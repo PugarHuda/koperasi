@@ -19,7 +19,7 @@ The builder approved the contract change (rule 7: contract architecture).
 | 3 | **Payouts from the treasury through a scoped DAO role.** The contract holds role `tasks` (`transfer:AddProposal`, `transfer:VoteApprove`, nothing else). Each payout is a Transfer proposal it files and approves itself under the members' rule, so the money never leaves the DAO before a payout and every payout is a DAO proposal. | Technical, track fit | showcase #26 (contract-held 0.87 NEAR back to the treasury), #27 (code), #28 (rule v2, 1 NEAR budget), #29 (role) |
 | 4 | **Collusion:** trust counts **different** posters (and the DAO for voted bounties); each poster pays with no vote at most `poster_daily_auto` a day. | Technical, security | contract test `two_friends_cannot_make_each_other_trusted…`, `a_poster_pays_with_no_vote_only_up_to_the_daily_limit` |
 | 5 | **Trust → pay → profit share:** a member's finished task earns contribution points, which weigh the profit share. | Originality | task #2: bob 5 → 10 points |
-| 6 | **Security review of #27**, three fixes (#32): see below. | Technical | test co-op `koperasi-mw80aczw`, proposal #5 |
+| 6 | **Security review of #27**, three fixes (#32), then a second review, two more fixes (#33): see below. | Technical | test co-op `koperasi-mw80aczw`, proposal #5; showcase task #4 (#34) |
 
 ## Security review of #27 (automated review, then checked on testnet)
 
@@ -28,6 +28,9 @@ The builder approved the contract change (rule 7: contract architecture).
 | Points inflation: two members post many tiny tasks, each worth the full points | **Yes** | Points = `points × amount / one_vote_max`, floored. A 0.05 NEAR task earns 0 of 5; points grow only as fast as the treasury pays. | test `a_member_who_finishes_a_task…` (0.05 → 0, 0.5 → 5, 0.2 → 2) |
 | Status read too early / fail-open | **Yes, in another form.** The receipts of approve_task #2 show that act_proposal returns the transfer's promise, so the read is not early. But testnet's Sputnik has no `on_proposal_callback`, so **a bounced transfer stays Approved**. | The contract reads the result of the transfer promise that act_proposal returns: Approved without a successful transfer is not counted. | test co-op proposal #5: contributor account deleted, transfer `AccountDoesNotExist`, proposal **Approved**, task **Cancelled**, budget unchanged, no record |
 | A failed payout accepted again | Partly. A Failed transfer does not run twice, but a payout the members **rejected** could be refiled and self-approved by the contract. | Rejected, Removed, Expired, Failed, or a bounced transfer → task **Cancelled**. Only an add_proposal that failed (nothing filed) returns to Submitted. | test `…is_not_filed_again` |
+| (review 2) `settle_task` in the middle of the contract's own chain could read Approved before the transfer's result and count a bounced payout | **Yes** | Key `inflight:<id>` from `pay` until the check; `settle_task` refuses while it is set (#33) | test `a_payout_still_open…` |
+| (review 2) points above `points` if the members lower `one_vote_max` after a task is posted | **Yes** | `min(points)` (#33) | test: 0.5 NEAR task after one_vote_max fell to 0.001 → 5 points, not 2,500 |
+| (review 2) budget refunded when the act_proposal chain fails although the transfer happened | **No.** The promise act_proposal returns is the transfer receipt itself (receipts of #30); if act_proposal panics, its state reverts and the proposal stays InProgress (the "wait" branch, not a refund) | – | receipts of approve_task #2 |
 
 ## Transactions (testnet)
 
@@ -38,7 +41,8 @@ The builder approved the contract change (rule 7: contract architecture).
 | Showcase task #2: Bahasa Indonesia quick start, by bob (member), approved by the steward | DAO proposal #30, [DdZhNN31…](https://testnet.nearblocks.io/txns/DdZhNN31dMoicn76bpqR9iQcpgwnGVVbf8jCg4W3Czpp); bob +5 points (under #27's flat rule) |
 | Showcase task #3: `scripts/verify.mjs`, by carol, on earned trust | DAO proposal #31, [7QbPcRmd…](https://testnet.nearblocks.io/txns/7QbPcRmdx6tTYrXsCdwKJrJthCEZvqQNTbbChc9JhNK7) |
 | Bounce test (test co-op `koperasi-mw80aczw`) | DAO proposal #5, `approve_task` [BpccRtdt…](https://testnet.nearblocks.io/txns/BpccRtdtAakvzAakvyxMZCmAFPPsWneMfz53FgWhXXL9): task Cancelled |
-| Upgrades by vote | #27 `C17FHkdu…`, #32 `AK4hrshT…` (sha256 `8a59d358…`), 0 full-access keys |
+| Showcase task #4: report 09, by bob, on earned trust under #33 | DAO proposal #34; bob 10 → 11 points (5 × 0.1 / 0.5) |
+| Upgrades by vote | #27 `C17FHkdu…`, #32 `AK4hrshT…`, #33 `GjJjx49G…` (sha256 `e9b5c1d3…`), 0 full-access keys |
 
 ## Tests
 

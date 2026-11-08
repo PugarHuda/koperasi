@@ -134,6 +134,10 @@ fn text(s: &str, what: &str) {
 fn payout_key(id: u32) -> Vec<u8> {
     format!("payout:{id}").into_bytes()
 }
+/// Set while the contract's own file → vote → check chain runs, so `settle_task` cannot read the proposal in between.
+fn inflight_key(id: u32) -> Vec<u8> {
+    format!("inflight:{id}").into_bytes()
+}
 fn payout_kind(t: &Task) -> Value {
     near_sdk::serde_json::json!({ "Transfer": {
         "token_id": "", "receiver_id": t.contributor.as_ref().unwrap(), "amount": t.amount, "msg": null } })
@@ -298,6 +302,7 @@ impl Koperasi {
         let tier = approver.as_ref().map_or("earned trust, no vote".to_string(), |a| format!("approved by {a}"));
         t.approved_by = approver;
         save(&task_key(t.id), t);
+        env::storage_write(&inflight_key(t.id), &[1]);
         let description = format!("Koperasi task #{}: pay {} for \"{}\" ({tier})", t.id, t.contributor.as_ref().unwrap(), t.description);
         let _ = ext_dao_proposals::ext(self.dao_id.clone())
             .with_attached_deposit(PAYOUT_BOND)
@@ -326,7 +331,8 @@ impl Koperasi {
     /// transfer bounces (the proposal stays Approved). So the money moved only if that result succeeded.
     #[private]
     pub fn on_payout_voted(&mut self, id: u32, pid: u64) -> Promise {
-        let moved = matches!(env::promise_result(0), near_sdk::PromiseResult::Successful(_));
+        // only success or failure matters; TooLong(_) means it succeeded with a value we do not read
+        let moved = !matches!(env::promise_result_checked(0, 0), Err(PromiseError::Failed));
         ext_dao_proposals::ext(self.dao_id.clone())
             .with_static_gas(GAS_VIEW)
             .get_proposal(pid)
@@ -337,6 +343,7 @@ impl Koperasi {
     // ponytail: a payout the members approved by hand is taken as moved; their own vote transaction shows the transfer
     pub fn settle_task(&mut self, id: u32) -> Promise {
         require!(task(id).status == TaskStatus::Paying, "no payout in flight");
+        require!(env::storage_read(&inflight_key(id)).is_none(), "the contract is still settling this payout");
         let pid = read_u128(&payout_key(id)).unwrap_or_else(|| env::panic_str("no payout proposal yet")) as u64;
         ext_dao_proposals::ext(self.dao_id.clone())
             .with_static_gas(GAS_VIEW)
@@ -349,6 +356,7 @@ impl Koperasi {
     pub fn on_payout_checked(&mut self, id: u32, moved: bool, #[callback_result] p: Result<Value, PromiseError>) {
         let mut t = task(id);
         require!(t.status == TaskStatus::Paying, "no payout in flight");
+        env::storage_remove(&inflight_key(id));
         let status = p.ok().and_then(|p| p["status"].as_str().map(String::from)).unwrap_or_default();
         match status.as_str() {
             "Approved" if moved => {
@@ -356,7 +364,8 @@ impl Koperasi {
                 t.paid_at = Some(U64(env::block_timestamp()));
                 save(&task_key(id), &t);
                 let points = load::<TrustRule>(KEY_TRUST)
-                    .map_or(0, |r| (r.points as u128 * t.amount.0 / r.one_vote_max.0.max(1)) as u64);
+                    // at most `points`, even if the members lowered one_vote_max after the task was posted
+                    .map_or(0, |r| (r.points as u128 * t.amount.0 / r.one_vote_max.0.max(1)).min(r.points as u128) as u64);
                 self.credit(t.contributor.as_ref().unwrap(), format!("task:{id}"), t.amount.0, points);
             }
             // still open (e.g. the role is missing from the policy) or unreadable: the members can vote it by hand,
@@ -370,6 +379,7 @@ impl Koperasi {
 
     /// The payout did not happen: the money stays in the treasury and in the budget.
     fn unpay(&mut self, mut t: Task, status: TaskStatus) {
+        env::storage_remove(&inflight_key(t.id));
         write_u128(KEY_BUDGET, budget() + t.amount.0);
         if status == TaskStatus::Submitted {
             env::storage_remove(&payout_key(t.id));
