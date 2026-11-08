@@ -128,7 +128,9 @@ async function act(label, fn) {
     const hash = await fn();
     note = `${label}: done.${hash ? ` <a href="${esc(txUrl(hash))}">See the transaction</a>.` : ""}`;
   } catch (e) {
-    note = `<span class="err">${label} failed: ${esc(e.message ?? e)}</span>`;
+    // the contract's own sentence ("the poster is no longer a member"), without the VM's prefix
+    const why = String(e?.message ?? e).replace(/^[\s\S]*?Smart contract panicked: /, "").replace(/^panicked at '?|'?, src[\s\S]*$/g, "");
+    note = `<span class="err">${label} failed: ${esc(why)}</span>`;
   }
   busy = false;
   await new Promise((r) => setTimeout(r, 1500));

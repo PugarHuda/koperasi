@@ -118,6 +118,14 @@ Grep for `mock|fake|dummy|TODO|FIXME|lorem|placeholder|coming soon|0x000`:
 | T14 | Deps | Low | npm | 2 low advisories | – |
 | T15 | DX | Low | README | The Windows `cargo build` error and `--no-abi` are not documented | Docs |
 
+## Done after this audit (same day)
+
+- **T3 fixed.** The builder approved setting the `KOP_MEMBER_KEYS` secret (testnet keys of the 4 demo members only). Manual run [42499483559](https://github.com/PugarHuda/koperasi/actions/runs/42499483559) logs `no open requests to join` and the savings sync. From now on, someone who joins from the page is voted in within 30 minutes.
+- **T8 fixed.** A failed transaction shows the contract's own sentence without the VM's prefix (`web/wallet.js`).
+- **T11 partly fixed.** CSP `frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`. Script and connect sources stay open on purpose, because NEAR Connect loads wallets from many origins.
+- **T15 fixed.** The README documents `cargo near build … --no-abi`.
+- E2E resilience + trust, desktop: 23/23 passed.
+
 ## Priorities by impact on the judging criteria
 
 1. **T3:** set the secret. Without it, inviting real people (Impact) is useless. 1 command, by the builder.

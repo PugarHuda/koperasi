@@ -40,7 +40,8 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 
 ## Try it
 
-Requirements: Node 22+. Rust + `cargo-near` only to rebuild the contract: without a local build, `npm run demo` deploys the
+Requirements: Node 22+. Rust + `cargo-near` only to rebuild the contract (`cargo near build non-reproducible-wasm --no-abi`;
+plain `cargo build` stops with "use cargo near build", and on Windows the ABI step does not link, hence `--no-abi`): without a local build, `npm run demo` deploys the
 code the showcase members voted, already published on-chain as a global contract (`codeSha256` in `deployment.testnet.json`).
 
 ### 1. Tests (offline, ~2 min)
