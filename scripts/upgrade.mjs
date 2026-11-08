@@ -46,7 +46,7 @@ if (lock) {
 } else {
   const published = await rpc({ request_type: "view_global_contract_code", code_hash: codeHash }).then(() => true, () => false);
   if (!published) {
-    if (!publisher) throw new Error(`publish the code first: --publisher <account with ~${Math.ceil(wasm.length / 1e5 + 1)} NEAR, key in .keys/>`);
+    if (!publisher) throw new Error(`publish the code first: --publisher <account with ~${Math.ceil(wasm.length / 1e4) + 1} NEAR (0.0001 NEAR a byte), key in .keys/>`);
     await account(publisher).deployGlobalContract(new Uint8Array(wasm), "codeHash");
     console.log(`${publisher} published global contract ${codeHash} (${wasm.length} bytes)`);
   }
@@ -64,7 +64,9 @@ if (lock) {
   console.log(`proposal #${id} approved: ${dep.contract}.upgrade(${codeHash})`);
 }
 
-const now = await running();
+// the upgrade lands a block after the vote, and an RPC can lag behind that: wait for it before checking
+let now = await running();
+for (let i = 0; now !== codeHash && i < 10; i++) { await new Promise((ok) => setTimeout(ok, 1500)); now = await running(); }
 if (now !== codeHash) throw new Error(`${dep.contract} runs ${now}, not ${codeHash}`);
 const after = await view(dep.contract, "get_info");
 for (const k of ["members", "receipts", "periods"]) {
