@@ -2,7 +2,7 @@
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "https://esm.sh/@hot-labs/near-connect@0.12.0";
 import { dep, view, all, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
-import { splitShare, usdcExact, usdcUnits } from "./share.js";
+import { nearUnits, payPath, splitShare, usdcExact, usdcUnits } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
 const preview = (amount, s) => {
@@ -86,12 +86,16 @@ const safeDescribe = (p, s) => {
 };
 
 async function load() {
-  const [info, member, pending, policy, last] = await Promise.all([
+  // tasks with earned trust are read in the same round: open to anyone signed in, members also post and approve
+  const [info, member, pending, policy, last, board, tasks, recs] = await Promise.all([
     view(dep.contract, "get_info"),
     view(dep.contract, "get_member", { account_id: me }),
     view(dep.contract, "is_pending", { account_id: me }),
     view(dep.dao, "get_policy"),
     view(dep.dao, "get_last_proposal_id"),
+    view(dep.contract, "get_board"),
+    all(dep.contract, "get_tasks"),
+    view(dep.contract, "get_contributors"),
   ]);
   const proposals = await view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 50), limit: 50 });
   const group = policy.roles.find((r) => r.name === "member")?.kind?.Group ?? [];
@@ -110,7 +114,8 @@ async function load() {
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
   const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
-  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims, roster, treasury };
+  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims, roster, treasury,
+    board, tasks, records: Object.fromEntries(recs) };
 }
 
 // each button runs one transaction, then the panel re-reads the chain
@@ -128,6 +133,41 @@ async function act(label, fn) {
   busy = false;
   await new Promise((r) => setTimeout(r, 1500));
   await render();
+}
+
+const TASK_FEE = 10n ** 22n; // 0.01 NEAR, kept for the task's storage (TASK_FEE in contract/src/tasks.rs)
+const workLink = (d) => (/^https:\/\/\S+$/.test(d) ? `<a href="${esc(d)}" rel="noopener">${esc(d)}</a>` : esc(d));
+function tasksPanel(s) {
+  const r = s.board.rule;
+  let html = `<h3 class="jh">Tasks with earned trust</h3>`;
+  if (!r) return `${html}<p class="small">The members have not voted a trust rule yet, so no task can be posted.</p>`;
+  const done = (a) => s.records[a]?.done ?? 0;
+  const mine = done(me);
+  html += `<p class="small">Your record: ${mine} finished${mine >= r.trusted_after ? `, so tasks up to ${nearAmt(r.auto_max)} NEAR pay you when the poster accepts` : ""}.
+    Budget left: ${nearAmt(s.board.budget)} NEAR.</p>`;
+  const li = (t, action) => `<li><span><strong>#${t.id}</strong> ${esc(t.description)}<span class="claim">Pays ${nearAmt(t.amount)} NEAR, posted by ${esc(t.poster)}${
+    t.deliverable ? `; delivered: ${workLink(t.deliverable)}` : ""}</span></span>${action}</li>`;
+  const items = s.tasks.flatMap((t) => {
+    if (t.status === "Open" && t.poster !== me) return [li(t, `<button type="button" class="btn small" data-ttake="${t.id}">Take this task</button>`)];
+    if (t.status === "Claimed" && t.contributor === me) return [li(t, `<span class="task-done"><input id="w-tw-${t.id}" type="text" maxlength="500" placeholder="Link to your work" aria-label="Link to your work for task #${t.id}">
+      <button type="button" class="btn small" data-tsubmit="${t.id}">Deliver</button><button type="button" class="btn ghost small" data-tgiveup="${t.id}">Give up</button></span>`)];
+    if (t.status === "Submitted" && t.poster === me) {
+      const how = payPath(t.amount, r, done(t.contributor)) === "trust" ? "pays at once: trusted contributor" : "then one other member approves";
+      return [li(t, `<button type="button" class="btn small" data-taccept="${t.id}">Accept the work (${how})</button>`)];
+    }
+    if (t.status === "NeedsApproval" && s.member && t.poster !== me && t.contributor !== me) {
+      return [li(t, `<button type="button" class="btn small" data-tapprove="${t.id}">Approve paying ${esc(t.contributor)}</button>`)];
+    }
+    return [];
+  });
+  html += items.length ? `<ul class="props tasks">${items.join("")}</ul>` : `<p class="small">Nothing for you to do on the board right now.</p>`;
+  if (s.member) {
+    html += `<div class="stake-row"><label>Task <input id="w-task-desc" type="text" maxlength="500" autocomplete="off" aria-label="Task description"></label>
+      <label>Pays <input id="w-task-amt" type="text" inputmode="decimal" autocomplete="off" aria-label="NEAR to pay" placeholder="0.05"> NEAR</label>
+      <button type="button" class="btn" id="w-task-post">Post (0.01 NEAR storage)</button></div>
+      <p class="small">Up to ${nearAmt(r.one_vote_max)} NEAR. Larger tasks are DAO bounties, voted by all members.</p>`;
+  }
+  return html;
 }
 
 const step = (state, title, body) => `<li class="${state}"><b>${title}</b>${body ? `<div>${body}</div>` : ""}</li>`;
@@ -221,6 +261,7 @@ async function render() {
              <button type="button" class="btn ghost small" data-vote="VoteReject" data-id="${p.id}">Reject</button></span>`}</li>`;
       }).join("")}</ul>` : `<p class="small">Nothing to vote on right now.</p>`}`;
   }
+  html += tasksPanel(s);
   if (note) html += `<p class="note-line">${note}</p>`;
   box.innerHTML = html;
 
@@ -289,6 +330,31 @@ async function render() {
         { deposit: BigInt(s.policy.proposal_bond), tgas: 50 }));
     };
   });
+  const task = (attr, label, method, extra = () => ({})) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => {
+    b.onclick = () => {
+      const id = Number(b.dataset[attr]);
+      const args = extra(id); // read inputs before act() re-renders the panel
+      if (args) act(`${label} task #${id}`, () => send(dep.contract, method, { id, ...args }, { tgas: 100 }));
+    };
+  });
+  task("ttake", "Take", "claim_task");
+  task("tgiveup", "Give up", "give_up_task");
+  task("taccept", "Accept", "accept_task");
+  task("tapprove", "Approve", "approve_task");
+  task("tsubmit", "Deliver", "submit_task", (id) => {
+    const work = $(`w-tw-${id}`).value.trim();
+    if (!work) { say(`<span class="err">Task #${id}: link to the work you delivered first.</span>`); return null; }
+    return { deliverable: work };
+  });
+  const post = $("w-task-post");
+  if (post) post.onclick = () => {
+    const desc = $("w-task-desc").value.trim();
+    const amt = nearUnits($("w-task-amt").value);
+    const max = BigInt(s.board.rule.one_vote_max);
+    if (!desc) { say(`<span class="err">Task: describe the task first.</span>`); return; }
+    if (amt === null || amt > max) { say(`<span class="err">Task: pay a positive NEAR amount, at most ${nearAmt(max)} NEAR and 6 decimals.</span>`); return; }
+    act(`Post a ${nearAmt(amt)} NEAR task`, () => send(dep.contract, "post_task", { description: desc, amount: amt.toString() }, { deposit: TASK_FEE, tgas: 30 }));
+  };
   box.querySelectorAll("[data-vote]").forEach((b) => {
     b.onclick = () => act(b.dataset.vote === "VoteApprove" ? "Approve" : "Reject", async () => {
       const p = await view(dep.dao, "get_proposal", { id: Number(b.dataset.id) });

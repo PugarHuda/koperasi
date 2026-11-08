@@ -136,7 +136,7 @@ h2 .dim { color: var(--grey); }
 /* the co-op loop: five steps, each links to its section */
 .loop { background: var(--black); color: #fff; padding: 6rem clamp(1.2rem, 4vw, 3rem) 6.5rem calc(clamp(1.2rem, 4vw, 3rem) + 6.5rem); }
 .loop h2 .dim { color: #6f7699; }
-.loop ol { list-style: none; margin: 3rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; counter-reset: step; }
+.loop ol { list-style: none; margin: 3rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1rem; counter-reset: step; }
 .loop li { counter-increment: step; }
 .loop li a { position: relative; display: grid; gap: .7rem; align-content: start; height: 100%; padding: 1.4rem 1.2rem; text-decoration: none; border-top: 2px solid #23294a; transition: border-color .2s, background .2s; }
 .loop li a::before { content: counter(step, decimal-leading-zero); color: var(--blue-hi); font-size: .8rem; }
@@ -150,8 +150,8 @@ h2 .dim { color: var(--grey); }
 /* verify the by-laws in the browser */
 .verify { max-width: 30rem; }
 .codegov { max-width: 30rem; margin-top: 2rem; }
-#bounties { margin-top: 2.5rem; }
-#bounties caption .muted { font-weight: 400; font-size: .85rem; }
+#bounties, #records { margin-top: 2.5rem; }
+#bounties caption .muted, #tasks caption .muted, #records caption .muted { font-weight: 400; font-size: .85rem; }
 .task-done { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 .task-done input { min-width: 0; flex: 1 1 12rem; padding: .45rem .6rem; border: 1px solid var(--rule); font: inherit; }
 .codegov h3 { font-size: 1rem; margin: 0 0 .5rem; }
@@ -233,6 +233,16 @@ h2 .dim { color: var(--grey); }
 .plan li::before { content: "✓"; color: var(--blue); margin-right: .6rem; }
 .plan.members li::before { color: #9fb6ff; }
 #periods { margin-top: 5rem; }
+
+/* tasks & trust: three tiers, the trusted one in blue */
+.tiers { list-style: none; counter-reset: tier; padding: 0; margin: 0; display: grid; gap: .8rem; }
+.tiers li { counter-increment: tier; display: grid; gap: .3rem; padding: 1.1rem 1.3rem; border: 1px solid var(--rule); border-radius: 6px; }
+.tiers li:first-child { background: linear-gradient(180deg, var(--blue), #071a7a); color: #fff; border-color: transparent; }
+.tiers b { font: 700 1.3rem/1 var(--display); text-transform: uppercase; }
+.tiers b::before { content: counter(tier) ". "; opacity: .6; }
+.tiers span { font-size: .9rem; }
+#tasks { margin-top: 5rem; }
+#tasks .claim { display: block; font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
 
 /* closing: headline with a live chip inside it */
 .closing {

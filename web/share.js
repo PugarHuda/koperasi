@@ -42,3 +42,19 @@ export const usdcExact = (units) => {
   const frac = (u % 1_000_000n).toString().padStart(6, "0").replace(/0{1,4}$/, "");
   return `${u / 1_000_000n}.${frac}`;
 };
+
+/** "0.05" → yoctoNEAR; null for anything that is not a positive amount with ≤ 6 decimals. */
+export const nearUnits = (text) => {
+  const t = String(text).trim();
+  if (!/^\d{1,9}(\.\d{1,6})?$/.test(t)) return null;
+  const [whole, frac = ""] = t.split(".");
+  const units = BigInt(whole) * 10n ** 24n + BigInt(frac.padEnd(24, "0"));
+  return units > 0n ? units : null;
+};
+
+/**
+ * How a delivered task gets paid (Koperasi::accept_task in contract/src/tasks.rs): "trust" pays when the poster accepts,
+ * "member" waits for one other member. `done` is the contributor's finished tasks.
+ * @param {string} amount yoctoNEAR @param {{ auto_max: string, trusted_after: number }} rule @param {number} done
+ */
+export const payPath = (amount, rule, done) => (BigInt(amount) <= BigInt(rule.auto_max) && done >= rule.trusted_after ? "trust" : "member");

@@ -31,6 +31,7 @@
       <a href="#work">Work</a>
       <a href="#audit">Audit</a>
       <a href="#shares">Profit shares</a>
+      <a href="#trust">Tasks</a>
     </nav>
     <div class="top-actions">
       <a class="quiet" href="https://github.com/PugarHuda/koperasi">Source</a>
@@ -137,6 +138,7 @@
         <li><a href="#work"><b>Work</b><span>The agent bids, delivers and records one receipt per paid job.</span><small>Agent Market, NEAR AI Cloud</small></a></li>
         <li><a href="#audit"><b>Audit</b><span>Every payout must reach the co-op, or the steward's bond is slashed.</span><small>USDC on NEAR</small></a></li>
         <li><a href="#shares"><b>Share</b><span>The members vote a profit share and each claims their own.</span><small>Sputnik DAO treasury</small></a></li>
+        <li><a href="#trust"><b>Earn trust</b><span>Finished tasks build a record; small payouts then need no vote.</span><small>koperasi contract + DAO bounties</small></a></li>
       </ol>
     </section>
 
@@ -232,8 +234,29 @@
         <thead><tr><th scope="col">Period</th><th scope="col">Date</th><th scope="col" class="num">Shared</th><th scope="col" class="num">Kept as reserve</th><th scope="col" class="num">Members</th></tr></thead>
         <tbody></tbody>
       </table>
+    </section>
+
+    <section id="trust" class="block">
+      <div class="rail"><span class="num">06</span><span class="tag">Tasks &amp; trust</span></div>
+      <div class="split">
+        <div>
+          <h2>Trust is earned,<br /><span class="dim">task by task.</span></h2>
+          <p class="sub" id="trust-rule">Reading the members' trust rule…</p>
+        </div>
+        <ol class="tiers" id="tiers"></ol>
+      </div>
+      <table class="grid" id="tasks">
+        <caption>Tasks on the board <span class="muted">(a member posts, anyone takes it; who must approve the payout depends on its size and the contributor's record)</span></caption>
+        <thead><tr><th scope="col">Task</th><th scope="col" class="num">Pays</th><th scope="col">Status</th><th scope="col">Contributor</th><th scope="col">Paid how</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <table class="grid" id="records">
+        <caption>Contributors' records <span class="muted">(every point names the task or DAO proposal it came from)</span></caption>
+        <thead><tr><th scope="col">Contributor</th><th scope="col" class="num">Finished</th><th scope="col">Trusted</th><th scope="col">Where each point came from</th></tr></thead>
+        <tbody></tbody>
+      </table>
       <table class="grid" id="bounties">
-        <caption>Tasks the co-op pays for <span class="muted">(DAO bounties: a member takes one, files the work, the members vote the payout from the treasury)</span></caption>
+        <caption>Large tasks: DAO bounties <span class="muted">(voted in and paid out by all members from the treasury; each payout counts on the record above)</span></caption>
         <thead><tr><th scope="col">Task</th><th scope="col" class="num">Pays</th><th scope="col" class="num">Left</th><th scope="col" class="num">Taken</th></tr></thead>
         <tbody></tbody>
       </table>

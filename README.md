@@ -39,15 +39,19 @@ npm install
 npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `56 passed` for the contract and `pass 13` for the agent, scripts and page logic: response-signature recovery, the TDX quote
+See: `69 passed` for the contract and `pass 14` for the agent, scripts and page logic: response-signature recovery, the TDX quote
 binding the server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market
 check, the page's profit-share preview matching the contract's split to the last USDC unit, views that move past a
 rate-limited RPC, and the agent's money path when a job fails half-way (a billed inference that then fails is booked at
-the cap; a failed delivery or receipt is finished on the next pass without paying for the inference twice).
+the cap; a failed delivery or receipt is finished on the next pass without paying for the inference twice), and the
+page's task amounts and pay path matching the contract.
 The contract tests cover membership from the DAO policy, by-laws only by vote, receipts refused under an
 unapproved config, receipt status rules, the audit net of the 5% market fee, the profit share with no money lost to
 rounding, claim rollback, steward bond and slash, pause, `cancel_join` admitting (not refunding) someone the DAO already
-voted in, savings read from the staking pool, code upgrades only by the DAO, the inference proof kept with each
+voted in, savings read from the staking pool, code upgrades only by the DAO, the task tiers (a newcomer needs one other
+member, then earns payment on acceptance; large tasks are refused as DAO bounties; the poster, the contributor and
+non-members cannot approve; payouts stop at the voted budget; a bounced payout returns to the budget and earns nothing;
+an approved DAO bounty counts once; a poster the members removed cannot accept; trust needs at least one finished task), the inference proof kept with each
 receipt, and moving to another USDC contract only when no share is unclaimed and no transfer is in flight. (On Windows, `contract/.cargo/config.toml` uses aws-lc-sys's prebuilt NASM objects.)
 
 ### 2. The whole story on testnet (~3 min)
@@ -183,9 +187,10 @@ The result is committed to [`evidence/`](evidence) and shown on the live page; a
 | Refresh every member's savings from the staking pool | `node scripts/sync-savings.mjs` | same workflow |
 | Re-prove the by-laws model runs in TEEs | `node agent/tee.mjs <model>` | `.github/workflows/tee.yml`, daily, commits `evidence/` |
 | Propose new by-laws | `node scripts/propose-bylaws.mjs config/config.vN.yaml <member> <points> "why" [voters…]` | by vote only |
-| Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposals #12, #16) |
+| Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposals #12, #16, #19, #25) |
 | One time: delete the contract account's full-access keys, so only a vote can change the code | `node scripts/upgrade.mjs --lock` | no (done on the demo co-op `koperasi-mw57ou3m.testnet`: 0 keys) |
-| Tasks the co-op pays for: post by vote, take, file the work, vote the payout | `node scripts/bounty.mjs post\|claim\|done\|vote\|list …` | by vote only |
+| Tasks the co-op pays for: post by vote, take, file the work, vote the payout (USDC, or NEAR with `--near`) | `node scripts/bounty.mjs post\|claim\|done\|vote\|list …` | by vote only |
+| Tasks with earned trust: vote the rule and the NEAR budget, post, take, deliver, accept, approve, count a DAO bounty on a record | `node scripts/tasks.mjs rule\|fund\|post\|claim\|submit\|accept\|approve\|credit\|list …` | rule and budget by vote; payouts by the tier |
 | Move the co-op to another USDC contract (claims every member's share in the old token first, registers the DAO and the contract with the new one) | `node scripts/switch-usdc.mjs [token id]` | by vote only (showcase: proposal #18) |
 
 ## How it works
@@ -209,6 +214,7 @@ The result is committed to [`evidence/`](evidence) and shown on the live page; a
 | Savings | NEAR the member staked in the pool the DAO chose (`set_staking_pool`), read on-chain by `sync_savings`; weights the profit share |
 | Members' meeting | DAO proposals and votes |
 | By-laws | the agent config; its sha256 is the only one the contract accepts receipts for (`set_config`) |
+| Task record (earned trust) | finished tasks per named account, each naming its task or DAO proposal (`get_record`); decides which tier pays (`contract/src/tasks.rs`) |
 | Contribution points | awarded by vote for by-law or tool work (`award_points`); reset after each profit share |
 | Audit | `get_audit`: paid jobs net of the 5% market fee vs. what the steward passed on |
 | Profit share | `ft_transfer_call(msg "share")` from the DAO: reserve back to the DAO, the rest credited per member (`claim_share`) |
@@ -221,7 +227,7 @@ Rules in plain words: [`RULES.md`](RULES.md).
 
 | Track | What the brief asks | Where it is here |
 |---|---|---|
-| **Social Money** | collective ownership, shared budgets, programmable rewards, reputation-based access, on Sputnik DAO and Trezu, without rebuilding the multisig | The DAO owns and steers the agent; membership is the DAO role; the profit share is a programmable reward by savings and contribution; contribution points trace to the proposal that awarded them; members are paid for tasks through Sputnik bounties; even the contract's code changes only by vote; all money sits in the Sputnik treasury (demo steps 1, 2, 6) |
+| **Social Money** | collective ownership, shared budgets, programmable rewards, reputation-based access, on Sputnik DAO and Trezu, without rebuilding the multisig | The DAO owns and steers the agent; membership is the DAO role; the profit share is a programmable reward by savings and contribution; contribution points trace to the proposal that awarded them; members are paid for tasks with **earned trust**: small payouts to contributors with a record are paid when the poster accepts, mid-size ones need one other member, large ones are normal Sputnik bounties voted by all, and every point of a record names the task or proposal it came from (section 06 of the page); even the contract's code changes only by vote; all money sits in the Sputnik treasury (demo steps 1, 2, 6) |
 | **Autonomous Business** | treasury, sales, procurement, revenue sharing; humans only set the constraints; no plaintext full-access key; public ledger; a short testnet loop | The agent sells work on Agent Market and buys its inference; the by-laws hold price, caps and kill switch (`pause`); the agent account has only a function-call key; receipts + audit are the public ledger (demo steps 3, 5, 7) |
 | **Agent Economy** | agents that earn, spend, pay for compute; a receipt per task | Bid → deliver → paid; inference cost per job from NEAR AI Cloud billing; one on-chain receipt per job (demo step 3) |
 
@@ -267,6 +273,20 @@ none on mainnet until the co-op's NEAR AI organization has credits).
    (`web/share.js`, tested against the contract's test). Open share proposals show the same preview to voters.
 4. **The human in the middle is bonded and audited.** The steward who holds the Agent Market account must pass every
    payout on; the audit is on-chain and the bond is slashable by vote. We found no other project that audits its operator.
+5. **Trust earned on-chain, on an unmodified Sputnik DAO.** Sputnik votes per proposal *kind*, so a 5 USDC and a
+   5,000 USDC transfer need the same vote, and Trezu exposes one Finance threshold. Koperasi adds the tiers beside the DAO
+   (`contract/src/tasks.rs`): payouts up to the members' `auto_max` are paid when the poster accepts, once the contributor
+   has `trusted_after` finished tasks; up to `one_vote_max` one other member approves (membership read from the DAO policy
+   at that moment); above that it is a normal Sputnik bounty voted by all, which `credit_dao_bounty` then counts. Each
+   point names the task or DAO proposal it came from, and nothing is paid beyond the budget the members voted. Others
+   either rank contributors off-chain and still pay by hand ([Dework XP ranks at DIA DAO](https://forum.diadata.org/t/gdp-011-proposing-a-rank-system-for-dia-dao-contributors/450)),
+   let trust unlock self-assignment but not payment ([Pocket PEP-42](https://forum.pokt.network/t/pep-42-reward-and-decentralise-rad/3397)),
+   or give a fixed address an allowance ([Zodiac Roles, as voted by HAI](https://www.tally.xyz/gov/hai/proposal/71232920685128172221431433589301790868107413093536771388303049247330839170330)):
+   the limit belongs to whoever holds the role, not to a record anyone can audit.
+   On testnet: task #0 paid after one member's approval, task #1 paid on earned trust with no vote, DAO bounty #1
+   (0.6 NEAR) voted by all in proposal #24 and counted on the record. Our mistake while seeding: task #0's delivery link
+   points to the by-laws file, which holds no translation; records are immutable, so it stays, and #1 and #24 carry
+   work anyone can check (the by-laws hash and the contract test run).
 
 ## Trust assumptions (read before you rely on it)
 
@@ -280,10 +300,11 @@ none on mainnet until the co-op's NEAR AI organization has credits).
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
-4. **The contract's code.** It runs a global contract the members approved (first #12, now #16), and `upgrade` only obeys the
+4. **The contract's code.** It runs a global contract the members approved (first #12, then #16, #19 for the task tiers, now #25 with two fixes from a security review; #20 re-ran #19's
+   upgrade after a lagging RPC made the script stop early), and `upgrade` only obeys the
    DAO. Both the showcase and the demo co-op are locked: their contract accounts have no full-access key left, so no
    one, the builder included, can deploy code without a vote; the live page shows the key count from the chain. Each upgrade publishes a global contract, which burns ~10x normal storage
-   (about 26 NEAR for this 256 KB contract).
+   (about 31 NEAR for this 305 KB contract).
 5. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
    code. It is not listed for hire until the co-op's NEAR AI organization has credits, so no buyer can hire an agent
