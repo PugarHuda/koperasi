@@ -1,8 +1,8 @@
 {
   "ok": true,
   "model": "z-ai/glm-5.3-flash",
-  "at": "2026-11-07T11:07:21.817Z",
-  "nonce": "b03708872b84d93ff462cefb3df039f917195350e38594336bcbeb2944d701b3",
+  "at": "2026-11-08T10:28:20.322Z",
+  "nonce": "7731fee47d809a508b299d7bd0fc05465528191b8b7752cf8a3b1895f5d32cd1",
   "gateway": {
     "signing_address": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
     "signing_algo": "ecdsa",
