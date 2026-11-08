@@ -701,70 +701,193 @@ fn the_ledger_starts_only_once() {
 // ---------- tasks with earned trust ----------
 
 const MILLI: u128 = 1_000_000_000_000_000_000_000;
+const DAY: u64 = 86_400_000_000_000;
 
 fn me() -> AccountId {
     acc("koperasi.testnet")
 }
 
-/// alice and bob are members; the members voted 1 NEAR, auto ≤ 0.1 NEAR after 1 finished task, one vote ≤ 0.5 NEAR.
+fn trust(trusted_after: u32) -> TrustRule {
+    TrustRule {
+        auto_max: U128(100 * MILLI),
+        one_vote_max: U128(500 * MILLI),
+        trusted_after,
+        poster_daily_auto: U128(200 * MILLI),
+        points: 5,
+    }
+}
+
+/// alice and bob are members; the members let the contract pay 1 NEAR from the treasury: no vote ≤ 0.1 NEAR once
+/// trusted by 1 source, ≤ 0.2 NEAR a day per poster; one vote ≤ 0.5 NEAR; 5 points per finished task.
 fn board() -> Koperasi {
     let mut k = setup();
     with_members(&mut k, &["alice.testnet", "bob.testnet"]);
     as_(&dao(), near(0));
-    k.set_trust(TrustRule { auto_max: U128(100 * MILLI), one_vote_max: U128(500 * MILLI), trusted_after: 1 });
-    as_(&dao(), near(1));
-    k.fund_tasks();
+    k.set_trust(trust(1));
+    k.set_task_budget(U128(1000 * MILLI));
     k
 }
 
-/// alice posts, carol takes and delivers, alice accepts. Returns whether it paid at once.
-fn deliver(k: &mut Koperasi, amount: u128) -> (u32, bool) {
-    as_(&acc("alice.testnet"), TASK_FEE);
+/// `poster` posts, `worker` takes and delivers, `poster` accepts. Returns the id and whether it paid with no vote.
+fn deliver_by(k: &mut Koperasi, poster: &str, worker: &str, amount: u128) -> (u32, bool) {
+    as_(&acc(poster), TASK_FEE);
     let id = k.post_task("translate the by-laws".into(), U128(amount));
-    as_(&acc("carol.testnet"), near(0));
+    as_(&acc(worker), near(0));
     k.claim_task(id);
     k.submit_task(id, "https://example.org/by-laws-id.md".into());
-    as_(&acc("alice.testnet"), near(0));
+    as_(&acc(poster), near(0));
     (id, k.accept_task(id))
 }
 
-fn paid(k: &mut Koperasi, id: u32, ok: bool) {
+fn deliver(k: &mut Koperasi, amount: u128) -> (u32, bool) {
+    deliver_by(k, "alice.testnet", "carol.testnet", amount)
+}
+
+/// Sputnik answers: the Transfer proposal got id `100 + id`, and after the contract's vote it reads `status`.
+fn dao_says(k: &mut Koperasi, id: u32, status: &str) {
     as_(&me(), near(0));
-    k.on_task_paid(id, if ok { Ok(()) } else { Err(PromiseError::Failed) });
+    let _ = k.on_payout_proposed(id, Ok(100 + id as u64));
+    k.on_payout_checked(id, Ok(json!({ "status": status })));
+}
+
+fn approve(k: &mut Koperasi, id: u32) {
+    as_(&me(), near(0));
+    k.on_approve_policy(id, acc("bob.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
 }
 
 #[test]
-fn a_newcomer_needs_one_other_member_then_earns_trust_and_is_paid_on_acceptance() {
+fn a_newcomer_needs_one_other_member_then_earns_trust_and_is_paid_from_the_treasury_by_a_dao_proposal() {
     let mut k = board();
     let (id, at_once) = deliver(&mut k, 50 * MILLI);
     assert!(!at_once, "no track record yet");
     assert_eq!(k.get_tasks(None, None)[0].status, TaskStatus::NeedsApproval);
-    as_(&me(), near(0));
-    k.on_approve_policy(id, acc("bob.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
+    approve(&mut k, id);
+    assert_eq!(k.get_tasks(None, None)[0].status, TaskStatus::Paying);
     assert_eq!(k.get_board().budget.0, 950 * MILLI);
-    paid(&mut k, id, true);
+    dao_says(&mut k, id, "Approved");
     let t = &k.get_tasks(None, None)[0];
     assert_eq!((t.status, t.approved_by.clone()), (TaskStatus::Paid, Some(acc("bob.testnet"))));
+    assert_eq!(k.get_payout_proposal(id), Some(100));
     let r = k.get_record(acc("carol.testnet")).unwrap();
     assert_eq!((r.done, r.earned.0, r.refs.clone()), (1, 50 * MILLI, vec!["task:0".to_string()]));
+    assert_eq!(k.get_trust_sources(acc("carol.testnet")), 1);
 
     // now trusted: a small task is paid when alice accepts, with no vote
     let (id, at_once) = deliver(&mut k, 80 * MILLI);
     assert!(at_once);
-    paid(&mut k, id, true);
+    assert_eq!(k.get_tasks(None, None)[1].approved_by, None);
+    dao_says(&mut k, id, "Approved");
     assert_eq!(k.get_record(acc("carol.testnet")).unwrap().refs, vec!["task:0", "task:1"]);
     assert_eq!(k.get_board().budget.0, 870 * MILLI);
     assert_eq!(k.get_contributors().len(), 1);
 }
 
 #[test]
+fn two_friends_cannot_make_each_other_trusted_trust_needs_different_posters() {
+    let mut k = board();
+    as_(&dao(), near(0));
+    k.set_trust(trust(2));
+    for _ in 0..2 {
+        let (id, at_once) = deliver(&mut k, 50 * MILLI);
+        assert!(!at_once, "only alice ever posted for carol: one source");
+        approve(&mut k, id);
+        dao_says(&mut k, id, "Approved");
+    }
+    assert_eq!((k.get_record(acc("carol.testnet")).unwrap().done, k.get_trust_sources(acc("carol.testnet"))), (2, 1));
+    // a task from bob is a second source
+    let (id, at_once) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 50 * MILLI);
+    assert!(!at_once);
+    as_(&me(), near(0));
+    k.on_approve_policy(id, acc("alice.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
+    dao_says(&mut k, id, "Approved");
+    assert_eq!(k.get_trust_sources(acc("carol.testnet")), 2);
+    assert!(deliver(&mut k, 50 * MILLI).1, "trusted by alice and bob");
+}
+
+#[test]
+fn a_poster_pays_with_no_vote_only_up_to_the_daily_limit() {
+    let mut k = board();
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, id);
+    dao_says(&mut k, id, "Approved");
+    assert!(deliver(&mut k, 100 * MILLI).1);
+    assert!(deliver(&mut k, 100 * MILLI).1, "200 of 200 today");
+    assert!(!deliver(&mut k, 10 * MILLI).1, "over alice's 0.2 NEAR today: one other member must approve");
+    // the next day the limit starts again
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(acc("alice.testnet")).attached_deposit(TASK_FEE).block_timestamp(DAY);
+    testing_env!(b.build());
+    let id = k.post_task("t".into(), U128(MILLI));
+    b.predecessor_account_id(acc("carol.testnet")).attached_deposit(near(0));
+    testing_env!(b.build());
+    k.claim_task(id);
+    k.submit_task(id, "w".into());
+    b.predecessor_account_id(acc("alice.testnet"));
+    testing_env!(b.build());
+    assert!(k.accept_task(id));
+}
+
+#[test]
+fn a_member_who_finishes_a_task_earns_contribution_points_for_the_profit_share() {
+    let mut k = board();
+    let (id, _) = deliver_by(&mut k, "alice.testnet", "bob.testnet", 50 * MILLI);
+    as_(&me(), near(0));
+    k.on_approve_policy(id, acc("dave.testnet"), Ok(policy(&["alice.testnet", "bob.testnet", "dave.testnet"])));
+    assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 0, "nothing before the DAO pays");
+    dao_says(&mut k, id, "Approved");
+    assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 5);
+    // a non-member contributor gets the record, not points (and nothing panics)
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, id);
+    dao_says(&mut k, id, "Approved");
+    assert_eq!(k.get_record(acc("carol.testnet")).unwrap().done, 1);
+}
+
+#[test]
+fn a_payout_the_dao_did_not_make_goes_back_to_the_budget_and_earns_nothing() {
+    let mut k = board();
+    for status in ["Rejected", "Removed", "Failed", "Expired"] {
+        let (id, _) = deliver(&mut k, 50 * MILLI);
+        approve(&mut k, id);
+        dao_says(&mut k, id, status);
+        assert_eq!(k.get_board().budget.0, 1000 * MILLI, "{status}");
+        assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Submitted);
+        assert_eq!(k.get_payout_proposal(id), None);
+        assert!(k.get_record(acc("carol.testnet")).is_none());
+    }
+    // Sputnik refused the proposal itself (e.g. the bond): same
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, id);
+    as_(&me(), near(0));
+    let _ = k.on_payout_proposed(id, Err(PromiseError::Failed));
+    assert_eq!((k.get_tasks(None, None)[id as usize].status, k.get_board().budget.0), (TaskStatus::Submitted, 1000 * MILLI));
+}
+
+#[test]
+fn a_payout_still_open_in_the_dao_waits_and_settles_once() {
+    let mut k = board();
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, id);
+    dao_says(&mut k, id, "InProgress"); // e.g. the `tasks` role is missing: the members vote it by hand
+    assert_eq!(k.get_tasks(None, None)[0].status, TaskStatus::Paying);
+    assert_eq!(k.get_board().budget.0, 950 * MILLI);
+    as_(&acc("anyone.testnet"), near(0));
+    let _ = k.settle_task(id);
+    as_(&me(), near(0));
+    k.on_payout_checked(id, Ok(json!({ "status": "Approved" })));
+    assert_eq!(k.get_tasks(None, None)[0].status, TaskStatus::Paid);
+    let again = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.on_payout_checked(id, Ok(json!({ "status": "Approved" })))));
+    assert!(again.is_err(), "counted once");
+    assert_eq!(k.get_record(acc("carol.testnet")).unwrap().done, 1);
+}
+
+#[test]
 fn a_trusted_contributor_still_needs_a_vote_above_auto_max() {
     let mut k = board();
     let (id, _) = deliver(&mut k, 50 * MILLI);
-    as_(&me(), near(0));
-    k.on_approve_policy(id, acc("bob.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
-    paid(&mut k, id, true);
-    let (_, at_once) = deliver(&mut k, 300 * MILLI);
+    approve(&mut k, id);
+    dao_says(&mut k, id, "Approved");
+    let (_, at_once) = deliver(&mut k, 150 * MILLI);
     assert!(!at_once);
 }
 
@@ -806,22 +929,9 @@ fn only_members_post() {
 fn payouts_stop_at_the_budget_the_members_voted() {
     let mut k = board();
     as_(&dao(), near(0));
-    let _ = k.return_budget(U128(990 * MILLI));
+    k.set_task_budget(U128(10 * MILLI));
     let (id, _) = deliver(&mut k, 50 * MILLI);
-    as_(&me(), near(0));
-    k.on_approve_policy(id, acc("bob.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
-}
-
-#[test]
-fn a_bounced_payout_goes_back_to_the_budget_and_earns_nothing() {
-    let mut k = board();
-    let (id, _) = deliver(&mut k, 50 * MILLI);
-    as_(&me(), near(0));
-    k.on_approve_policy(id, acc("bob.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
-    paid(&mut k, id, false);
-    assert_eq!(k.get_board().budget.0, 1000 * MILLI);
-    assert_eq!(k.get_tasks(None, None)[0].status, TaskStatus::Submitted);
-    assert!(k.get_record(acc("carol.testnet")).is_none());
+    approve(&mut k, id);
 }
 
 #[test]
@@ -834,7 +944,8 @@ fn the_flow_refuses_out_of_turn_steps() {
         ("carol.testnet", "submit unclaimed"),
         ("bob.testnet", "accept as non-poster"),
         ("carol.testnet", "set rule"),
-        ("carol.testnet", "fund"),
+        ("carol.testnet", "budget"),
+        ("carol.testnet", "settle unpaid"),
     ] {
         as_(&acc(who), near(0));
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match step {
@@ -843,8 +954,11 @@ fn the_flow_refuses_out_of_turn_steps() {
             "accept as non-poster" => {
                 k.accept_task(id);
             }
-            "set rule" => k.set_trust(TrustRule { auto_max: U128(0), one_vote_max: U128(0), trusted_after: 0 }),
-            _ => k.fund_tasks(),
+            "set rule" => k.set_trust(trust(1)),
+            "budget" => k.set_task_budget(U128(1)),
+            _ => {
+                let _ = k.settle_task(id);
+            }
         }));
         assert!(r.is_err(), "{step} should fail");
     }
@@ -874,8 +988,12 @@ fn an_approved_dao_bounty_counts_once_on_the_receivers_record() {
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.on_dao_proposal(if p["status"] == "Approved" && p["kind"]["BountyDone"].is_object() { 7 } else { 8 }, Ok(p.clone()))));
         assert!(r.is_err());
     }
-    // trusted through the DAO bounty: a small task is paid on acceptance
+    // trusted through the DAO bounty (the DAO is a source): a small task is paid on acceptance
     assert!(deliver(&mut k, 50 * MILLI).1);
+    // a member paid a DAO bounty earns the voted points too
+    as_(&me(), near(0));
+    k.on_dao_proposal(9, Ok(json!({ "status": "Approved", "kind": { "BountyDone": { "bounty_id": 1, "receiver_id": "bob.testnet" } } })));
+    assert_eq!(k.get_member(acc("bob.testnet")).unwrap().points, 5);
 }
 
 #[test]
@@ -899,5 +1017,5 @@ fn a_poster_the_members_removed_cannot_pay_on_trust() {
 fn trust_needs_at_least_one_finished_task() {
     let mut k = board();
     as_(&dao(), near(0));
-    k.set_trust(TrustRule { auto_max: U128(MILLI), one_vote_max: U128(MILLI), trusted_after: 0 });
+    k.set_trust(TrustRule { trusted_after: 0, ..trust(1) });
 }

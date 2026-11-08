@@ -53,8 +53,16 @@ export const nearUnits = (text) => {
 };
 
 /**
- * How a delivered task gets paid (Koperasi::accept_task in contract/src/tasks.rs): "trust" pays when the poster accepts,
- * "member" waits for one other member. `done` is the contributor's finished tasks.
- * @param {string} amount yoctoNEAR @param {{ auto_max: string, trusted_after: number }} rule @param {number} done
+ * Different sources that trust a contributor (`sources` in contract/src/tasks.rs): each task's poster, and the DAO for
+ * every voted bounty. Two members posting only to each other's friend add one source each.
+ * @param {string[]} refs "task:<id>" | "dao-proposal:<id>" @param {{ id: number, poster: string }[]} tasks
  */
-export const payPath = (amount, rule, done) => (BigInt(amount) <= BigInt(rule.auto_max) && done >= rule.trusted_after ? "trust" : "member");
+export const trustSources = (refs, tasks) =>
+  new Set(refs.map((r) => (r.startsWith("task:") ? tasks.find((t) => t.id === Number(r.slice(5)))?.poster ?? r : "dao"))).size;
+
+/**
+ * How a delivered task gets paid (Koperasi::accept_task in contract/src/tasks.rs): "trust" pays when the poster accepts
+ * (if the poster is still within their daily limit, which only the contract knows), "member" waits for one other member.
+ * @param {string} amount yoctoNEAR @param {{ auto_max: string, trusted_after: number }} rule @param {number} sources
+ */
+export const payPath = (amount, rule, sources) => (BigInt(amount) <= BigInt(rule.auto_max) && sources >= rule.trusted_after ? "trust" : "member");

@@ -112,7 +112,7 @@ test("views move to the next RPC on rate limits and network failures, never on a
 });
 
 test("the page's task amounts and pay path follow the contract (tasks.rs: accept_task)", async () => {
-  const { nearUnits, payPath } = await import("../../web/share.js");
+  const { nearUnits, payPath, trustSources } = await import("../../web/share.js");
   assert.equal(nearUnits("0.05"), 5n * 10n ** 22n);
   assert.equal(nearUnits("1"), 10n ** 24n);
   for (const bad of ["0", "-1", "abc", "1.1234567", "", "1e3", "0.000000"]) assert.equal(nearUnits(bad), null, bad);
@@ -120,4 +120,9 @@ test("the page's task amounts and pay path follow the contract (tasks.rs: accept
   assert.equal(payPath((10n ** 23n).toString(), rule, 1), "trust", "at the limit, trusted");
   assert.equal(payPath((10n ** 23n + 1n).toString(), rule, 5), "member", "above the limit");
   assert.equal(payPath("1", rule, 0), "member", "no record yet");
+  // trust counts different posters, and the DAO for voted bounties (tasks.rs: sources)
+  const tasks = [{ id: 0, poster: "alice" }, { id: 1, poster: "alice" }, { id: 2, poster: "bob" }];
+  assert.equal(trustSources(["task:0", "task:1"], tasks), 1, "one friend posting twice is one source");
+  assert.equal(trustSources(["task:0", "task:2", "dao-proposal:24"], tasks), 3);
+  assert.equal(trustSources(["dao-proposal:1", "dao-proposal:2"], tasks), 1, "the DAO is one source");
 });

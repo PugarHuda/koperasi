@@ -15,6 +15,7 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
 
 import { dep, testnet, RAW, explorer, view, all, query, $, esc, usdc, nearAmt } from "./near.js";
 import { verifyInBrowser } from "./tee.js";
+import { trustSources } from "./share.js";
 
 // "Don't trust us": each check writes its verdict into its card
 const verdict = (id, ok, html) => {
@@ -30,7 +31,10 @@ const rows = (tbody, html) => { tbody.innerHTML = html || `<tr><td colspan="9" c
 
 // read with the rest, not after it: the board sits above the join panel, and filling it late would move the panel
 // under the reader's pointer
-const trustBoard = Promise.all([view(dep.contract, "get_board"), all(dep.contract, "get_tasks"), view(dep.contract, "get_contributors")]);
+// with the DAO proposal that paid each task (task payouts are Transfer proposals filed by the contract's `tasks` role)
+const trustBoard = Promise.all([view(dep.contract, "get_board"), all(dep.contract, "get_tasks"), view(dep.contract, "get_contributors")])
+  .then(async ([b, tasks, recs]) => [b, tasks, recs, await Promise.all(tasks.map((t) =>
+    (t.status === "Paid" || t.status === "Paying" ? view(dep.contract, "get_payout_proposal", { id: t.id }) : null)))]);
 trustBoard.catch(() => {}); // handled where it is rendered
 
 try {
@@ -308,32 +312,33 @@ try {
       <td class="num" data-label="Left">${b.times}</td><td class="num" data-label="Taken">${taken[i]}</td></tr>`).join(""));
   }).catch(() => rows($("bounties").tBodies[0], ""));
   // tasks with earned trust: the members' rule, every task, and each contributor's record with its sources
-  trustBoard.then(([b, tasks, recs]) => {
+  trustBoard.then(([b, tasks, recs, payouts]) => {
     const rule = b.rule;
     $("trust-rule").innerHTML = rule
-      ? `The members voted the rule and a budget of NEAR for tasks; <strong>${nearAmt(b.budget)} NEAR</strong> of it is left. Payouts above ${nearAmt(rule.one_vote_max)} NEAR never skip the full vote.`
+      ? `The money stays in the DAO treasury: each payout is a Transfer proposal the contract files and approves with its own DAO role <code>tasks</code>, which can do nothing else. The members let it pay <strong>${nearAmt(b.budget)} NEAR</strong> more. A member who finishes a task earns ${rule.points} contribution points toward the profit share.`
       : "The members have not voted a trust rule yet, so no task can be posted.";
     $("tiers").innerHTML = rule ? [
-      ["Paid on acceptance", `up to ${nearAmt(rule.auto_max)} NEAR, for a contributor with ${rule.trusted_after}+ finished task${rule.trusted_after === 1 ? "" : "s"}. No vote.`],
+      ["Paid on acceptance", `up to ${nearAmt(rule.auto_max)} NEAR, for a contributor trusted by ${rule.trusted_after}+ different member${rule.trusted_after === 1 ? "" : "s"} (or a voted bounty). Each poster pays at most ${nearAmt(rule.poster_daily_auto)} NEAR a day this way. No vote.`],
       ["One member approves", `up to ${nearAmt(rule.one_vote_max)} NEAR, or anyone without that record yet. Never the poster or the contributor.`],
       ["All members vote", `above ${nearAmt(rule.one_vote_max)} NEAR: a Sputnik DAO bounty, paid from the treasury, counted on the record.`],
     ].map(([h, p]) => `<li><b>${h}</b><span>${p}</span></li>`).join("") : "";
     const STATUS = { Open: "Open", Claimed: "Taken", Submitted: "Delivered, waiting for the poster", NeedsApproval: "Waiting for one member",
       Paying: "Paying", Paid: "Paid", Cancelled: "Cancelled" };
     const work = (d) => (/^https:\/\/\S+$/.test(d) ? `<a href="${esc(d)}" rel="noopener">${esc(d)}</a>` : esc(d));
-    rows($("tasks").tBodies[0], [...tasks].reverse().map((t) => `<tr id="task-${t.id}">
+    rows($("tasks").tBodies[0], tasks.map((t, i) => [t, i]).reverse().map(([t, i]) => `<tr id="task-${t.id}">
       <td><strong>#${t.id}</strong> ${esc(t.description)}<span class="claim">posted by ${esc(t.poster)}${t.deliverable ? `; delivered: ${work(t.deliverable)}` : ""}</span></td>
       <td class="num" data-label="Pays">${nearAmt(t.amount)} NEAR</td>
       <td data-label="Status">${STATUS[t.status] ?? esc(t.status)}</td>
       <td data-label="Contributor">${t.contributor ? `<a href="${explorer(t.contributor)}">${esc(t.contributor)}</a>` : "–"}</td>
-      <td data-label="Paid how">${t.status !== "Paid" ? "–" : t.approved_by ? `approved by ${esc(t.approved_by)}` : "on earned trust, no vote"}</td></tr>`).join(""));
+      <td data-label="Paid how">${t.status !== "Paid" ? "–" : t.approved_by ? `approved by ${esc(t.approved_by)}` : "on earned trust, no vote"}${
+        payouts[i] === null || payouts[i] === undefined ? "" : `; <a href="${explorer(dep.dao)}">DAO proposal #${esc(payouts[i])}</a>`}</td></tr>`).join(""));
     const src = (r) => {
       const [kind, id] = r.split(":");
       return kind === "task" ? `<a href="#task-${esc(id)}">task #${esc(id)}</a>` : `<a href="${explorer(dep.dao)}">DAO proposal #${esc(id)}</a>`;
     };
     rows($("records").tBodies[0], recs.map(([who, r]) => `<tr><td><a href="${explorer(who)}">${esc(who)}</a></td>
       <td class="num" data-label="Finished">${r.done}</td>
-      <td data-label="Trusted">${rule && r.done >= rule.trusted_after ? `yes, up to ${nearAmt(rule.auto_max)} NEAR` : "not yet"}</td>
+      <td data-label="Trusted">${rule && trustSources(r.refs, tasks) >= rule.trusted_after ? `yes, up to ${nearAmt(rule.auto_max)} NEAR` : "not yet"}</td>
       <td data-label="Sources">${r.refs.map(src).join(", ")}</td></tr>`).join(""));
   }).catch(() => {
     $("trust-rule").textContent = "Could not read the task board right now. Reload in a moment.";

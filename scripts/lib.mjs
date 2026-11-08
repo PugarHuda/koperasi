@@ -187,13 +187,21 @@ export const accountUrl = (id) => `https://${NETWORK === "mainnet" ? "" : "testn
 
 // ---------- Sputnik DAO ----------
 
+/**
+ * The contract's role for task payouts (contract/src/tasks.rs): it may only file and approve `transfer` proposals, so a
+ * payout is a Transfer from the treasury that anyone can read in the DAO; the contract decides when by the members' rule.
+ */
+export const tasksRole = (contract) =>
+  ({ name: "tasks", kind: { Group: [contract] }, permissions: ["transfer:AddProposal", "transfer:VoteApprove"], vote_policy: {} });
+
 /** 1 member 1 vote: role `member` votes with RoleWeight, half + 1 decides; anyone may propose. */
-export function koperasiPolicy(founders) {
+export function koperasiPolicy(founders, contract) {
   const voteAll = ["*:VoteApprove", "*:VoteReject", "*:VoteRemove", "*:Finalize", "*:AddProposal"];
   return {
     roles: [
       { name: "all", kind: "Everyone", permissions: ["*:AddProposal"], vote_policy: {} },
       { name: "member", kind: { Group: founders }, permissions: voteAll, vote_policy: {} },
+      ...(contract ? [tasksRole(contract)] : []),
     ],
     default_vote_policy: { weight_kind: "RoleWeight", quorum: "0", threshold: [1, 2] },
     proposal_bond: (NEAR / 10n).toString(),
@@ -203,10 +211,10 @@ export function koperasiPolicy(founders) {
   };
 }
 
-export async function createDao(founder, name, purpose, founders, deposit = 6n * NEAR) {
+export async function createDao(founder, name, purpose, founders, contract, deposit = 6n * NEAR) {
   await call(founder, SPUTNIK_FACTORY, "create", {
     name,
-    args: b64({ config: { name, purpose, metadata: "" }, policy: koperasiPolicy(founders) }),
+    args: b64({ config: { name, purpose, metadata: "" }, policy: koperasiPolicy(founders, contract) }),
   }, { deposit, tgas: 150 });
   return `${name}.${SPUTNIK_FACTORY}`;
 }

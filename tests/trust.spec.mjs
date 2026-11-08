@@ -7,7 +7,7 @@ const CAROL = "kop-carol-mw4i2iwk.testnet";
 const ALICE = "kop-alice-mw4i3w8f.testnet";
 const BOB = "kop-bob-mw4i3w8f.testnet";
 const N = (n) => (BigInt(Math.round(n * 1e6)) * 10n ** 18n).toString();
-const rule = { auto_max: N(0.1), one_vote_max: N(0.5), trusted_after: 1 };
+const rule = { auto_max: N(0.1), one_vote_max: N(0.5), trusted_after: 1, poster_daily_auto: N(0.2), points: 5 };
 const task = (id, status, extra = {}) => ({ id, poster: ALICE, description: `task ${id}`, amount: N(0.05), contributor: CAROL,
   deliverable: null, approved_by: null, status, created: "0", paid_at: null, ...extra });
 
@@ -15,10 +15,12 @@ test("the board shows the members' three tiers, every task and where each point 
   await page.goto("/#trust");
   const tiers = page.locator("#tiers li");
   await expect(tiers).toHaveCount(3);
-  await expect(tiers.nth(0)).toContainText(/Paid on acceptance.*up to [\d.]+ NEAR/s);
+  await expect(tiers.nth(0)).toContainText(/Paid on acceptance.*up to [\d.]+ NEAR.*different member.*[\d.]+ NEAR a day/s);
   await expect(tiers.nth(1)).toContainText("Never the poster or the contributor");
   await expect(tiers.nth(2)).toContainText("Sputnik DAO bounty");
-  await expect(page.locator("#trust-rule")).toContainText(/NEAR of it is left/);
+  await expect(page.locator("#trust-rule")).toContainText(/Transfer proposal the contract files and approves with its own DAO role tasks.*[\d.]+ NEAR more.*contribution points/s);
+  // since the move into the DAO, a paid task links the Transfer proposal that paid it
+  await expect(page.locator("#tasks tbody")).toContainText(/DAO proposal #\d+/);
   // on the showcase: task #0 paid with one member's approval, #1 paid on earned trust, a DAO bounty on the record
   await expect(page.locator("#task-0")).toContainText(`approved by ${BOB}`);
   await expect(page.locator("#task-1")).toContainText("on earned trust, no vote");
@@ -66,7 +68,7 @@ test("the poster sees how acceptance will pay: at once for a trusted contributor
     get_tasks: [task(0, "Submitted", { deliverable: "https://example.org/a" }), task(1, "Submitted", { amount: N(0.3) })],
     get_contributors: [[CAROL, { done: 1, earned: N(0.05), refs: ["task:9"] }]] });
   await page.goto(`/?as=${ALICE}`);
-  await expect(page.locator("[data-taccept='0']")).toContainText("pays at once: trusted contributor");
+  await expect(page.locator("[data-taccept='0']")).toContainText("pays at once if you are within your daily limit");
   await expect(page.locator("[data-taccept='1']")).toContainText("then one other member approves");
 });
 

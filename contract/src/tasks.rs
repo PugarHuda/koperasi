@@ -1,30 +1,47 @@
 //! Tasks the co-op pays for, with earned trust. The members vote a NEAR budget and a trust rule; a member posts a
 //! task, anyone takes it, and when the poster accepts the work the payout is decided by size and track record:
-//!   - up to `auto_max`, to a contributor with `trusted_after` finished tasks: paid at once from the budget;
-//!   - up to `one_vote_max`: paid once one other member (not the poster, not the contributor) approves;
+//!   - up to `auto_max`, to a contributor trusted by `trusted_after` *different* sources (task posters, or the DAO
+//!     for a voted bounty), within the poster's `poster_daily_auto`: paid with no vote;
+//!   - up to `one_vote_max` (or when the above does not hold): paid once one other member approves;
 //!   - larger: not posted here at all; it is a normal DAO proposal (a Sputnik bounty) and `credit_dao_bounty`
 //!     adds it to the contributor's record once the members approved it.
 //!
-//! Every point of a record names the task or DAO proposal it came from. Custody and the budget stay with the DAO:
-//! only a vote funds the budget, sets the rule, cancels any task or takes the budget back.
+//! The money stays in the DAO's treasury until a payout: this contract holds the Sputnik role `tasks`, which may only
+//! add and approve `transfer` proposals. A payout is a Transfer proposal from the treasury that the contract files and
+//! approves itself, so every payout is a DAO proposal anyone can read, and the role is visible in the DAO policy.
+//! The members vote how much the contract may pay out in total (`set_task_budget`), the rule, and can cancel any task.
+//! A finished task by a member also earns the contribution points the members voted, so it raises their profit share.
 //!
 //! State lives under its own storage keys (not struct fields), so the upgrade needs no state migration.
 
 use crate::*;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 
-const KEY_TRUST: &[u8] = b"trust";
+// v2: the v1 rule (stored under "trust") had no poster cap or points; the members vote a v2 rule after the upgrade
+const KEY_TRUST: &[u8] = b"trust_v2";
 const KEY_BUDGET: &[u8] = b"task_budget";
 const KEY_TASK_COUNT: &[u8] = b"task_count";
 const KEY_CONTRIBUTORS: &[u8] = b"contributors";
 /// Kept by the contract for the task's storage; also what makes spamming the board cost something.
 pub const TASK_FEE: NearToken = NearToken::from_millinear(10);
 const MAX_TEXT: usize = 500;
+/// The DAO role that lets this contract file and approve `transfer` proposals, and nothing else.
+pub const TASKS_ROLE: &str = "tasks";
+// ponytail: the DAO's proposal bond (0.1 NEAR on Koperasi DAOs), fronted from the contract's balance and returned by
+// Sputnik when the payout is approved; read it from the policy if a DAO ever votes a different bond.
+pub const PAYOUT_BOND: NearToken = NearToken::from_millinear(100);
+const DAY_NS: u64 = 86_400_000_000_000;
+const GAS_PROPOSE: Gas = Gas::from_tgas(15);
+const GAS_ACT: Gas = Gas::from_tgas(50);
+const GAS_PROPOSED: Gas = Gas::from_tgas(90);
+const GAS_CHECKED: Gas = Gas::from_tgas(15);
 
 #[ext_contract(ext_dao_proposals)]
 #[allow(dead_code)]
 trait SputnikProposals {
     fn get_proposal(&self, id: u64) -> Value;
+    fn add_proposal(&mut self, proposal: Value) -> u64;
+    fn act_proposal(&mut self, id: u64, action: String, proposal: Value, memo: Option<String>);
 }
 
 #[near(serializers = [borsh, json])]
@@ -34,8 +51,12 @@ pub struct TrustRule {
     pub auto_max: U128,
     /// yoctoNEAR: payouts up to this need one other member; larger tasks are DAO proposals.
     pub one_vote_max: U128,
-    /// finished tasks (here or DAO bounties) before a contributor is trusted.
+    /// different sources (task posters; the DAO for voted bounties) on a record before a contributor is trusted.
     pub trusted_after: u32,
+    /// yoctoNEAR one poster may pay out with no vote per UTC day; more waits for one other member.
+    pub poster_daily_auto: U128,
+    /// contribution points a member earns per finished task or DAO bounty (they weigh the profit share).
+    pub points: u64,
 }
 
 #[near(serializers = [borsh, json])]
@@ -81,7 +102,7 @@ pub struct Record {
 #[near(serializers = [json])]
 pub struct Board {
     pub rule: Option<TrustRule>,
-    /// yoctoNEAR the members voted for tasks and not yet paid out
+    /// yoctoNEAR the members let this contract pay from the treasury, not yet paid out
     pub budget: U128,
     pub tasks: u32,
 }
@@ -107,20 +128,24 @@ fn task(id: u32) -> Task {
 fn text(s: &str, what: &str) {
     require!(!s.trim().is_empty() && s.len() <= MAX_TEXT, format!("{what}: 1 to {MAX_TEXT} characters"));
 }
+fn payout_key(id: u32) -> Vec<u8> {
+    format!("payout:{id}").into_bytes()
+}
+fn payout_kind(t: &Task) -> Value {
+    near_sdk::serde_json::json!({ "Transfer": {
+        "token_id": "", "receiver_id": t.contributor.as_ref().unwrap(), "amount": t.amount, "msg": null } })
+}
 
-/// One more point on `who`'s record, from `source`.
-fn credit(who: &AccountId, source: String, earned: u128) {
-    let mut r: Record = load(&record_key(who)).unwrap_or_else(|| {
-        let mut all: Vec<AccountId> = load(KEY_CONTRIBUTORS).unwrap_or_default();
-        all.push(who.clone());
-        save(KEY_CONTRIBUTORS, &all);
-        Record::default()
-    });
-    r.done += 1;
-    r.earned = U128(r.earned.0 + earned);
-    log!("trust: +1 for {} from {}", who, source);
-    r.refs.push(source);
-    save(&record_key(who), &r);
+/// Different sources on a record: each task's poster, and the DAO (all members) for every voted bounty. Two friends
+/// posting tasks to each other give one source each, so trust needs work for more than one member.
+// ponytail: reads every task on the record; keep a poster set per record if records grow long
+fn sources(r: &Record) -> u32 {
+    let mut s: Vec<String> = r.refs.iter()
+        .map(|x| x.strip_prefix("task:").map_or("dao".into(), |id| task(id.parse().unwrap()).poster.to_string()))
+        .collect();
+    s.sort();
+    s.dedup();
+    s.len() as u32
 }
 
 #[near]
@@ -134,19 +159,10 @@ impl Koperasi {
         save(KEY_TRUST, &rule);
     }
 
-    /// The members add NEAR to the task budget (a FunctionCall proposal with a deposit).
-    #[payable]
-    pub fn fund_tasks(&mut self) {
+    /// How much this contract may still pay from the DAO's treasury for tasks, in yoctoNEAR (replaces what is left).
+    pub fn set_task_budget(&mut self, amount: U128) {
         self.assert_dao();
-        write_u128(KEY_BUDGET, budget() + env::attached_deposit().as_yoctonear());
-    }
-
-    /// The members take unspent budget back to the DAO.
-    pub fn return_budget(&mut self, amount: U128) -> Promise {
-        self.assert_dao();
-        require!(amount.0 > 0 && amount.0 <= budget(), "more than the budget");
-        write_u128(KEY_BUDGET, budget() - amount.0);
-        Promise::new(self.dao_id.clone()).transfer(NearToken::from_yoctonear(amount.0))
+        write_u128(KEY_BUDGET, amount.0);
     }
 
     // ---------- the task's life ----------
@@ -210,8 +226,8 @@ impl Koperasi {
         save(&task_key(id), &t);
     }
 
-    /// The poster accepts the work: paid at once if small and the contributor is trusted, else it waits for one
-    /// other member's approval. Returns true when it paid.
+    /// The poster accepts the work: paid with no vote if small, the contributor is trusted and the poster is within
+    /// their daily limit; else it waits for one other member's approval. Returns true when the payout started.
     pub fn accept_task(&mut self, id: u32) -> bool {
         let mut t = task(id);
         require!(t.status == TaskStatus::Submitted, "nothing submitted");
@@ -220,8 +236,12 @@ impl Koperasi {
         require!(self.members.contains_key(&t.poster), "the poster is no longer a member");
         let rule: TrustRule = load(KEY_TRUST).unwrap_or_else(|| env::panic_str("no trust rule"));
         let who = t.contributor.clone().unwrap();
-        let done = load::<Record>(&record_key(&who)).map_or(0, |r| r.done);
-        if t.amount.0 <= rule.auto_max.0 && done >= rule.trusted_after {
+        let trusted = load::<Record>(&record_key(&who)).map_or(0, |r| sources(&r)) >= rule.trusted_after;
+        let today = format!("auto:{}:{}", t.poster, env::block_timestamp() / DAY_NS);
+        let spent = read_u128(today.as_bytes()).unwrap_or(0) + t.amount.0;
+        if t.amount.0 <= rule.auto_max.0 && trusted && spent <= rule.poster_daily_auto.0 {
+            // ponytail: a payout that later fails still counts toward the poster's day; errs on the safe side
+            write_u128(today.as_bytes(), spent);
             self.pay(&mut t, None);
             true
         } else {
@@ -240,7 +260,7 @@ impl Koperasi {
         ext_dao::ext(self.dao_id.clone())
             .with_static_gas(GAS_VIEW)
             .get_policy()
-            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK.saturating_mul(2)).on_approve_policy(id, who))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_PROPOSE.saturating_add(GAS_PROPOSED).saturating_add(GAS_CALLBACK)).on_approve_policy(id, who))
     }
 
     #[private]
@@ -267,32 +287,96 @@ impl Koperasi {
         save(&task_key(id), &t);
     }
 
+    /// The payout is a Transfer proposal from the DAO's treasury, filed and approved by this contract's `tasks` role.
     fn pay(&mut self, t: &mut Task, approver: Option<AccountId>) {
-        require!(t.amount.0 <= budget(), "the task budget is too low: the members must fund it");
+        require!(t.amount.0 <= budget(), "the task budget is too low: the members must raise it");
         write_u128(KEY_BUDGET, budget() - t.amount.0);
         t.status = TaskStatus::Paying;
+        let tier = approver.as_ref().map_or("earned trust, no vote".to_string(), |a| format!("approved by {a}"));
         t.approved_by = approver;
         save(&task_key(t.id), t);
-        let _ = Promise::new(t.contributor.clone().unwrap())
-            .transfer(NearToken::from_yoctonear(t.amount.0))
-            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_task_paid(t.id));
+        let description = format!("Koperasi task #{}: pay {} for \"{}\" ({tier})", t.id, t.contributor.as_ref().unwrap(), t.description);
+        let _ = ext_dao_proposals::ext(self.dao_id.clone())
+            .with_attached_deposit(PAYOUT_BOND)
+            .with_static_gas(GAS_PROPOSE)
+            .add_proposal(near_sdk::serde_json::json!({ "description": description, "kind": payout_kind(t) }))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_PROPOSED).on_payout_proposed(t.id));
     }
 
     #[private]
-    pub fn on_task_paid(&mut self, id: u32, #[callback_result] r: Result<(), PromiseError>) {
+    pub fn on_payout_proposed(&mut self, id: u32, #[callback_result] pid: Result<u64, PromiseError>) -> PromiseOrValue<()> {
+        let t = task(id);
+        let Ok(pid) = pid else {
+            self.unpay(t);
+            return PromiseOrValue::Value(());
+        };
+        write_u128(&payout_key(id), pid as u128);
+        let dao = ext_dao_proposals::ext(self.dao_id.clone());
+        PromiseOrValue::Promise(
+            dao.with_static_gas(GAS_ACT).act_proposal(pid, "VoteApprove".into(), payout_kind(&t), None)
+                .then(ext_dao_proposals::ext(self.dao_id.clone()).with_static_gas(GAS_VIEW).get_proposal(pid))
+                .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id)),
+        )
+    }
+
+    /// Anyone: re-read a payout's DAO proposal (e.g. one the members approved or rejected by hand) and settle the task.
+    pub fn settle_task(&mut self, id: u32) -> Promise {
+        require!(task(id).status == TaskStatus::Paying, "no payout in flight");
+        let pid = read_u128(&payout_key(id)).unwrap_or_else(|| env::panic_str("no payout proposal yet")) as u64;
+        ext_dao_proposals::ext(self.dao_id.clone())
+            .with_static_gas(GAS_VIEW)
+            .get_proposal(pid)
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id))
+    }
+
+    /// Paid only when the DAO says the Transfer proposal is Approved (Sputnik marks a bounced transfer Failed).
+    #[private]
+    pub fn on_payout_checked(&mut self, id: u32, #[callback_result] p: Result<Value, PromiseError>) {
         let mut t = task(id);
-        if r.is_ok() {
-            t.status = TaskStatus::Paid;
-            t.paid_at = Some(U64(env::block_timestamp()));
-            credit(t.contributor.as_ref().unwrap(), format!("task:{id}"), t.amount.0);
-        } else {
-            // the transfer bounced (e.g. the account does not exist): money back in the budget, accept again
-            write_u128(KEY_BUDGET, budget() + t.amount.0);
-            t.status = TaskStatus::Submitted;
-            t.approved_by = None;
-            log!("task #{}: payout failed, back to submitted", id);
+        require!(t.status == TaskStatus::Paying, "no payout in flight");
+        let status = p.ok().and_then(|p| p["status"].as_str().map(String::from)).unwrap_or_default();
+        match status.as_str() {
+            "Approved" => {
+                t.status = TaskStatus::Paid;
+                t.paid_at = Some(U64(env::block_timestamp()));
+                save(&task_key(id), &t);
+                self.credit(t.contributor.as_ref().unwrap(), format!("task:{id}"), t.amount.0);
+            }
+            // still open (e.g. the role is missing from the policy) or unreadable: the members can vote it by hand,
+            // then anyone calls settle_task
+            "InProgress" | "" => log!("task #{}: payout proposal not approved yet", id),
+            _ => self.unpay(t),
         }
-        save(&task_key(id), &t);
+    }
+
+    /// The payout did not happen: money back in the budget, the poster can accept again.
+    fn unpay(&mut self, mut t: Task) {
+        write_u128(KEY_BUDGET, budget() + t.amount.0);
+        env::storage_remove(&payout_key(t.id));
+        t.status = TaskStatus::Submitted;
+        t.approved_by = None;
+        log!("task #{}: payout failed, back to submitted", t.id);
+        save(&task_key(t.id), &t);
+    }
+
+    /// One more point on `who`'s record, from `source`; a member also earns the voted contribution points.
+    fn credit(&mut self, who: &AccountId, source: String, earned: u128) {
+        let mut r: Record = load(&record_key(who)).unwrap_or_else(|| {
+            let mut all: Vec<AccountId> = load(KEY_CONTRIBUTORS).unwrap_or_default();
+            all.push(who.clone());
+            save(KEY_CONTRIBUTORS, &all);
+            Record::default()
+        });
+        r.done += 1;
+        r.earned = U128(r.earned.0 + earned);
+        log!("trust: +1 for {} from {}", who, source);
+        r.refs.push(source);
+        save(&record_key(who), &r);
+        let points = load::<TrustRule>(KEY_TRUST).map_or(0, |r| r.points);
+        if points > 0 && self.members.contains_key(who) {
+            self.add_points(who, points);
+            log!("+{} contribution points for {}", points, who);
+        }
     }
 
     /// Anyone: count an approved Sputnik `BountyDone` proposal (a large task the members voted) on its receiver's record.
@@ -315,7 +399,7 @@ impl Koperasi {
         let key = format!("credited:{proposal_id}");
         require!(env::storage_read(key.as_bytes()).is_none(), "already counted");
         env::storage_write(key.as_bytes(), &[1]);
-        credit(&receiver, format!("dao-proposal:{proposal_id}"), 0);
+        self.credit(&receiver, format!("dao-proposal:{proposal_id}"), 0);
     }
 
     // ---------- views ----------
@@ -332,6 +416,16 @@ impl Koperasi {
 
     pub fn get_record(&self, account_id: AccountId) -> Option<Record> {
         load(&record_key(&account_id))
+    }
+
+    /// How many different sources trust this account (what `trusted_after` counts).
+    pub fn get_trust_sources(&self, account_id: AccountId) -> u32 {
+        load::<Record>(&record_key(&account_id)).map_or(0, |r| sources(&r))
+    }
+
+    /// The DAO proposal that paid (or is paying) a task.
+    pub fn get_payout_proposal(&self, id: u32) -> Option<u64> {
+        read_u128(&payout_key(id)).map(|p| p as u64)
     }
 
     /// Everyone with a record, with it.

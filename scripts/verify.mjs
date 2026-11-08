@@ -27,22 +27,25 @@ const [info, policy, board, contributors, audit] = await Promise.all([
   view(d.contract, "get_contributors"), view(d.contract, "get_audit"),
 ]);
 const proposal = (id) => view(d.dao, "get_proposal", { id });
+// every DAO proposal, to find the vote behind each claim instead of trusting a number in the README
+const last = await view(d.dao, "get_last_proposal_id");
+const proposals = [];
+for (let from = 0; from < last; from += 100) proposals.push(...await view(d.dao, "get_proposals", { from_index: from, limit: 100 }));
+const approvedCall = (method, ok) => proposals.find((p) => p.status === "Approved" && argsOf(p).some((a) => a.method === method && ok(a.args)));
 
 // 1. by-laws
 const fileHash = sha256(fs.readFileSync(path.join(ROOT, d.configUri)));
-const p7 = await proposal(7);
-const voted = p7.status === "Approved" && argsOf(p7).some((a) => a.method === "set_config" && a.args.hash === info.config.hash);
-check(fileHash === info.config.hash && voted, `the agent's by-laws ${d.configUri} are the ones the members voted (proposal #7)`,
-  `file sha256 ${fileHash.slice(0, 16)}…, contract ${info.config.hash.slice(0, 16)}… v${info.config.version}, proposal #7 ${p7.status}`);
+const byLaws = approvedCall("set_config", (a) => a.hash === info.config.hash);
+check(fileHash === info.config.hash && byLaws, `the agent's by-laws ${d.configUri} are the ones the members voted`,
+  `file sha256 ${fileHash.slice(0, 16)}…, contract ${info.config.hash.slice(0, 16)}… v${info.config.version}, voted in proposal #${byLaws?.id}`);
 
 // 2. contract code: the global contract the members voted, no full-access key
 const acct = await rawQuery({ request_type: "view_account", account_id: d.contract });
 const code = acct.global_contract_hash ?? acct.code_hash;
 const want = baseEncode(Buffer.from(d.codeSha256, "hex"));
-const p25 = await proposal(25);
-const upgraded = p25.status === "Approved" && argsOf(p25).some((a) => a.method === "upgrade" && a.args.code_hash === code);
-check(code === want && upgraded, "the contract runs the global contract the members voted (proposal #25)",
-  `on-chain ${code}, deployment.testnet.json ${want}, proposal #25 ${p25.status}`);
+const upgraded = approvedCall("upgrade", (a) => a.code_hash === code);
+check(code === want && upgraded, "the contract runs the global contract the members voted",
+  `on-chain ${code}, deployment.testnet.json ${want}, voted in proposal #${upgraded?.id}`);
 const keys = (await rawQuery({ request_type: "view_access_key_list", account_id: d.contract })).keys;
 const full = keys.filter((k) => k.access_key.permission === "FullAccess").length;
 check(full === 0, "nobody holds a full-access key to the contract, the builder included", `${keys.length} keys, ${full} full-access`);
@@ -67,11 +70,29 @@ const vp = role?.vote_policy?.["*"] ?? policy.default_vote_policy;
 check(vp.weight_kind === "RoleWeight" && JSON.stringify(vp.threshold) === "[1,2]", "one member, one vote: RoleWeight, threshold 1/2",
   `${vp.weight_kind}, threshold ${JSON.stringify(vp.threshold)}`);
 
-// 5. earned trust: every point of every record names a task or DAO proposal that really paid that account
+// 5. earned trust: the contract pays only through its own DAO role, and every point of a record traces to a payout
+const tasksRole = policy.roles.find((x) => x.name === "tasks");
+check(JSON.stringify(tasksRole?.kind) === JSON.stringify({ Group: [d.contract] })
+  && [...tasksRole.permissions].sort().join() === "transfer:AddProposal,transfer:VoteApprove",
+  "the contract's DAO role `tasks` may only file and approve transfer proposals", JSON.stringify(tasksRole && [tasksRole.kind, tasksRole.permissions]));
 const r = board.rule;
-check(r && BigInt(r.auto_max) <= BigInt(r.one_vote_max) && r.trusted_after >= 1, "the trust tiers were voted and trust must be earned",
-  r ? `auto ≤ ${near(r.auto_max)} NEAR after ${r.trusted_after} finished task(s), one other member ≤ ${near(r.one_vote_max)} NEAR, above: DAO bounty; budget ${near(board.budget)} NEAR` : "no rule");
+const ruleVote = approvedCall("set_trust", (a) => JSON.stringify(a.rule) === JSON.stringify(r));
+check(r && ruleVote && BigInt(r.auto_max) <= BigInt(r.one_vote_max) && r.trusted_after >= 1, "the trust tiers were voted and trust must be earned",
+  r ? `no vote ≤ ${near(r.auto_max)} NEAR once trusted by ${r.trusted_after} different source(s), ≤ ${near(r.poster_daily_auto)} NEAR a day per poster; one other member ≤ ${near(r.one_vote_max)} NEAR; above: DAO bounty; ${r.points} points a task; the contract may pay ${near(board.budget)} NEAR more; voted in proposal #${ruleVote?.id}` : "no rule");
 const tasks = await view(d.contract, "get_tasks", { from: 0, limit: 200 });
+for (const t of tasks.filter((x) => x.status === "Paid")) {
+  const pid = await view(d.contract, "get_payout_proposal", { id: t.id });
+  const how = t.approved_by ? `approved by ${t.approved_by}` : "earned trust, no vote";
+  if (pid === null) {
+    console.log(`INFO  task #${t.id}: ${near(t.amount)} NEAR to ${t.contributor}, ${how}; paid by the contract itself, before payouts moved into the DAO`);
+    continue;
+  }
+  const p = await proposal(pid);
+  const tr = p.kind.Transfer;
+  check(p.status === "Approved" && p.proposer === d.contract && tr?.token_id === "" && tr.receiver_id === t.contributor && tr.amount === t.amount,
+    `task #${t.id} was paid from the treasury by DAO proposal #${pid}, filed by the contract`,
+    `${near(t.amount)} NEAR to ${t.contributor}, ${how}; proposal ${p.status}, proposer ${p.proposer}, ${JSON.stringify(tr)}`);
+}
 for (const [who, rec] of contributors) {
   const bad = [];
   for (const ref of rec.refs) {
@@ -84,11 +105,10 @@ for (const [who, rec] of contributors) {
       if (!(p.status === "Approved" && p.kind.BountyDone?.receiver_id === who)) bad.push(ref);
     } else bad.push(ref);
   }
+  const sources = await view(d.contract, "get_trust_sources", { account_id: who });
   check(bad.length === 0 && rec.refs.length === rec.done, `${who}'s record: ${rec.done} finished, each traced to its source`,
-    `${rec.refs.join(", ")}${bad.length ? `; does not check out: ${bad.join(", ")}` : ""}`);
+    `${rec.refs.join(", ")}; trusted by ${sources} different source(s)${bad.length ? `; does not check out: ${bad.join(", ")}` : ""}`);
 }
-const paidBy = (t) => (t.approved_by ? `approved by ${t.approved_by}` : "earned trust, no vote");
-for (const t of tasks) console.log(`      task #${t.id} ${t.status}, ${near(t.amount)} NEAR to ${t.contributor ?? "-"}${t.status === "Paid" ? `, ${paidBy(t)}` : ""}`);
 
 // 6. what the README admits: no real jobs yet, audit red on purpose, treasury empty
 const receipts = await view(d.contract, "get_receipts", { from: 0, limit: 200 });

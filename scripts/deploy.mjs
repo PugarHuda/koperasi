@@ -26,8 +26,8 @@ const steward = await ensureAccount(ids.steward, 9n);
 const kop = await ensureAccount(ids.contract, 6n);
 console.log(`  steward  ${ids.steward}\n  contract ${ids.contract}`);
 
-step("Sputnik DAO with role member, RoleWeight, threshold 1/2");
-const daoId = await createDao(steward, `koperasi-${tag}`, "Koperasi: an AI agent owned by its members", [ids.steward]);
+step("Sputnik DAO with role member, RoleWeight, threshold 1/2, and role tasks (the contract files and approves task payouts)");
+const daoId = await createDao(steward, `koperasi-${tag}`, "Koperasi: an AI agent owned by its members", [ids.steward], ids.contract);
 console.log(`  ${daoId}`);
 
 step("deploy koperasi contract");
