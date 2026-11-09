@@ -976,6 +976,27 @@ fn a_payout_whose_callback_failed_is_unstuck_after_an_hour_without_paying_twice_
 }
 
 #[test]
+fn a_bounce_on_record_still_counts_after_an_unreadable_proposal() {
+    let mut k = board();
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, id);
+    as_(&me(), near(0));
+    let _ = k.on_payout_proposed(id, Ok(100 + id as u64));
+    // on_payout_voted saw the transfer bounce; then get_proposal failed, so the check waits
+    env::storage_write(format!("moved:{id}").as_bytes(), &[0]);
+    k.on_payout_checked(id, false, Err(PromiseError::Failed));
+    assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Paying);
+    as_(&acc("anyone.testnet"), near(0));
+    let _ = k.settle_task(id);
+    let moved = near_sdk::test_utils::get_created_receipts().iter().flat_map(|r| r.actions.clone()).find_map(|a| match a {
+        near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, .. } if method_name == b"on_payout_checked" =>
+            near_sdk::serde_json::from_slice::<Value>(&args).ok().map(|v| v["moved"].as_bool().unwrap()),
+        _ => None,
+    });
+    assert_eq!(moved, Some(false), "the bounce is not forgotten");
+}
+
+#[test]
 fn a_trusted_contributor_still_needs_a_vote_above_auto_max() {
     let mut k = board();
     let (id, _) = deliver(&mut k, 50 * MILLI);

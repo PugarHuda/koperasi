@@ -360,7 +360,7 @@ impl Koperasi {
     /// If a callback of the contract's own chain failed, the task is unstuck an hour later:
     /// - no proposal on record (one may have been filed): Cancelled, never filed again by the contract; the members
     ///   can still vote that proposal, or pay with a bounty;
-    /// - the transfer's result on record: settled from the proposal with that result;
+    /// - the transfer's result on record (stuck or not): settled from the proposal with that result;
     /// - the result never read: only the members (the DAO) can settle it, as paid, or cancel it with `cancel_task`.
     // ponytail: a payout the members approved by hand is taken as moved; their own vote transaction shows the transfer
     pub fn settle_task(&mut self, id: u32) -> PromiseOrValue<()> {
@@ -372,8 +372,9 @@ impl Koperasi {
             self.unpay(t, TaskStatus::Cancelled);
             return PromiseOrValue::Value(());
         };
+        // the transfer's result once on record decides; with nothing on record the members approved it by hand
         let moved = match env::storage_read(&moved_key(id)) {
-            Some(v) if open => v == [1],
+            Some(v) => v == [1],
             None if open => {
                 require!(env::predecessor_account_id() == self.dao_id,
                     "the transfer's result was never read: the members settle or cancel this payout by vote");
@@ -392,14 +393,15 @@ impl Koperasi {
     pub fn on_payout_checked(&mut self, id: u32, moved: bool, #[callback_result] p: Result<Value, PromiseError>) {
         let mut t = task(id);
         require!(t.status == TaskStatus::Paying, "no payout in flight");
+        // the transfer's result stays on record until the task settles: a later settle_task must still see a bounce
         env::storage_remove(&inflight_key(id));
-        env::storage_remove(&moved_key(id));
         let status = p.ok().and_then(|p| p["status"].as_str().map(String::from)).unwrap_or_default();
         match status.as_str() {
             "Approved" if moved => {
                 t.status = TaskStatus::Paid;
                 t.paid_at = Some(U64(env::block_timestamp()));
                 save(&task_key(id), &t);
+                env::storage_remove(&moved_key(id));
                 let points = load::<TrustRule>(KEY_TRUST)
                     // at most `points`, even if the members lowered one_vote_max after the task was posted
                     .map_or(0, |r| (r.points as u128 * t.amount.0 / r.one_vote_max.0.max(1)).min(r.points as u128) as u64);
