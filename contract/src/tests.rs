@@ -916,32 +916,63 @@ fn a_payout_still_open_in_the_dao_waits_and_settles_once() {
 }
 
 #[test]
-fn a_payout_whose_callback_failed_is_unstuck_after_an_hour() {
-    let at = |who: &str, ns: u64| {
+fn a_payout_whose_callback_failed_is_unstuck_after_an_hour_without_paying_twice_or_counting_a_bounce() {
+    let at = |who: &AccountId, ns: u64| {
         let mut b = VMContextBuilder::new();
-        b.current_account_id(me()).predecessor_account_id(acc(who)).block_timestamp(ns);
+        b.current_account_id(me()).predecessor_account_id(who.clone()).block_timestamp(ns);
         testing_env!(b.build());
     };
-    let settle = |k: &mut Koperasi, id| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let _ = k.settle_task(id); }));
+    let anyone = acc("anyone.testnet");
+    let settle = |k: &mut Koperasi, id| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let _ = k.settle_task(id); })).is_ok();
+    // the `moved` argument settle_task hands to on_payout_checked
+    let moved_arg = || near_sdk::test_utils::get_created_receipts().iter().flat_map(|r| r.actions.clone()).find_map(|a| match a {
+        near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, .. } if method_name == b"on_payout_checked" =>
+            near_sdk::serde_json::from_slice::<Value>(&args).ok().map(|v| v["moved"].as_bool().unwrap()),
+        _ => None,
+    });
+    let status = |k: &Koperasi, id: u32| k.get_tasks(None, None)[id as usize].status.clone();
     let mut k = board();
-    // on_payout_proposed ran out of gas: Paying, no proposal on record, the flag never cleared
-    let (a, _) = deliver(&mut k, 50 * MILLI);
-    approve(&mut k, a);
-    // on_payout_checked ran out of gas after the proposal was filed
-    let (b, _) = deliver(&mut k, 50 * MILLI);
-    approve(&mut k, b);
+    let mut ids = vec![];
+    for filed in [false, true, true, true] {
+        let (id, _) = deliver(&mut k, 50 * MILLI);
+        approve(&mut k, id);
+        if filed {
+            as_(&me(), near(0));
+            let _ = k.on_payout_proposed(id, Ok(100 + id as u64));
+        }
+        ids.push(id);
+    }
+    let [a, b, c, d] = ids[..] else { unreachable!() };
+    // b's transfer bounced and on_payout_voted wrote that down; then its check ran out of gas
+    env::storage_write(format!("moved:{b}").as_bytes(), &[0]);
+    assert_eq!(k.get_board().budget.0, 800 * MILLI);
+    at(&anyone, 3_600_000_000_000);
+    assert!(!settle(&mut k, a), "not before an hour");
+    at(&anyone, 3_600_000_000_001);
+    // a: nothing on record, though a proposal may have been filed: cancelled, so the contract never files it again
+    assert!(settle(&mut k, a));
+    assert_eq!((status(&k, a), k.get_board().budget.0), (TaskStatus::Cancelled, 850 * MILLI));
+    // b: the bounce on record is what settles it
+    assert!(settle(&mut k, b));
+    assert_eq!(moved_arg(), Some(false));
     as_(&me(), near(0));
-    let _ = k.on_payout_proposed(b, Ok(100 + b as u64));
-    assert_eq!(k.get_board().budget.0, 900 * MILLI);
-    at("anyone.testnet", 3_600_000_000_000);
-    assert!(settle(&mut k, a).is_err(), "not before an hour");
-    at("anyone.testnet", 3_600_000_000_001);
-    assert!(settle(&mut k, a).is_ok());
-    assert_eq!((k.get_tasks(None, None)[a as usize].status.clone(), k.get_board().budget.0), (TaskStatus::Submitted, 950 * MILLI));
-    assert!(settle(&mut k, b).is_ok(), "reads the proposal");
+    k.on_payout_checked(b, false, Ok(json!({ "status": "Approved" })));
+    assert_eq!(status(&k, b), TaskStatus::Cancelled);
+    // c: the result was never read: not anyone, only the members
+    at(&anyone, 3_600_000_000_001);
+    assert!(!settle(&mut k, c));
+    at(&dao(), 3_600_000_000_001);
+    assert!(settle(&mut k, c));
+    assert_eq!(moved_arg(), Some(true));
     as_(&me(), near(0));
-    k.on_payout_checked(b, true, Ok(json!({ "status": "Approved" })));
-    assert_eq!(k.get_tasks(None, None)[b as usize].status, TaskStatus::Paid);
+    k.on_payout_checked(c, true, Ok(json!({ "status": "Approved" })));
+    assert_eq!(status(&k, c), TaskStatus::Paid);
+    // d: the members cancel it instead; the poster cannot
+    at(&acc("alice.testnet"), 3_600_000_000_001);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.cancel_task(d))).is_err());
+    at(&dao(), 3_600_000_000_001);
+    k.cancel_task(d);
+    assert_eq!((status(&k, d), k.get_board().budget.0), (TaskStatus::Cancelled, 950 * MILLI));
 }
 
 #[test]

@@ -125,6 +125,11 @@ Grep for `mock|fake|dummy|TODO|FIXME|lorem|placeholder|coming soon|0x000`:
 - **T11 partly fixed.** CSP `frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`. Script and connect sources stay open on purpose, because NEAR Connect loads wallets from many origins.
 - **T15 fixed.** The README documents `cargo near build … --no-abi`.
 - **T6 fixed (9 Nov), showcase upgraded by vote #35** (global code `GtB4Dk9J…`, sha256 `ebfb4b82…`, 0 full-access keys; `npm run verify` finds #35 itself). The `inflight:` flag now holds the time it was set. `settle_task` refuses while it is younger than an hour; after that, a task with no proposal on record goes back to Submitted with the budget restored, and a task with a proposal is settled from that proposal as usual. Flags written by the old code (one byte) count as stuck. Test `a_payout_whose_callback_failed_is_unstuck_after_an_hour`; 74 contract tests pass. Not shown on testnet: the callbacks have fixed gas, so a failed callback cannot be caused on demand. The ~34 NEAR came from unused test accounts of this builder (old co-op tags), not the faucet.
+- **A security review of #35 found two real issues, fixed in code (not on-chain yet):**
+  - With no proposal id on record, a proposal may still have been filed. Sending the task back to Submitted would let the contract file and approve a second one, so it is now **Cancelled**. The members can still vote the stray proposal or pay with a bounty.
+  - A stuck payout was settled as if the transfer had moved, so a bounce could have counted as paid. `on_payout_voted` now records the transfer's result before it reads the proposal, and settling uses that result. If the result was never read, only the DAO can settle the task (as paid) or cancel it (`cancel_task` now accepts a stuck Paying task, with the budget restored).
+  - Test `…without_paying_twice_or_counting_a_bounce` covers both; 74 tests pass.
+  - The upgrade (about 33 NEAR) waits for the faucet. No showcase task is Paying, and a failed callback cannot be caused on demand, so nothing is exposed meanwhile.
 - E2E resilience + trust, desktop: 23/23 passed.
 
 ## Priorities by impact on the judging criteria

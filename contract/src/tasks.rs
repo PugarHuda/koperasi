@@ -140,6 +140,16 @@ fn payout_key(id: u32) -> Vec<u8> {
 fn inflight_key(id: u32) -> Vec<u8> {
     format!("inflight:{id}").into_bytes()
 }
+/// What the transfer returned, written by `on_payout_voted` before it reads the proposal: [1] moved, [0] bounced.
+fn moved_key(id: u32) -> Vec<u8> {
+    format!("moved:{id}").into_bytes()
+}
+/// The contract's own chain broke (a callback failed): its flag is older than an hour. Flags written before this rule
+/// hold one byte and read as time 0, so they count as stuck.
+fn stuck(id: u32) -> bool {
+    env::storage_read(&inflight_key(id))
+        .is_some_and(|v| env::block_timestamp().saturating_sub(v.try_into().map_or(0, u64::from_le_bytes)) > STUCK_NS)
+}
 fn payout_kind(t: &Task) -> Value {
     near_sdk::serde_json::json!({ "Transfer": {
         "token_id": "", "receiver_id": t.contributor.as_ref().unwrap(), "amount": t.amount, "msg": null } })
@@ -287,11 +297,15 @@ impl Koperasi {
         let mut t = task(id);
         use TaskStatus::*;
         let ok = if who == self.dao_id {
-            !matches!(t.status, Paying | Paid | Cancelled)
+            !matches!(t.status, Paid | Cancelled) && (t.status != Paying || stuck(id))
         } else {
             who == t.poster && matches!(t.status, Open | Claimed)
         };
         require!(ok, "cannot cancel this task");
+        if t.status == Paying {
+            // the members decided a stuck payout did not happen: the money stays in the budget
+            return self.unpay(t, Cancelled);
+        }
         t.status = Cancelled;
         save(&task_key(id), &t);
     }
@@ -335,6 +349,7 @@ impl Koperasi {
     pub fn on_payout_voted(&mut self, id: u32, pid: u64) -> Promise {
         // only success or failure matters; TooLong(_) means it succeeded with a value we do not read
         let moved = !matches!(env::promise_result_checked(0, 0), Err(PromiseError::Failed));
+        env::storage_write(&moved_key(id), &[moved as u8]);
         ext_dao_proposals::ext(self.dao_id.clone())
             .with_static_gas(GAS_VIEW)
             .get_proposal(pid)
@@ -342,25 +357,34 @@ impl Koperasi {
     }
 
     /// Anyone: re-read a payout's DAO proposal (e.g. one the members approved or rejected by hand) and settle the task.
-    /// If a callback of the contract's own chain failed, the task is unstuck an hour later: with no proposal on record
-    /// it goes back to Submitted (budget restored); otherwise the proposal is read as usual.
+    /// If a callback of the contract's own chain failed, the task is unstuck an hour later:
+    /// - no proposal on record (one may have been filed): Cancelled, never filed again by the contract; the members
+    ///   can still vote that proposal, or pay with a bounty;
+    /// - the transfer's result on record: settled from the proposal with that result;
+    /// - the result never read: only the members (the DAO) can settle it, as paid, or cancel it with `cancel_task`.
     // ponytail: a payout the members approved by hand is taken as moved; their own vote transaction shows the transfer
     pub fn settle_task(&mut self, id: u32) -> PromiseOrValue<()> {
         let t = task(id);
         require!(t.status == TaskStatus::Paying, "no payout in flight");
-        // flags written before this rule hold one byte: read as time 0, so they count as stuck
-        let since = env::storage_read(&inflight_key(id))
-            .map(|v| v.try_into().map_or(0, u64::from_le_bytes));
-        require!(since.is_none_or(|s| env::block_timestamp().saturating_sub(s) > STUCK_NS),
-            "the contract is still settling this payout");
+        let open = env::storage_read(&inflight_key(id)).is_some();
+        require!(!open || stuck(id), "the contract is still settling this payout");
         let Some(pid) = read_u128(&payout_key(id)) else {
-            self.unpay(t, TaskStatus::Submitted);
+            self.unpay(t, TaskStatus::Cancelled);
             return PromiseOrValue::Value(());
+        };
+        let moved = match env::storage_read(&moved_key(id)) {
+            Some(v) if open => v == [1],
+            None if open => {
+                require!(env::predecessor_account_id() == self.dao_id,
+                    "the transfer's result was never read: the members settle or cancel this payout by vote");
+                true
+            }
+            _ => true,
         };
         PromiseOrValue::Promise(ext_dao_proposals::ext(self.dao_id.clone())
             .with_static_gas(GAS_VIEW)
             .get_proposal(pid as u64)
-            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id, true)))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id, moved)))
     }
 
     /// Paid only when the DAO's Transfer proposal is Approved and its transfer went through.
@@ -369,6 +393,7 @@ impl Koperasi {
         let mut t = task(id);
         require!(t.status == TaskStatus::Paying, "no payout in flight");
         env::storage_remove(&inflight_key(id));
+        env::storage_remove(&moved_key(id));
         let status = p.ok().and_then(|p| p["status"].as_str().map(String::from)).unwrap_or_default();
         match status.as_str() {
             "Approved" if moved => {
@@ -392,6 +417,7 @@ impl Koperasi {
     /// The payout did not happen: the money stays in the treasury and in the budget.
     fn unpay(&mut self, mut t: Task, status: TaskStatus) {
         env::storage_remove(&inflight_key(t.id));
+        env::storage_remove(&moved_key(t.id));
         write_u128(KEY_BUDGET, budget() + t.amount.0);
         if status == TaskStatus::Submitted {
             env::storage_remove(&payout_key(t.id));
