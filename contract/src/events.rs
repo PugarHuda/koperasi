@@ -30,6 +30,9 @@ pub enum Event {
     /// A member's savings weight (yoctoNEAR staked for inference), by vote or read from the staking pool.
     #[event_version("1.0.0")]
     SavingsSet { account_id: AccountId, savings: U128 },
+    /// A stake increase read from the staking pool; it counts as savings from `counts_from` (ns), if still staked.
+    #[event_version("1.0.0")]
+    SavingsPending { account_id: AccountId, savings: U128, counts_from: U64 },
     /// The staking pool whose stake counts as savings.
     #[event_version("1.0.0")]
     StakingPoolSet { pool: Option<AccountId> },

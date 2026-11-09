@@ -151,7 +151,9 @@ test("only the contract's own, well-formed NEP-297 events reach the live feed", 
     ["k", "EVENT_JSON:{not json"],
   ]) assert.deepEqual(parseEvents(outcome(who, [log]), "k"), [], log);
   assert.deepEqual(parseEvents(null, "k"), []);
-  assert.equal(EVENTS.length, 38, "every event in contract/src/events.rs");
+  const rs = (await import("node:fs")).readFileSync(new URL("../../contract/src/events.rs", import.meta.url), "utf8");
+  const wire = [...rs.matchAll(/#\[event_version[^\n]*\n\s*(\w+)/g)].map(([, n]) => n.replace(/(?<!^)[A-Z]/g, (c) => `_${c}`).toLowerCase());
+  assert.deepEqual([...EVENTS].sort(), wire.sort(), "every event in contract/src/events.rs");
 });
 
 test("the indexer's answer is checked before it is used", async () => {

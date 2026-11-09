@@ -115,6 +115,8 @@ async function load() {
   const claimable = member ? await view(dep.contract, "get_claimable", { account_id: me }) : "0";
   const pool = member ? await view(dep.contract, "get_staking_pool") : null;
   const staked = pool ? await view(pool, "get_account_staked_balance", { account_id: me }).catch(() => "0") : "0";
+  // [yoctoNEAR, counts from (ns)]: a stake increase that waits 7 days before it counts (S12)
+  const waiting = pool ? await view(dep.contract, "get_pending_savings", { account_id: me }).catch(() => null) : null;
   const usdcReady = member ? await view(dep.usdc, "storage_balance_of", { account_id: me }).catch(() => null) : null;
   // what the token itself asks for a registration (NEP-145), not a guess
   const usdcStorage = member && !usdcReady ? BigInt((await view(dep.usdc, "storage_balance_bounds")).min) : 0n;
@@ -124,7 +126,7 @@ async function load() {
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
   const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
-  return { onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims, roster, treasury,
+  return { onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
     board, tasks, records: Object.fromEntries(recs) };
 }
 
@@ -262,9 +264,12 @@ async function render() {
         <div><span>Staked in the pool now</span><strong>${nearAmt(s.staked)} NEAR</strong></div>
         <div><span>Counted as savings</span><strong>${nearAmt(s.member.savings)} NEAR</strong></div>
       </div>
+      ${s.waiting ? `<p class="small">${nearAmt(s.waiting[0])} NEAR waits to count: a stake increase counts as savings after 7 days
+        in the pool, from ${new Date(Number(BigInt(s.waiting[1]) / 1_000_000n)).toLocaleString("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+        (sync again then). A decrease counts at once.</p>` : `<p class="small">A stake increase counts as savings after 7 days in the pool; a decrease counts at once.</p>`}
       <div class="stake-row"><label>Stake <input id="w-amt" type="number" min="1" step="1" value="1" inputmode="numeric"> NEAR</label>
         <button type="button" class="btn" id="w-stake">Stake</button>
-        <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}
+        <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings || (s.waiting?.[0] === s.staked && BigInt(s.waiting[1]) > BigInt(Date.now()) * 1_000_000n) ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}
       <h3 class="jh">Members' meeting: propose a profit share</h3>
       ${s.treasury > 0n
         ? `<p class="small">The treasury holds ${usdc(s.treasury)} USDC. Choose how much to share; everyone sees each member's part before voting.</p>

@@ -69,6 +69,19 @@ fn bump(key: &[u8], by: u128, sub: bool) {
     }
 }
 
+/// A stake increase read by `sync_savings` counts only once it has stayed this long (security finding S12: without it,
+/// a large stake a block before a profit share took the savings pool and left right after). A decrease counts at once.
+const SAVINGS_DELAY_NS: u64 = 7 * 24 * 3600 * 1_000_000_000;
+/// Per-member stake increase waiting for SAVINGS_DELAY_NS: (yoctoNEAR, since) in borsh, keyed by account.
+const PENDING_SAVINGS_PREFIX: &[u8] = b"savings_pending:";
+
+fn pending_key(a: &AccountId) -> Vec<u8> {
+    [PENDING_SAVINGS_PREFIX, a.as_bytes()].concat()
+}
+fn read_pending(a: &AccountId) -> Option<(u128, u64)> {
+    env::storage_read(&pending_key(a)).and_then(|b| near_sdk::borsh::from_slice(&b).ok())
+}
+
 fn proof_key(job_id: &str) -> Vec<u8> {
     [PROOF_PREFIX, job_id.as_bytes()].concat()
 }
@@ -348,6 +361,7 @@ impl Koperasi {
                 Event::MemberAdded { account_id }.emit();
             }
         } else if let Some(m) = self.members.remove(&account_id) {
+            env::storage_remove(&pending_key(&account_id));
             Event::MemberLeft { account_id: account_id.clone(), refunded: m.join_deposit }.emit();
             let _ = Promise::new(account_id).transfer(m.join_deposit);
         }
@@ -385,6 +399,7 @@ impl Koperasi {
         self.assert_dao();
         for (a, s) in entries {
             self.members.get_mut(&a).unwrap_or_else(|| env::panic_str("not a member")).savings = s;
+            env::storage_remove(&pending_key(&a)); // a members' vote counts at once
             Event::SavingsSet { account_id: a, savings: s }.emit();
         }
     }
@@ -421,11 +436,36 @@ impl Koperasi {
     /// Callback of `sync_savings`.
     #[private]
     pub fn on_staked(&mut self, account_id: AccountId, #[callback_result] staked: Result<U128, PromiseError>) {
-        let staked = staked.unwrap_or_else(|_| env::panic_str("could not read the staking pool"));
-        if let Some(m) = self.members.get_mut(&account_id) {
-            m.savings = staked;
-            Event::SavingsSet { account_id, savings: staked }.emit();
+        let staked = staked.unwrap_or_else(|_| env::panic_str("could not read the staking pool")).0;
+        let Some(m) = self.members.get_mut(&account_id) else { return };
+        let now = env::block_timestamp();
+        if staked <= m.savings.0 {
+            // a decrease counts at once and cancels any increase still waiting
+            env::storage_remove(&pending_key(&account_id));
+            if staked < m.savings.0 {
+                m.savings = U128(staked);
+                Event::SavingsSet { account_id, savings: m.savings }.emit();
+            }
+            return;
         }
+        // an increase waits; a larger one restarts the wait, a smaller one keeps it (that much was there since then)
+        let since = match read_pending(&account_id) {
+            Some((p, since)) if staked <= p => since,
+            _ => now,
+        };
+        if now - since >= SAVINGS_DELAY_NS {
+            env::storage_remove(&pending_key(&account_id));
+            m.savings = U128(staked);
+            Event::SavingsSet { account_id, savings: m.savings }.emit();
+        } else {
+            env::storage_write(&pending_key(&account_id), &near_sdk::borsh::to_vec(&(staked, since)).unwrap());
+            Event::SavingsPending { account_id, savings: U128(staked), counts_from: U64(since + SAVINGS_DELAY_NS) }.emit();
+        }
+    }
+
+    /// A stake increase `sync_savings` read that does not count yet: (yoctoNEAR, counts from, ns).
+    pub fn get_pending_savings(&self, account_id: AccountId) -> Option<(U128, U64)> {
+        read_pending(&account_id).map(|(s, since)| (U128(s), U64(since + SAVINGS_DELAY_NS)))
     }
 
     /// DAO only: the profit-share rule (reserve, savings, contribution), adding up to 10000 bps.
@@ -608,6 +648,17 @@ impl Koperasi {
     /// Credit every member's share and return what stays in the DAO (reserve + rounding + unused pools).
     fn distribute(&mut self, amount: u128) -> u128 {
         require!(!self.members.is_empty(), "no members");
+        // increases that have waited long enough count from now on
+        let now = env::block_timestamp();
+        for (a, m) in self.members.iter_mut() {
+            if let Some((s, since)) = read_pending(a) {
+                if now - since >= SAVINGS_DELAY_NS {
+                    env::storage_remove(&pending_key(a));
+                    m.savings = U128(s);
+                    Event::SavingsSet { account_id: a.clone(), savings: m.savings }.emit();
+                }
+            }
+        }
         let r = &self.share_rule;
         let simp_pool = amount * r.savings_bps as u128 / BPS;
         let points_pool = amount * r.points_bps as u128 / BPS;

@@ -523,7 +523,7 @@ fn staking_pool_is_set_by_the_dao_and_savings_follow_the_stake() {
     let _ = k.sync_savings(acc("alice.testnet"));
     as_(&acc("koperasi.testnet"), near(0));
     k.on_staked(acc("alice.testnet"), Ok(U128(7 * 10u128.pow(24))));
-    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings, U128(7 * 10u128.pow(24)));
+    assert_eq!(k.get_pending_savings(acc("alice.testnet")).unwrap().0, U128(7 * 10u128.pow(24)), "counts after 7 days (S12)");
     as_(&dao(), near(0));
     k.set_staking_pool(None);
     assert_eq!(k.get_staking_pool(), None);
@@ -1481,20 +1481,57 @@ fn members_are_read_a_page_at_a_time() {
 /// who stakes a large amount just before a profit share, syncs, and unstakes after takes most of the savings pool.
 /// The cost is only the stake's lock-up (unstaking takes about 4 epochs). Fixing it (count a raise only after a delay)
 /// needs an upgrade by vote; this test shows the current behaviour and flips when the fix lands.
+fn at(who: &AccountId, ns: u64) {
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(who.clone()).account_balance(near(100)).block_timestamp(ns);
+    testing_env!(b.build());
+}
+
+/// S12 (was a PoC that paid mallory 99% of the savings pool): a stake increase counts only after 7 days.
 #[test]
-fn poc_s12_stake_just_before_a_share_takes_the_savings_pool() {
+fn s12_a_stake_just_before_a_share_does_not_count_yet() {
     let mut k = setup(); // 20% reserve, 40% savings, 40% points
     with_members(&mut k, &["alice.testnet", "mallory.testnet"]);
     as_(&dao(), near(0));
     k.set_staking_pool(Some(acc("pool.testnet")));
-    let staked = |k: &mut Koperasi, who: &str, n: u128| {
-        as_(&acc("koperasi.testnet"), near(0));
+    let staked = |k: &mut Koperasi, who: &str, n: u128, ns: u64| {
+        at(&me(), ns);
         k.on_staked(acc(who), Ok(U128(n * 10u128.pow(24))));
     };
-    staked(&mut k, "alice.testnet", 100); // alice has saved 100 NEAR for months
-    staked(&mut k, "mallory.testnet", 9_900); // mallory stakes 9 900 NEAR the day before the share is paid
-    share(&mut k, 100_000_000); // 100 USDC: 40 USDC savings pool
-    assert_eq!(k.get_claimable(acc("mallory.testnet")).0, 39_600_000, "99% of the savings pool");
-    assert_eq!(k.get_claimable(acc("alice.testnet")).0, 400_000);
-    staked(&mut k, "mallory.testnet", 0); // and unstakes after
+    staked(&mut k, "alice.testnet", 100, 0); // alice saves 100 NEAR
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 0, "an increase waits");
+    assert_eq!(k.get_pending_savings(acc("alice.testnet")), Some((U128(100 * 10u128.pow(24)), U64(7 * DAY))));
+    staked(&mut k, "mallory.testnet", 9_900, 30 * DAY - 1); // mallory stakes 9 900 NEAR the day before the share
+    at(&usdc(), 30 * DAY);
+    let _ = k.ft_on_transfer(dao(), U128(100_000_000), "share".into()); // 100 USDC: 40 USDC savings pool
+    assert_eq!(k.get_claimable(acc("alice.testnet")).0, 40_000_000, "alice's 100 NEAR waited 7 days: all the pool");
+    assert_eq!(k.get_claimable(acc("mallory.testnet")).0, 0, "mallory's stake does not count yet");
+    assert_eq!(k.get_pending_savings(acc("alice.testnet")), None);
+    // a decrease counts at once and drops the wait
+    staked(&mut k, "mallory.testnet", 0, 30 * DAY + 1);
+    assert_eq!(k.get_pending_savings(acc("mallory.testnet")), None);
+    staked(&mut k, "alice.testnet", 40, 30 * DAY + 2);
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 40 * 10u128.pow(24));
+}
+
+#[test]
+fn a_larger_stake_restarts_the_wait_and_a_smaller_one_keeps_it() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    let staked = |k: &mut Koperasi, n: u128, ns: u64| {
+        at(&me(), ns);
+        k.on_staked(acc("alice.testnet"), Ok(U128(n * 10u128.pow(24))));
+    };
+    staked(&mut k, 1, 0);
+    staked(&mut k, 500, 6 * DAY); // a top-up a day before the first would count: waits 7 days from now
+    staked(&mut k, 500, 7 * DAY);
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 0);
+    staked(&mut k, 300, 10 * DAY); // less than what waits: 300 was there since day 6
+    staked(&mut k, 300, 13 * DAY);
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 300 * 10u128.pow(24));
+    // a members' vote counts at once
+    staked(&mut k, 900, 14 * DAY);
+    as_(&dao(), near(0));
+    k.set_savings(vec![(acc("alice.testnet"), U128(5))]);
+    assert_eq!(k.get_pending_savings(acc("alice.testnet")), None);
 }

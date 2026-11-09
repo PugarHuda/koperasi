@@ -71,7 +71,7 @@ export const payPath = (amount, rule, sources) => (BigInt(amount) <= BigInt(rule
 
 /** Every NEP-297 event the contract emits (contract/src/events.rs), by its snake_case wire name. */
 export const EVENTS = ["join_requested", "join_cancelled", "member_added", "member_left", "config_set", "points_awarded",
-  "savings_set", "staking_pool_set", "share_rule_set", "usdc_set", "ledger_started", "agent_set", "steward_set",
+  "savings_set", "savings_pending", "staking_pool_set", "share_rule_set", "usdc_set", "ledger_started", "agent_set", "steward_set",
   "steward_bonded", "steward_slashed", "paused", "unpaused", "upgraded", "receipt_recorded", "receipt_updated",
   "earnings_deposited", "share_distributed", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "task_approved",
@@ -106,6 +106,7 @@ export function describeEvent({ event: e, data: d }) {
     config_set: () => `The members voted by-laws v${d.version}`,
     points_awarded: () => `${short(d.account_id)} was awarded ${d.points} contribution points`,
     savings_set: () => `Savings of ${short(d.account_id)} now count ${nearOf(d.savings)}`,
+    savings_pending: () => `${short(d.account_id)} staked ${nearOf(d.savings)}; it counts as savings after 7 days`,
     share_distributed: () => `The members shared ${usdcOf(d.amount)} among ${d.members} members`,
     share_claimed: () => `${short(d.account_id)} claimed ${usdcOf(d.amount)}`,
     paused: () => `The agent was paused by ${short(d.by)}`,
