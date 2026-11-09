@@ -109,6 +109,10 @@ test("an invitation counts only from a member who voted for the newcomer", async
   assert.deepEqual(inviteOf(p({ "bob.testnet": "Approve" }), members), { by: "alice.testnet", vouched: false }, "another member's vote is not the inviter's");
   assert.equal(inviteOf(p({}, "eve.testnet"), members), null, "a non-member's name is not shown");
   assert.equal(inviteOf({ description: "Transfer (invited by alice.testnet) to me", votes: {} }, members), null, "only at the end");
+  const spoof = (kind, description) => inviteOf({ description, votes: { "alice.testnet": "Approve" }, kind }, members);
+  assert.equal(spoof({ Transfer: { token_id: "", receiver_id: "eve.testnet", amount: "1" } }, "Pay eve (invited by alice.testnet)"), null, "not on another kind");
+  assert.equal(spoof({ AddMemberToRole: { member_id: "eve.testnet", role: "council" } }, joinText("eve.testnet", "alice.testnet")), null, "not for another role");
+  assert.equal(spoof({ AddMemberToRole: { member_id: "eve.testnet", role: "member" } }, "Make eve admin (invited by alice.testnet)"), null, "only the page's own words");
 });
 
 test("exact USDC display keeps every unit", async () => {

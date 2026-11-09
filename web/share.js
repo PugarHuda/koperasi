@@ -205,8 +205,11 @@ export const joinText = (me, by) => `Accept ${me} as a member (asked from the Ko
  * once X has voted to approve the proposal on-chain.
  */
 export function inviteOf(p, members) {
-  const by = /\(invited by ([a-z0-9._-]{2,64})\)$/.exec(String(p?.description ?? ""))?.[1];
-  if (!by || !members.includes(by) || by === p.kind?.AddMemberToRole?.member_id) return null;
+  // only a membership proposal in this page's exact words: free text on any other proposal never shows as vouched
+  const add = p?.kind?.AddMemberToRole;
+  if (!add || add.role !== "member") return null;
+  const by = /\(invited by ([a-z0-9._-]{2,64})\)$/.exec(String(p.description ?? ""))?.[1];
+  if (!by || !members.includes(by) || p.description !== joinText(add.member_id, by)) return null;
   return { by, vouched: p.votes?.[by] === "Approve" };
 }
 
