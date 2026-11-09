@@ -51,13 +51,13 @@ test("the attested docker compose must match mr_config_id", () => {
 
 test("max_tokens keeps a job's worst case under the by-laws' per-job cap", () => {
   const glm = { inMicro: 0.08, outMicro: 0.5 }; // z-ai/glm-5.3-flash list prices, micro-USD a token
-  assert.equal(maxTokensWithin(500_000, 2_000, glm), 4000, "a $0.50 cap leaves the full 4000 tokens");
+  assert.equal(maxTokensWithin(500_000, 2_000, glm), 16000, "a $0.50 cap leaves the full 16000 tokens (reasoning included)");
   const n = maxTokensWithin(1_000, 2_000, glm); // $0.001 cap: 160 µ$ of input leaves 840 µ$ → 1680 tokens
   assert.equal(n, 1680);
   assert.ok(2_000 * glm.inMicro + n * glm.outMicro <= 1_000);
   assert.throws(() => maxTokensWithin(100, 2_000, glm), OverBudget);
   assert.throws(() => maxTokensWithin(0, 0, glm), OverBudget);
-  assert.equal(maxTokensWithin(1, 10, { inMicro: 0, outMicro: 0 }), 4000, "a free model is capped by the output limit");
+  assert.equal(maxTokensWithin(1, 10, { inMicro: 0, outMicro: 0 }), 16000, "a free model is capped by the output limit");
 });
 
 test("only a local market counts as the demo stand-in", () => {

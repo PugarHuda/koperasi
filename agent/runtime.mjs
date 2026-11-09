@@ -18,7 +18,10 @@ import { verifyModel } from "./tee.mjs";
 
 const NEARAI = "https://cloud-api.near.ai/v1";
 // ponytail: fixed output and brief limits keep one job's cost bounded before the call; tune with the model's price.
-const MAX_OUTPUT_TOKENS = 4000;
+// Reasoning models spend their thinking out of the same budget before they answer (GLM 5.3 used 1 800 tokens on a
+// three-bullet brief): 4000 left real briefs with no answer at all. 16000 costs at most $0.008 on GLM 5.3 Flash; the
+// by-laws' per-job cap still bounds it for pricier models.
+const MAX_OUTPUT_TOKENS = 16000;
 const MAX_BRIEF_CHARS = 12000;
 const STATE = process.env.KOP_STATE ?? path.join(ROOT, "agent", ".state.json");
 
@@ -113,7 +116,7 @@ function loadState() {
 }
 const saveState = (s) => fs.writeFileSync(STATE, JSON.stringify(s));
 
-async function infer(config, job, capMicroUsd, { local = false } = {}) {
+export async function infer(config, job, capMicroUsd, { local = false } = {}) {
   const key = process.env.NEARAI_API_KEY;
   if (!key) {
     if (!local) throw new NotVerified("no NEARAI_API_KEY: the agent does not deliver work no model did");
@@ -150,7 +153,10 @@ async function infer(config, job, capMicroUsd, { local = false } = {}) {
       tee_checked_at: tee.at, billed: billed !== null,
     };
     const text = out.choices?.[0]?.message?.content;
-    if (typeof text !== "string" || !text) throw new Error(`NEAR AI Cloud returned no text for ${out.id}`);
+    if (typeof text !== "string" || !text) {
+      throw new Error(`NEAR AI Cloud returned no text for ${out.id} (finish: ${out.choices?.[0]?.finish_reason}, `
+        + `reasoning tokens: ${out.usage?.reasoning_tokens ?? "?"} of ${max_tokens})`);
+    }
     return { text, costMicroUsd, proof };
   } catch (e) {
     // the request went out, so it may be billed: the caller books the per-job cap, never zero

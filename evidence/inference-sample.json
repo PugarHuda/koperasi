@@ -1,0 +1,17 @@
+{
+ "note": "One real inference through the agent's own path (agent/runtime.mjs infer): model verified in a TEE first, the response signed by an attested TEE signing address over sha256(request):sha256(response), cost read from NEAR AI billing. A sample brief, not a market job: no buyer has awarded one yet, so no receipt was recorded.",
+ "at": "2026-11-09T06:24:54.722Z",
+ "brief": {
+  "title": "Explain NEAR global contracts in 5 bullet points"
+ },
+ "proof": {
+  "model": "z-ai/glm-5.3-flash",
+  "inference_id": "e05bc028-78ed-53e8-8f61-eba944402b97",
+  "chat_id": "75d19a22692b4f6c98bd80f0c557b2d3",
+  "tee_signer": "0x3b753b4406613c5e70ae640508632b600424fa0c",
+  "tee_checked_at": "2026-11-09T06:22:37.958Z",
+  "billed": true
+ },
+ "cost_usd": 0.001902,
+ "answer": "- **What it is.** A NEAR *global contract* is program code published once to the network as a whole, rather than stored inside one particular account. Other accounts can point at that shared code instead of each uploading their own copy — like one master recipe kept in a public library instead of every household photocopying it. (NEAR Docs — \"Global Contracts\": https://docs.near.org/concepts/abstract/global-contracts)\n\n- **The hash is a fingerprint.** Global contract code is identified by its *code hash* — a unique fingerprint computed from the exact bytes of the code. Identical code always yields the identical hash; even a one-character change produces a completely different hash. So approving \"this hash\" and approving \"this exact code\" are the same thing. (NEAR Docs — Global Contracts, same page)\n\n- **How an upgrade works.** Someone publishes the new version globally, which creates a new hash. Accounts change behavior only when they deliberately switch to referencing that new hash — nothing moves until the switch, and the code behind the hash can be inspected and tested *before* anyone points to it. (NEAR Docs — Global Contracts, same page)\n\n- **Why that beats a deploy key.** A deploy key is a standing permission: whoever holds it can swap the contract's code at any moment, silently, and everyone finds out afterward — a lost, leaked, or rogue key means arbitrary new code with no notice or vote. Voting on a hash flips this: the upgrade happens only after the group approves that specific fingerprint, and no key exists that could quietly install anything else. The safety shifts from \"trust a key holder\" to \"verify a fingerprint.\" (Mechanics per NEAR Docs — Global Contracts; the vote-on-hash *procedure* itself is your co-op's governance layer, not something the docs prescribe)\n\n- **Side benefit for members.** Because the code lives once on-chain, storage is cheaper and every account using it runs the identical, reviewed version — one code review covers everyone, rather than many drifting copies. (NEAR Docs — Global Contracts, same page)\n\n**What I could not verify:** I'm working from memory of the NEAR docs and cannot browse, so please confirm the page URL/slug and exact wording on docs.near.org (search \"global contracts\"). I did not verify specific storage-cost figures, did not cite a numbered NEP, and could not confirm how the docs phrase the deploy-key comparison. The docs also describe referencing global code by account ID (where upgrades follow that account); the hash-referenced form — the immutable one your vote-on-hash process relies on — should be confirmed there too."
+}
