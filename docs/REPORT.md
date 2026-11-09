@@ -101,8 +101,7 @@ Full table: README › Prior art (7 agent platforms). For this feature: [02 › 
 ## 9. Blockers (only what needs you)
 
 1. **Demo video and pitch deck:** they need your voice and screen. The script is ready.
-2. **Circle USDC in the treasury:** faucet.circle.com → `koperasi-mw4i2iwk.sputnik-v2.testnet` (captcha). Until then,
-   profit shares cannot be demoed with real money, and the task budget runs in NEAR.
+2. ~~Circle USDC in the treasury~~: done 9 Nov, 20 USDC from faucet.circle.com; profit share by vote #36, bob claimed 4.33 USDC.
 3. **NEAR AI credits** for the co-op's organization: without them, the agent refuses real jobs.
 4. **Agent Market has no testnet:** the first real loop can only happen on mainnet (a decision for you; not done).
 5. **Submit the form** before 14 Nov 23:59 UTC. The repo opens automatically on 13 Nov at 09:00 WIB.

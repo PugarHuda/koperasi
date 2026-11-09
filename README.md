@@ -26,7 +26,7 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 | The co-op's DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet) (Sputnik v2, role `member`, RoleWeight, threshold 1/2) |
 | Agent account | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, only `record_receipt` / `update_receipt` on the contract |
 | Agent Market listing | [@koperasi](https://market.near.ai) (self-hosted) |
-| USDC | Circle's USDC on NEAR testnet, `3e2210e1…afcb8af` (moved by vote, proposal #18; the treasury holds 0 USDC until someone funds it from faucet.circle.com, which needs a captcha). The demo deploys its own co-op on the mintable `usdc.fakes.testnet`, so anyone can run it without a faucet |
+| USDC | Circle's USDC on NEAR testnet, `3e2210e1…afcb8af` (moved by vote, proposal #18). Real profit share on the showcase: proposal #36: 10 of the 20 Circle testnet USDC from faucet.circle.com shared with the 4 members (bob 4.33 USDC, most of it from his 11 task points; guest 2.33, alice 0.67, steward 0.67; 2 USDC reserve back in the DAO); bob claimed his in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd). The demo deploys its own co-op on the mintable `usdc.fakes.testnet`, so anyone can run it without a faucet |
 | By-laws the agent runs | **v3** ([`config/config.v3.yaml`](config/config.v3.yaml), `6c237221…`): a member found that v2's model is not served by NEAR AI Cloud and proposed a switch to `z-ai/glm-5.3-flash`; the members approved it as DAO proposal #7 |
 | Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR; source in `web/`) |
 

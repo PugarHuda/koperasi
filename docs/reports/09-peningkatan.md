@@ -55,7 +55,7 @@ The builder approved the contract change (rule 7: contract architecture).
 
 ## What still needs the builder (it cannot be faked)
 
-1. Circle USDC in the treasury (captcha at faucet.circle.com): a real profit share and a claim.
+1. ~~Circle USDC in the treasury~~: done, profit share #36, bob claimed 4.33 USDC.
 2. NEAR AI credits (NEAR Builders, Q-000): one real Agent Market job with an on-chain proof.
 3. **Independent members:** every demo account is held by the builder, and the README says so. 3–5 people joining from the page would move Impact the most.
 4. The demo video and the X post (Q-012); submit with Social Money and Autonomous Business as tracks.
