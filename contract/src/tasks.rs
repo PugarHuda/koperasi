@@ -171,17 +171,20 @@ fn sources(r: &Record) -> u32 {
 impl Koperasi {
     // ---------- members' vote (DAO only) ----------
 
+    /// DAO only: the trust rule (tiers, daily limit per poster, points).
     pub fn set_trust(&mut self, rule: TrustRule) {
         self.assert_dao();
         require!(rule.auto_max.0 <= rule.one_vote_max.0, "auto_max must not exceed one_vote_max");
         require!(rule.trusted_after >= 1, "trusted_after must be at least 1: trust is earned");
         save(KEY_TRUST, &rule);
+        Event::TrustRuleSet { rule }.emit();
     }
 
     /// How much this contract may still pay from the DAO's treasury for tasks, in yoctoNEAR (replaces what is left).
     pub fn set_task_budget(&mut self, amount: U128) {
         self.assert_dao();
         write_u128(KEY_BUDGET, amount.0);
+        Event::TaskBudgetSet { amount }.emit();
     }
 
     // ---------- the task's life ----------
@@ -198,6 +201,7 @@ impl Koperasi {
         text(&description, "description");
         let id = read_u128(KEY_TASK_COUNT).unwrap_or(0) as u32;
         write_u128(KEY_TASK_COUNT, id as u128 + 1);
+        Event::TaskPosted { id, poster: poster.clone(), amount }.emit();
         save(&task_key(id), &Task {
             id,
             poster,
@@ -210,15 +214,16 @@ impl Koperasi {
             created: U64(env::block_timestamp()),
             paid_at: None,
         });
-        log!("task #{} posted", id);
         id
     }
 
+    /// Take an open task (anyone but its poster).
     pub fn claim_task(&mut self, id: u32) {
         let who = env::predecessor_account_id();
         let mut t = task(id);
         require!(t.status == TaskStatus::Open, "task is not open");
         require!(who != t.poster, "the poster cannot take their own task");
+        Event::TaskClaimed { id, contributor: who.clone() }.emit();
         t.contributor = Some(who);
         t.status = TaskStatus::Claimed;
         save(&task_key(id), &t);
@@ -229,6 +234,7 @@ impl Koperasi {
         let mut t = task(id);
         require!(t.status == TaskStatus::Claimed, "task is not claimed");
         require!(t.contributor.as_ref() == Some(&env::predecessor_account_id()), "not your task");
+        Event::TaskGivenUp { id, contributor: env::predecessor_account_id() }.emit();
         t.contributor = None;
         t.status = TaskStatus::Open;
         save(&task_key(id), &t);
@@ -240,6 +246,7 @@ impl Koperasi {
         require!(t.status == TaskStatus::Claimed, "task is not claimed");
         require!(t.contributor.as_ref() == Some(&env::predecessor_account_id()), "not your task");
         text(&deliverable, "deliverable");
+        Event::TaskSubmitted { id, deliverable: deliverable.clone() }.emit();
         t.deliverable = Some(deliverable);
         t.status = TaskStatus::Submitted;
         save(&task_key(id), &t);
@@ -261,9 +268,11 @@ impl Koperasi {
         if t.amount.0 <= rule.auto_max.0 && trusted && spent <= rule.poster_daily_auto.0 {
             // ponytail: a payout that later fails still counts toward the poster's day; errs on the safe side
             write_u128(today.as_bytes(), spent);
+            Event::TaskAccepted { id, on_trust: true }.emit();
             self.pay(&mut t, None);
             true
         } else {
+            Event::TaskAccepted { id, on_trust: false }.emit();
             t.status = TaskStatus::NeedsApproval;
             save(&task_key(id), &t);
             false
@@ -282,12 +291,14 @@ impl Koperasi {
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_PROPOSE.saturating_add(GAS_PROPOSED).saturating_add(GAS_CALLBACK)).on_approve_policy(id, who))
     }
 
+    /// Callback of `approve_task`.
     #[private]
     pub fn on_approve_policy(&mut self, id: u32, approver: AccountId, #[callback_result] policy: Result<Value, PromiseError>) {
         let policy = policy.unwrap_or_else(|_| env::panic_str("could not read DAO policy"));
         require!(role_has(&policy, MEMBER_ROLE, &approver), "only a member of the DAO approves");
         let mut t = task(id);
         require!(t.status == TaskStatus::NeedsApproval, "task is not waiting for approval");
+        Event::TaskApproved { id, approver: approver.clone() }.emit();
         self.pay(&mut t, Some(approver));
     }
 
@@ -302,6 +313,7 @@ impl Koperasi {
             who == t.poster && matches!(t.status, Open | Claimed)
         };
         require!(ok, "cannot cancel this task");
+        Event::TaskCancelled { id, by: who }.emit();
         if t.status == Paying {
             // the members decided a stuck payout did not happen: the money stays in the budget
             return self.unpay(t, Cancelled);
@@ -327,6 +339,7 @@ impl Koperasi {
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_PROPOSED).on_payout_proposed(t.id));
     }
 
+    /// Callback: the DAO filed the payout proposal (or did not).
     #[private]
     pub fn on_payout_proposed(&mut self, id: u32, #[callback_result] pid: Result<u64, PromiseError>) -> PromiseOrValue<()> {
         let t = task(id);
@@ -336,6 +349,7 @@ impl Koperasi {
             return PromiseOrValue::Value(());
         };
         write_u128(&payout_key(id), pid as u128);
+        Event::PayoutFiled { id, proposal_id: pid }.emit();
         PromiseOrValue::Promise(
             ext_dao_proposals::ext(self.dao_id.clone()).with_static_gas(GAS_ACT)
                 .act_proposal(pid, "VoteApprove".into(), payout_kind(&t), None)
@@ -389,6 +403,7 @@ impl Koperasi {
     }
 
     /// Paid only when the DAO's Transfer proposal is Approved and its transfer went through.
+    /// Callback: settle the task from the proposal's status and the transfer's result.
     #[private]
     pub fn on_payout_checked(&mut self, id: u32, moved: bool, #[callback_result] p: Result<Value, PromiseError>) {
         let mut t = task(id);
@@ -405,7 +420,9 @@ impl Koperasi {
                 let points = load::<TrustRule>(KEY_TRUST)
                     // at most `points`, even if the members lowered one_vote_max after the task was posted
                     .map_or(0, |r| (r.points as u128 * t.amount.0 / r.one_vote_max.0.max(1)).min(r.points as u128) as u64);
-                self.credit(t.contributor.as_ref().unwrap(), format!("task:{id}"), t.amount.0, points);
+                let contributor = t.contributor.clone().unwrap();
+                Event::TaskPaid { id, contributor: contributor.clone(), amount: t.amount, points }.emit();
+                self.credit(&contributor, format!("task:{id}"), t.amount.0, points);
             }
             // still open (e.g. the role is missing from the policy) or unreadable: the members can vote it by hand,
             // then anyone calls settle_task
@@ -435,7 +452,7 @@ impl Koperasi {
         }
         t.status = status;
         t.approved_by = None;
-        log!("task #{}: not paid, now {:?}", t.id, status);
+        Event::TaskUnpaid { id: t.id, status }.emit();
         save(&task_key(t.id), &t);
     }
 
@@ -449,12 +466,12 @@ impl Koperasi {
         });
         r.done += 1;
         r.earned = U128(r.earned.0 + earned);
-        log!("trust: +1 for {} from {}", who, source);
+        let points = if self.members.contains_key(who) { points } else { 0 };
+        Event::RecordCredited { account_id: who.clone(), source: source.clone(), points }.emit();
         r.refs.push(source);
         save(&record_key(who), &r);
-        if points > 0 && self.members.contains_key(who) {
+        if points > 0 {
             self.add_points(who, points);
-            log!("+{} contribution points for {}", points, who);
         }
     }
 
@@ -467,6 +484,7 @@ impl Koperasi {
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_dao_proposal(proposal_id))
     }
 
+    /// Callback of `credit_dao_bounty`.
     #[private]
     pub fn on_dao_proposal(&mut self, proposal_id: u64, #[callback_result] p: Result<Value, PromiseError>) {
         let p = p.unwrap_or_else(|_| env::panic_str("could not read the proposal"));
@@ -484,16 +502,19 @@ impl Koperasi {
 
     // ---------- views ----------
 
+    /// The trust rule, the budget left and how many tasks exist.
     pub fn get_board(&self) -> Board {
         Board { rule: load(KEY_TRUST), budget: U128(budget()), tasks: read_u128(KEY_TASK_COUNT).unwrap_or(0) as u32 }
     }
 
+    /// Tasks, a page at a time.
     pub fn get_tasks(&self, from: Option<u32>, limit: Option<u32>) -> Vec<Task> {
         let n = read_u128(KEY_TASK_COUNT).unwrap_or(0) as u32;
         let from = from.unwrap_or(0);
         (from..n.min(from.saturating_add(limit.unwrap_or(50)))).map(task).collect()
     }
 
+    /// An account's record: finished work, pay and where each point came from.
     pub fn get_record(&self, account_id: AccountId) -> Option<Record> {
         load(&record_key(&account_id))
     }

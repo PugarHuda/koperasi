@@ -43,7 +43,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: contract }
-      - run: cd contract && cargo test
+      - run: cd contract && cargo test --lib
+
+  # integration against the sponsor protocol: a local NEAR sandbox runs the real Sputnik DAO v2 code (the testnet
+  # showcase DAO's own wasm) next to this contract, and a task is paid from the DAO treasury through role `tasks`
+  sandbox:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-unknown-unknown }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: contract }
+      - run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+      - run: cd contract && cargo near build non-reproducible-wasm --locked
+      - run: cd contract && cargo test --locked --test sputnik_sandbox
 
   page:
     runs-on: ubuntu-latest

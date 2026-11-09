@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ff286c7910c326cf24d326d067a6022d62fbd2192532a43f593aa23526548c36 # shrinks to name = "aa._.testnet"
+cc 6e73126df2c6e83b1f052415df168d13c030cebfe1db3f69eee3ad7fe918e83b # shrinks to amount = 1, one_vote = 1, points = 0
+cc 24ed63c31a5ac5025d744bf7d6922f5d4ba91e363a101199ba09c388665e14ec # shrinks to ops = [(1, 0)]
+cc 35a0bb59edd46c4ba611dcc0f5d1f1eea67b8d9d4e91e3e5120b4b4992c798d1 # shrinks to ops = [(0, 0, 0, false)]
+cc 6ce969c35f1e5b0e9790b59f1481d0c02d76a931734971489f552a8f4b772df5 # shrinks to data = [(0, 0)], (r, sv, pt) = (0, 0, 10000), amount = 0

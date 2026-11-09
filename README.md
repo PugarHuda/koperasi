@@ -51,7 +51,7 @@ npm install
 npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `76 passed` for the contract and `pass 14` for the agent, scripts and page logic: response-signature recovery, the TDX quote
+See: `89 passed` for the contract and `pass 14` for the agent, scripts and page logic: response-signature recovery, the TDX quote
 binding the server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market
 check, the page's profit-share preview matching the contract's split to the last USDC unit, views that move past a
 rate-limited RPC, and the agent's money path when a job fails half-way (a billed inference that then fails is booked at
@@ -66,7 +66,13 @@ a poster pays with no vote only up to a daily limit; a member who finishes a tas
 refused as DAO bounties; the poster, the contributor and non-members cannot approve; payouts stop at the voted budget; a
 payout the DAO rejected or removed, or whose transfer bounced, returns to the budget, earns nothing and is not filed again; one still open waits and settles once;
 an approved DAO bounty counts once; a poster the members removed cannot accept; trust needs at least one finished task), the inference proof kept with each
-receipt, and moving to another USDC contract only when no share is unclaimed and no transfer is in flight. (On Windows, `contract/.cargo/config.toml` uses aws-lc-sys's prebuilt NASM objects.)
+receipt, moving to another USDC contract only when no share is unclaimed and no transfer is in flight, and a NEP-297 event
+for every state change. **Fuzz and invariant tests** (proptest): a profit share never loses or creates a unit for any members,
+savings, points, rule and amount; a share rule is accepted exactly when it adds up to 10000 bps; any valid account can join
+and leave; random sequences of shares and claims (succeeding or failing) keep the share ledger balanced; random task
+payouts and DAO outcomes keep the task budget balanced and never pay twice. Coverage (`cargo llvm-cov`): 98% of lines.
+**Against the real Sputnik code:** `contract/tests/sputnik_sandbox.rs` runs a local NEAR sandbox with the showcase DAO's own
+wasm (pulled from testnet) and pays a task from the DAO treasury through role `tasks` (Linux/macOS; CI job `sandbox`). (On Windows, `contract/.cargo/config.toml` uses aws-lc-sys's prebuilt NASM objects.)
 
 ### 2. The whole story on testnet (~3 min)
 

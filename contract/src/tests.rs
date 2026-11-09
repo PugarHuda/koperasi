@@ -930,7 +930,7 @@ fn a_payout_whose_callback_failed_is_unstuck_after_an_hour_without_paying_twice_
             near_sdk::serde_json::from_slice::<Value>(&args).ok().map(|v| v["moved"].as_bool().unwrap()),
         _ => None,
     });
-    let status = |k: &Koperasi, id: u32| k.get_tasks(None, None)[id as usize].status.clone();
+    let status = |k: &Koperasi, id: u32| k.get_tasks(None, None)[id as usize].status;
     let mut k = board();
     let mut ids = vec![];
     for filed in [false, true, true, true] {
@@ -1154,4 +1154,325 @@ fn trust_needs_at_least_one_finished_task() {
     let mut k = board();
     as_(&dao(), near(0));
     k.set_trust(TrustRule { trusted_after: 0, ..trust(1) });
+}
+
+// ---------- events (NEP-297) ----------
+
+fn events() -> Vec<Value> {
+    near_sdk::test_utils::get_logs()
+        .iter()
+        .filter_map(|l| l.strip_prefix("EVENT_JSON:"))
+        .map(|j| near_sdk::serde_json::from_str(j).unwrap())
+        .collect()
+}
+
+#[test]
+fn state_changes_emit_nep297_events() {
+    let mut k = setup();
+    as_(&acc("alice.testnet"), near(1));
+    k.join();
+    let e = events();
+    assert_eq!(e[0]["standard"], "koperasi");
+    assert_eq!(e[0]["version"], "1.0.0");
+    assert_eq!(e[0]["event"], "join_requested");
+    let data = |e: &Value| if e["data"].is_array() { e["data"][0].clone() } else { e["data"].clone() };
+    assert_eq!(data(&e[0])["account_id"], "alice.testnet");
+    k.apply_membership(acc("alice.testnet"), true);
+    assert_eq!(events().last().unwrap()["event"], "member_added");
+
+    as_(&usdc(), near(0));
+    let _ = k.ft_on_transfer(dao(), U128(1_000), "share".into());
+    let share = events().into_iter().find(|e| e["event"] == "share_distributed").expect("share event");
+    assert_eq!(data(&share)["amount"], "1000");
+
+    let mut k = board();
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, id);
+    assert!(events().iter().any(|e| e["event"] == "task_approved"));
+    dao_says(&mut k, id, "Approved"); // a new testing_env: only this step's logs remain
+    let names: Vec<String> = events().iter().map(|e| e["event"].as_str().unwrap().to_string()).collect();
+    for want in ["payout_filed", "task_paid", "record_credited"] {
+        assert!(names.iter().any(|n| n == want), "{want} missing from {names:?}");
+    }
+}
+
+// ---------- fuzz and invariants (proptest) ----------
+
+mod props {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Every case starts from empty storage (the mocked chain keeps it between cases otherwise).
+    fn fresh() {
+        near_sdk::mock::with_mocked_blockchain(|b| drop(b.take_storage()));
+    }
+
+    fn member(i: usize) -> String {
+        format!("m{i}.testnet")
+    }
+
+    /// Members with random savings (milli-NEAR) and points.
+    fn coop(savings: &[u64], points: &[u64]) -> Koperasi {
+        let mut k = setup();
+        let names: Vec<String> = (0..savings.len()).map(member).collect();
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        with_members(&mut k, &refs);
+        as_(&dao(), near(0));
+        k.set_savings(names.iter().zip(savings).map(|(n, s)| (acc(n), U128(*s as u128 * SAVINGS_UNIT))).collect());
+        for (n, p) in names.iter().zip(points) {
+            if *p > 0 {
+                k.award_points(acc(n), *p, "fuzz".into());
+            }
+        }
+        k
+    }
+
+    fn owed(k: &Koperasi, n: usize) -> u128 {
+        (0..n).map(|i| k.get_claimable(acc(&member(i))).0).sum()
+    }
+
+    /// (reserve, savings, points) in bps, adding up to 10000.
+    fn valid_rule() -> impl Strategy<Value = (u16, u16, u16)> {
+        (0u16..=10_000).prop_flat_map(|a| (Just(a), 0u16..=(10_000 - a))).prop_map(|(a, b)| (a, b, 10_000 - a - b))
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        /// Fuzz: any members, savings, points, rule and amount. Nothing is lost or created: the shares credited plus
+        /// the reserve equal the amount, and the reserve is at least the rule's reserve.
+        #[test]
+        fn a_profit_share_never_loses_or_creates_money(
+            data in prop::collection::vec((0u64..1_000_000_000_000, 0u64..1_000_000), 1..8),
+            (r, sv, pt) in valid_rule(),
+            amount in 0u128..1_000_000_000_000_000,
+        ) {
+            fresh();
+            let rule = rule(r, sv, pt);
+            let (savings, points): (Vec<u64>, Vec<u64>) = data.into_iter().unzip();
+            let mut k = coop(&savings, &points);
+            as_(&dao(), near(0));
+            k.set_share_rule(rule.clone());
+            as_(&usdc(), near(0));
+            let _ = k.ft_on_transfer(dao(), U128(amount), "share".into());
+            let reserve = k.get_periods()[0].reserve.0;
+            prop_assert_eq!(owed(&k, savings.len()) + reserve, amount);
+            prop_assert!(reserve >= amount * rule.reserve_bps as u128 / BPS);
+            prop_assert_eq!(k.get_ledger().unwrap().0 .0, owed(&k, savings.len()));
+        }
+
+        /// Fuzz: a share rule is accepted exactly when it adds up to 10000 bps.
+        #[test]
+        fn a_share_rule_is_accepted_iff_it_adds_up(a in 0u16..=u16::MAX, b in 0u16..=u16::MAX, c in 0u16..=u16::MAX) {
+            fresh();
+            let mut k = setup();
+            as_(&dao(), near(0));
+            let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.set_share_rule(rule(a, b, c)))).is_ok();
+            prop_assert_eq!(ok, a as u32 + b as u32 + c as u32 == 10_000);
+        }
+
+        /// Fuzz addresses: any valid account can join, be admitted by the DAO, and leave with its deposit.
+        #[test]
+        fn any_account_can_join_and_leave(name in "[a-z0-9]{2,20}([_-][a-z0-9]{1,8})?(\\.[a-z0-9]{1,12}([_-][a-z0-9]{1,6})?)?\\.testnet") {
+            fresh();
+            let mut k = setup();
+            let who = acc(&name);
+            as_(&who, near(3));
+            k.join();
+            prop_assert!(k.is_pending(who.clone()));
+            k.apply_membership(who.clone(), true);
+            prop_assert!(k.get_member(who.clone()).is_some());
+            k.apply_membership(who.clone(), false);
+            prop_assert!(k.get_member(who).is_none());
+            prop_assert_eq!(k.get_info().members, 0);
+        }
+
+        /// Fuzz: the by-laws hash must be 64 lowercase hex characters, nothing else.
+        #[test]
+        fn only_a_sha256_hex_is_a_valid_hash(h in "[0-9a-fA-Fg-z]{0,70}") {
+            let want = h.len() == 64 && h.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c));
+            prop_assert_eq!(valid_hash(&h), want);
+        }
+
+        /// Fuzz: whatever the task's pay and the rule, a member never earns more than the rule's points for a task.
+        #[test]
+        fn task_points_never_exceed_the_rule(amount in 1u128..=500, one_vote in 1u128..=500, points in 0u64..10_000) {
+            fresh();
+            let mut k = board();
+            with_members(&mut k, &["carol.testnet"]);
+            let (id, paid) = deliver(&mut k, amount * MILLI); // alice posts, carol (a member) works, bob approves
+            if !paid {
+                approve(&mut k, id);
+            }
+            as_(&dao(), near(0));
+            k.set_trust(TrustRule { one_vote_max: U128(one_vote * MILLI), auto_max: U128(0), points, ..trust(1) });
+            let before = k.get_member(acc("carol.testnet")).unwrap().points;
+            dao_says(&mut k, id, "Approved");
+            let earned = k.get_member(acc("carol.testnet")).unwrap().points - before;
+            prop_assert!(earned <= points);
+            prop_assert_eq!(earned as u128, (points as u128 * amount / one_vote).min(points as u128));
+            prop_assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Paid);
+        }
+
+        /// Invariant over random sequences of shares, claims (succeeding or failing), points and savings:
+        /// the ledger's owed counter always equals the shares waiting, nothing stays in flight once callbacks ran,
+        /// and every unit shared is either claimed, waiting, or back in the DAO as reserve.
+        #[test]
+        fn the_share_ledger_always_balances(ops in prop::collection::vec((0u8..4, 0usize..4, 0u128..10_000_000, any::<bool>()), 1..40)) {
+            fresh();
+            let n = 4;
+            let mut k = coop(&[1, 2, 3, 4], &[0, 0, 0, 0]);
+            let (mut shared, mut claimed, mut reserves) = (0u128, 0u128, 0u128);
+            for (op, i, x, ok) in ops {
+                let who = acc(&member(i));
+                match op {
+                    0 => {
+                        as_(&usdc(), near(0));
+                        let _ = k.ft_on_transfer(dao(), U128(x), "share".into());
+                        shared += x;
+                        let reserve = k.get_periods().last().unwrap().reserve;
+                        reserves += reserve.0;
+                        if reserve.0 > 0 {
+                            // the reserve's transfer to the DAO comes back
+                            as_(&me(), near(0));
+                            k.on_forwarded(reserve, Ok(()));
+                        }
+                    }
+                    1 if k.get_claimable(who.clone()).0 > 0 => {
+                        let amount = k.get_claimable(who.clone());
+                        as_(&who, near(0));
+                        let _ = k.claim_share();
+                        as_(&me(), near(0));
+                        k.on_claimed(who, amount, if ok { Ok(()) } else { Err(PromiseError::Failed) });
+                        if ok {
+                            claimed += amount.0;
+                        }
+                    }
+                    2 => {
+                        as_(&dao(), near(0));
+                        k.award_points(who, (x % 100) as u64, "fuzz".into());
+                    }
+                    3 => {
+                        as_(&dao(), near(0));
+                        k.set_savings(vec![(who, U128((x % 1000) * SAVINGS_UNIT))]);
+                    }
+                    _ => {}
+                }
+                let (owed_counter, in_flight) = k.get_ledger().unwrap();
+                prop_assert_eq!(owed_counter.0, owed(&k, n));
+                prop_assert_eq!(in_flight.0, 0);
+                prop_assert_eq!(claimed + owed(&k, n) + reserves, shared);
+            }
+        }
+
+        /// Invariant over random task payouts and DAO outcomes: the budget left plus everything paying or paid is
+        /// always the budget the members voted, and nothing is paid twice.
+        #[test]
+        fn the_task_budget_always_balances(ops in prop::collection::vec((1u128..=300, 0u8..4), 1..12)) {
+            fresh();
+            let mut k = board();
+            let voted = k.get_board().budget.0;
+            for (amount, outcome) in ops {
+                if amount * MILLI > k.get_board().budget.0 {
+                    continue;
+                }
+                let (id, paid) = deliver(&mut k, amount * MILLI);
+                if !paid {
+                    approve(&mut k, id);
+                }
+                as_(&me(), near(0));
+                match outcome {
+                    0 => dao_says(&mut k, id, "Approved"),
+                    1 => dao_says(&mut k, id, "Rejected"),
+                    2 => dao_says(&mut k, id, "InProgress"),
+                    _ => { let _ = k.on_payout_proposed(id, Err(PromiseError::Failed)); }
+                }
+                let out: u128 = k.get_tasks(None, None).iter()
+                    .filter(|t| matches!(t.status, TaskStatus::Paying | TaskStatus::Paid))
+                    .map(|t| t.amount.0).sum();
+                prop_assert_eq!(k.get_board().budget.0 + out, voted);
+                let paid_refs = k.get_record(acc("carol.testnet")).map_or(0, |r| r.refs.len());
+                let paid_tasks = k.get_tasks(None, None).iter().filter(|t| t.status == TaskStatus::Paid).count();
+                prop_assert_eq!(paid_refs, paid_tasks);
+            }
+        }
+    }
+}
+
+// ---------- coverage of the remaining entry points ----------
+
+#[test]
+fn a_contributor_can_hand_a_task_back_and_only_they_can() {
+    let mut k = board();
+    as_(&acc("alice.testnet"), TASK_FEE);
+    let id = k.post_task("t".into(), U128(MILLI));
+    as_(&acc("carol.testnet"), near(0));
+    k.claim_task(id);
+    as_(&acc("bob.testnet"), near(0));
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.give_up_task(id))).is_err(), "not bob's task");
+    as_(&acc("carol.testnet"), near(0));
+    k.give_up_task(id);
+    let t = &k.get_tasks(None, None)[id as usize];
+    assert_eq!((t.status, t.contributor.clone()), (TaskStatus::Open, None));
+}
+
+#[test]
+fn entry_points_that_read_the_dao_start_a_cross_contract_call() {
+    let mut k = board();
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    as_(&acc("bob.testnet"), near(0));
+    let _ = k.approve_task(id);
+    let _ = k.sync_member(acc("alice.testnet"));
+    let _ = k.credit_dao_bounty(7);
+    let calls: Vec<String> = near_sdk::test_utils::get_created_receipts().iter().flat_map(|r| r.actions.clone()).filter_map(|a| match a {
+        near_sdk::mock::MockAction::FunctionCallWeight { method_name, .. } => Some(String::from_utf8(method_name).unwrap()),
+        _ => None,
+    }).collect();
+    for m in ["get_policy", "on_approve_policy", "on_policy", "get_proposal", "on_dao_proposal"] {
+        assert!(calls.iter().any(|c| c == m), "{m} missing from {calls:?}");
+    }
+}
+
+#[test]
+fn the_transfers_result_is_recorded_before_the_proposal_is_read() {
+    use near_sdk::PromiseResult;
+    for (result, want) in [(PromiseResult::Successful(vec![]), 1u8), (PromiseResult::Failed, 0u8)] {
+        near_sdk::mock::with_mocked_blockchain(|b| drop(b.take_storage()));
+        let mut k = board();
+        let (id, _) = deliver(&mut k, 50 * MILLI);
+        approve(&mut k, id);
+        as_(&me(), near(0));
+        let _ = k.on_payout_proposed(id, Ok(100 + id as u64));
+        let mut b = VMContextBuilder::new();
+        b.current_account_id(me()).predecessor_account_id(me());
+        testing_env!(b.build(), near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(), vec![result]);
+        let _ = k.on_payout_voted(id, 100 + id as u64);
+        assert_eq!(env::storage_read(format!("moved:{id}").as_bytes()), Some(vec![want]));
+    }
+}
+
+#[test]
+fn the_dao_sets_the_agent_and_a_new_steward_gets_the_old_bond_back() {
+    let mut k = setup();
+    as_(&dao(), near(0));
+    k.set_agent(acc("agent2.testnet"));
+    assert_eq!(k.get_info().agent_id, acc("agent2.testnet"));
+    k.set_steward(Some(steward()));
+    as_(&steward(), near(2));
+    k.bond_steward();
+    assert_eq!(k.get_info().steward_bond, near(2));
+    as_(&dao(), near(0));
+    k.set_steward(Some(acc("steward2.testnet")));
+    assert_eq!(k.get_info().steward_bond, near(0));
+    let refund = near_sdk::test_utils::get_created_receipts().into_iter().find(|r| r.receiver_id == steward());
+    assert!(refund.is_some(), "the old steward's 2 NEAR bond goes back");
+}
+
+#[test]
+fn members_are_read_a_page_at_a_time() {
+    let mut k = setup();
+    with_members(&mut k, &["a1.testnet", "a2.testnet", "a3.testnet"]);
+    assert_eq!(k.get_members(None, None).len(), 3);
+    assert_eq!(k.get_members(Some(1), Some(1)).len(), 1);
+    assert_eq!(k.get_members(Some(3), None).len(), 0);
 }

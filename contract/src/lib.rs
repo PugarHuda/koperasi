@@ -6,6 +6,9 @@
 //! agent must run, a receipt for every job, on-chain reconciliation of the steward's deposits, and the
 //! profit share split by savings + contribution points, with a reserve returned to the DAO.
 
+// #[near] generates a wrapper for `new` with one more argument than its 7 founding terms
+#![allow(clippy::too_many_arguments)]
+
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde_json::Value;
 use near_sdk::store::{IterableMap, LookupMap, Vector};
@@ -69,6 +72,9 @@ fn bump(key: &[u8], by: u128, sub: bool) {
 fn proof_key(job_id: &str) -> Vec<u8> {
     [PROOF_PREFIX, job_id.as_bytes()].concat()
 }
+
+mod events;
+pub use events::Event;
 
 #[derive(BorshStorageKey)]
 #[near]
@@ -219,6 +225,7 @@ pub fn role_has(policy: &Value, role: &str, account: &AccountId) -> bool {
 
 #[near]
 impl Koperasi {
+    /// Found the co-op: its DAO, token, agent account, join deposit, profit-share rule and first by-laws.
     #[init]
     pub fn new(
         dao_id: AccountId,
@@ -283,6 +290,7 @@ impl Koperasi {
         require!(paid >= self.join_deposit, "attach at least the join deposit");
         require!(!self.members.contains_key(&who) && !self.pending.contains_key(&who), "already joined");
         self.pending.insert(who.clone(), self.join_deposit);
+        Event::JoinRequested { account_id: who.clone(), deposit: self.join_deposit }.emit();
         let change = paid.saturating_sub(self.join_deposit);
         if !change.is_zero() {
             let _ = Promise::new(who).transfer(change);
@@ -300,6 +308,7 @@ impl Koperasi {
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_cancel_policy(who))
     }
 
+    /// Callback of `cancel_join`.
     #[private]
     pub fn on_cancel_policy(&mut self, account_id: AccountId, #[callback_result] policy: Result<Value, PromiseError>) {
         let policy = policy.unwrap_or_else(|_| env::panic_str("could not read DAO policy"));
@@ -307,6 +316,7 @@ impl Koperasi {
             log!("{} was already voted in: admitted instead of refunded", account_id);
             self.apply_membership(account_id, true);
         } else if let Some(join_deposit) = self.pending.remove(&account_id) {
+            Event::JoinCancelled { account_id: account_id.clone(), refunded: join_deposit }.emit();
             let _ = Promise::new(account_id).transfer(join_deposit);
         }
     }
@@ -320,6 +330,7 @@ impl Koperasi {
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_policy(account_id))
     }
 
+    /// Callback of `sync_member`.
     #[private]
     pub fn on_policy(&mut self, account_id: AccountId, #[callback_result] policy: Result<Value, PromiseError>) {
         let policy = policy.unwrap_or_else(|_| env::panic_str("could not read DAO policy"));
@@ -334,10 +345,10 @@ impl Koperasi {
                     account_id.clone(),
                     Member { join_deposit, savings: U128(0), points: 0, joined_at: U64(env::block_timestamp()) },
                 );
-                log!("new member: {}", account_id);
+                Event::MemberAdded { account_id }.emit();
             }
         } else if let Some(m) = self.members.remove(&account_id) {
-            log!("member left: {}", account_id);
+            Event::MemberLeft { account_id: account_id.clone(), refunded: m.join_deposit }.emit();
             let _ = Promise::new(account_id).transfer(m.join_deposit);
         }
     }
@@ -352,14 +363,16 @@ impl Koperasi {
         if let Some(c) = &contributor {
             self.add_points(c, points);
         }
+        Event::ConfigSet { version, hash: hash.clone(), uri: uri.clone(), contributor: contributor.clone(), points }.emit();
         self.config = Config { version, hash, uri, contributor, activated_at: U64(env::block_timestamp()) };
         self.config_history.push(self.config.clone());
     }
 
+    /// DAO only: contribution points for work outside the by-laws (e.g. a new tool); they weigh the next profit share.
     pub fn award_points(&mut self, account_id: AccountId, points: u64, reason: String) {
         self.assert_dao();
         self.add_points(&account_id, points);
-        log!("+{} points for {}: {}", points, account_id, reason);
+        Event::PointsAwarded { account_id, points, reason }.emit();
     }
 
     fn add_points(&mut self, account_id: &AccountId, points: u64) {
@@ -372,12 +385,14 @@ impl Koperasi {
         self.assert_dao();
         for (a, s) in entries {
             self.members.get_mut(&a).unwrap_or_else(|| env::panic_str("not a member")).savings = s;
+            Event::SavingsSet { account_id: a, savings: s }.emit();
         }
     }
 
     /// Choose the staking pool whose stake counts as savings (None: savings only by `set_savings` votes).
     pub fn set_staking_pool(&mut self, pool: Option<AccountId>) {
         self.assert_dao();
+        Event::StakingPoolSet { pool: pool.clone() }.emit();
         match pool {
             Some(p) => {
                 env::storage_write(KEY_STAKING_POOL, p.as_bytes());
@@ -388,6 +403,7 @@ impl Koperasi {
         }
     }
 
+    /// The staking pool whose stake counts as savings, if the DAO chose one.
     pub fn get_staking_pool(&self) -> Option<AccountId> {
         env::storage_read(KEY_STAKING_POOL).and_then(|b| String::from_utf8(b).ok()?.parse().ok())
     }
@@ -402,18 +418,21 @@ impl Koperasi {
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_staked(account_id))
     }
 
+    /// Callback of `sync_savings`.
     #[private]
     pub fn on_staked(&mut self, account_id: AccountId, #[callback_result] staked: Result<U128, PromiseError>) {
         let staked = staked.unwrap_or_else(|_| env::panic_str("could not read the staking pool"));
         if let Some(m) = self.members.get_mut(&account_id) {
             m.savings = staked;
-            log!("savings of {}: {} yocto staked", account_id, staked.0);
+            Event::SavingsSet { account_id, savings: staked }.emit();
         }
     }
 
+    /// DAO only: the profit-share rule (reserve, savings, contribution), adding up to 10000 bps.
     pub fn set_share_rule(&mut self, rule: ShareRule) {
         self.assert_dao();
         check_rule(&rule);
+        Event::ShareRuleSet { reserve_bps: rule.reserve_bps, savings_bps: rule.savings_bps, points_bps: rule.points_bps }.emit();
         self.share_rule = rule;
     }
 
@@ -426,7 +445,7 @@ impl Koperasi {
         let owed = read_u128(KEY_OWED_SHARES).unwrap_or_else(|| env::panic_str("call init_ledger first"));
         require!(owed == 0, "profit shares are still to be claimed in the current token");
         require!(read_u128(KEY_IN_FLIGHT) == Some(0), "a USDC transfer is still in flight");
-        log!("usdc: {} -> {}", self.usdc_id, usdc_id);
+        Event::UsdcSet { from: self.usdc_id.clone(), to: usdc_id.clone() }.emit();
         self.usdc_id = usdc_id;
     }
 
@@ -438,7 +457,7 @@ impl Koperasi {
         let owed: u128 = self.members.keys().map(|a| self.claimable.get(a).copied().unwrap_or(0)).sum();
         write_u128(KEY_OWED_SHARES, owed);
         write_u128(KEY_IN_FLIGHT, 0);
-        log!("ledger started: {} owed in profit shares", owed);
+        Event::LedgerStarted { owed: U128(owed) }.emit();
     }
 
     /// (owed profit shares, USDC in flight); None before `init_ledger` on an older co-op.
@@ -446,20 +465,24 @@ impl Koperasi {
         Some((U128(read_u128(KEY_OWED_SHARES)?), U128(read_u128(KEY_IN_FLIGHT)?)))
     }
 
+    /// DAO only: the account whose function-call key records receipts.
     pub fn set_agent(&mut self, agent_id: AccountId) {
         self.assert_dao();
+        Event::AgentSet { agent_id: agent_id.clone() }.emit();
         self.agent_id = agent_id;
     }
 
     /// Appoint a new steward (the Agent Market account holder). Any bond of the previous steward goes back.
     pub fn set_steward(&mut self, steward: Option<AccountId>) {
         self.assert_dao();
+        let mut returned = NearToken::from_yoctonear(0);
         if let Some(old) = self.steward.take() {
             if !self.steward_bond.is_zero() {
-                let _ = Promise::new(old).transfer(self.steward_bond);
-                self.steward_bond = NearToken::from_yoctonear(0);
+                returned = std::mem::replace(&mut self.steward_bond, NearToken::from_yoctonear(0));
+                let _ = Promise::new(old).transfer(returned);
             }
         }
+        Event::StewardSet { steward: steward.clone(), bond_returned: returned }.emit();
         self.steward = steward;
     }
 
@@ -469,26 +492,33 @@ impl Koperasi {
         let bond = self.steward_bond;
         require!(!bond.is_zero(), "no bond");
         self.steward_bond = NearToken::from_yoctonear(0);
+        Event::StewardSlashed { amount: bond }.emit();
         let _ = Promise::new(self.dao_id.clone()).transfer(bond);
         bond
     }
 
+    /// The steward locks NEAR as a bond the DAO can slash if deposits fall short of the receipts.
     #[payable]
     pub fn bond_steward(&mut self) {
-        require!(Some(env::predecessor_account_id()) == self.steward, "only the steward");
+        let who = env::predecessor_account_id();
+        require!(Some(&who) == self.steward.as_ref(), "only the steward");
         self.steward_bond = self.steward_bond.saturating_add(env::attached_deposit());
+        Event::StewardBonded { steward: who, amount: env::attached_deposit(), bond: self.steward_bond }.emit();
     }
 
     /// Kill switch: the DAO or the steward can stop the agent; only the DAO can restart it.
     pub fn pause(&mut self) {
         let who = env::predecessor_account_id();
-        require!(who == self.dao_id || Some(who) == self.steward, "only the DAO or the steward");
+        require!(who == self.dao_id || Some(&who) == self.steward.as_ref(), "only the DAO or the steward");
         self.paused = true;
+        Event::Paused { by: who }.emit();
     }
 
+    /// DAO only: restart the agent after a pause.
     pub fn unpause(&mut self) {
         self.assert_dao();
         self.paused = false;
+        Event::Unpaused {}.emit();
     }
 
     /// The only way to change this contract's code. Wasm is far too large to pass through a proposal, so a member
@@ -497,12 +527,13 @@ impl Koperasi {
     /// account keeps no full-access key, so nobody can deploy around the vote. New code must keep the state layout.
     pub fn upgrade(&mut self, code_hash: Base58CryptoHash) -> Promise {
         self.assert_dao();
-        log!("upgrade by vote to global contract code {}", String::from(&code_hash));
+        Event::Upgraded { code_hash: String::from(&code_hash) }.emit();
         Promise::new(env::current_account_id()).use_global_contract(code_hash)
     }
 
     // ---------- the agent (function-call key, no deposit) ----------
 
+    /// Agent only: the receipt of one job, refused unless the agent runs the approved config and the co-op runs.
     pub fn record_receipt(
         &mut self,
         job_id: String,
@@ -522,6 +553,7 @@ impl Koperasi {
             require!(p.len() <= MAX_PROOF_LEN, "proof too long");
             env::storage_write(&proof_key(&job_id), p.as_bytes());
         }
+        Event::ReceiptRecorded { job_id: job_id.clone(), price, inference_cost, config_version: self.config.version }.emit();
         self.receipt_index.insert(job_id.clone(), self.receipts.len());
         self.receipts.push(Receipt {
             job_id,
@@ -535,6 +567,7 @@ impl Koperasi {
         });
     }
 
+    /// Agent only: mirror the market's verdict (Submitted to Paid, Refunded or Disputed; Disputed to Paid or Refunded).
     pub fn update_receipt(&mut self, job_id: String, status: ReceiptStatus) {
         self.assert_agent();
         let i = *self.receipt_index.get(&job_id).unwrap_or_else(|| env::panic_str("no receipt"));
@@ -543,6 +576,7 @@ impl Koperasi {
         let ok = matches!((r.status, status), (Submitted, Paid | Refunded | Disputed) | (Disputed, Paid | Refunded));
         require!(ok, "invalid status change");
         r.status = status;
+        Event::ReceiptUpdated { job_id, status }.emit();
     }
 
     // ---------- money in: USDC ft_transfer_call ----------
@@ -556,6 +590,7 @@ impl Koperasi {
         match msg.as_str() {
             "earnings" if Some(&sender_id) == self.steward.as_ref() => {
                 self.deposited += amount.0;
+                Event::EarningsDeposited { amount }.emit();
                 self.forward_to_dao(amount.0);
                 PromiseOrValue::Value(U128(0))
             }
@@ -583,12 +618,9 @@ impl Koperasi {
         let count = self.members.len();
         for (a, m) in self.members.iter_mut() {
             let mut share = 0;
-            if total_simp > 0 {
-                share += simp_pool * (m.savings.0 / SAVINGS_UNIT) / total_simp;
-            }
-            if total_points > 0 {
-                share += points_pool * m.points as u128 / total_points;
-            }
+            // checked_div: an empty pool (nobody saved, or no points) pays nothing from it
+            share += (simp_pool * (m.savings.0 / SAVINGS_UNIT)).checked_div(total_simp).unwrap_or(0);
+            share += (points_pool * m.points as u128).checked_div(total_points).unwrap_or(0);
             m.points = 0;
             if share > 0 {
                 let c = self.claimable.get(a).copied().unwrap_or(0);
@@ -598,6 +630,7 @@ impl Koperasi {
         }
         bump(KEY_OWED_SHARES, paid, false);
         let reserve = amount - paid;
+        Event::ShareDistributed { period: self.periods.len() + 1, amount: U128(amount), paid: U128(paid), reserve: U128(reserve), members: count }.emit();
         self.periods.push(Period {
             id: self.periods.len() + 1,
             amount: U128(amount),
@@ -617,11 +650,13 @@ impl Koperasi {
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_forwarded(U128(amount)));
     }
 
+    /// Callback of a transfer to the DAO.
     #[private]
     pub fn on_forwarded(&mut self, amount: U128, #[callback_result] r: Result<(), PromiseError>) {
         bump(KEY_IN_FLIGHT, amount.0, true);
         if r.is_err() {
             self.unforwarded += amount.0;
+            Event::ForwardFailed { amount }.emit();
         }
     }
 
@@ -634,12 +669,14 @@ impl Koperasi {
 
     // ---------- profit share ----------
 
+    /// Take your profit share in USDC (pull: each member claims their own). A failed transfer puts it back.
     pub fn claim_share(&mut self) -> Promise {
         let who = env::predecessor_account_id();
         let amount = self.claimable.remove(&who).unwrap_or(0);
         require!(amount > 0, "nothing to claim");
         bump(KEY_OWED_SHARES, amount, true);
         bump(KEY_IN_FLIGHT, amount, false);
+        Event::ShareClaimed { account_id: who.clone(), amount: U128(amount) }.emit();
         ext_ft::ext(self.usdc_id.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(GAS_FT_TRANSFER)
@@ -647,10 +684,12 @@ impl Koperasi {
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_claimed(who, U128(amount)))
     }
 
+    /// Callback of `claim_share`.
     #[private]
     pub fn on_claimed(&mut self, account_id: AccountId, amount: U128, #[callback_result] r: Result<(), PromiseError>) {
         bump(KEY_IN_FLIGHT, amount.0, true);
         if r.is_err() {
+            Event::ClaimRolledBack { account_id: account_id.clone(), amount }.emit();
             bump(KEY_OWED_SHARES, amount.0, false);
             let c = self.claimable.get(&account_id).copied().unwrap_or(0);
             self.claimable.insert(account_id, c + amount.0);
@@ -659,6 +698,7 @@ impl Koperasi {
 
     // ---------- views ----------
 
+    /// Everything a dashboard needs in one read.
     pub fn get_info(&self) -> Info {
         Info {
             dao_id: self.dao_id.clone(),
@@ -677,15 +717,18 @@ impl Koperasi {
         }
     }
 
+    /// The by-laws in force.
     pub fn get_config(&self) -> Config {
         self.config.clone()
     }
 
+    /// Every version of the by-laws, oldest first.
     pub fn get_config_history(&self, from: Option<u32>, limit: Option<u32>) -> Vec<Config> {
         let from = from.unwrap_or(0);
         self.config_history.iter().skip(from as usize).take(limit.unwrap_or(50) as usize).cloned().collect()
     }
 
+    /// Members with their deposit, savings and points, a page at a time.
     pub fn get_members(&self, from: Option<u32>, limit: Option<u32>) -> Vec<(AccountId, Member)> {
         self.members
             .iter()
@@ -695,14 +738,17 @@ impl Koperasi {
             .collect()
     }
 
+    /// One member, if they are one.
     pub fn get_member(&self, account_id: AccountId) -> Option<Member> {
         self.members.get(&account_id).cloned()
     }
 
+    /// Paid the join deposit and waits for the vote.
     pub fn is_pending(&self, account_id: AccountId) -> bool {
         self.pending.contains_key(&account_id)
     }
 
+    /// The agent's receipts, a page at a time.
     pub fn get_receipts(&self, from: Option<u32>, limit: Option<u32>) -> Vec<Receipt> {
         self.receipts.iter().skip(from.unwrap_or(0) as usize).take(limit.unwrap_or(50) as usize).cloned().collect()
     }
@@ -712,14 +758,17 @@ impl Koperasi {
         env::storage_read(&proof_key(&job_id)).and_then(|b| String::from_utf8(b).ok())
     }
 
+    /// Every profit share so far.
     pub fn get_periods(&self) -> Vec<Period> {
         self.periods.iter().cloned().collect()
     }
 
+    /// The profit share waiting for this account.
     pub fn get_claimable(&self, account_id: AccountId) -> U128 {
         U128(self.claimable.get(&account_id).copied().unwrap_or(0))
     }
 
+    /// What the steward owes: paid receipts net of the market fee, against deposits.
     pub fn get_audit(&self) -> Audit {
         let gross: u128 =
             self.receipts.iter().filter(|r| r.status == ReceiptStatus::Paid).map(|r| r.price.0).sum();
