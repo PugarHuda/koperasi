@@ -56,6 +56,13 @@ file is the script.
 **Agent Economy.** Bid → deliver → paid. Each job's inference cost comes from NEAR AI Cloud billing, with one receipt
 per job, plus a TEE proof that any visitor can verify in their own browser.
 
+## X post (draft)
+
+> Who controls an AI agent that earns money? In Koperasi, its members: one member, one vote, like an Indonesian
+> co-op. The agent's prompt, model and prices are by-laws pinned by hash in a @SputnikDAO vote; check its TEE with your
+> own nonce in your browser. Small tasks are paid on earned trust, big ones voted by all. Live on @NEARProtocol testnet:
+> https://koperasi-kohl.vercel.app #NEARHackathon
+
 ## Final checklist
 
 - [x] Repo with README: one-liner and positioning at the top, live demo link, per-track evidence, contract addresses, setup and tests
@@ -64,7 +71,7 @@ per job, plus a TEE proof that any visitor can verify in their own browser.
 - [x] CI: lint, typecheck, unit, contract, Playwright, npm audit, `npm run verify` (daily)
 - [x] Security rounds 1–3 ([05-security](reports/05-security.md)); S12 fixed on-chain (#48); gasless relayer live in production
 - [ ] **Demo video** (builder records it with the script above)
-- [ ] **Pitch deck** (outline above)
+- [x] **Pitch deck**: 9 slides built from the outline above (shared by the builder as a link)
 - [ ] **Repo public**: scheduled task on 13 Nov 09:00 WIB (check `.open-repo.log`)
 - [ ] **Submission form** before 14 Nov 23:59 UTC (06:59 WIB on 15 Nov)
 - [ ] Optional, for a treasury in USDC: Circle faucet → `koperasi-mw4i2iwk.sputnik-v2.testnet`
