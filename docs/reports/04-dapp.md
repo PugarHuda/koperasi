@@ -1,4 +1,87 @@
-# 04 · dApp and integration (dApp Engineer), 8 Nov 2026
+# 04 · dApp / full-stack (9 Nov 2026)
+
+Builds on [01-tech-lead](01-tech-lead.md), [02-strategi](02-strategi.md) and [03-contracts](03-contracts.md). The page
+is a static site (`web/`, no build step) on Vercel: https://koperasi-kohl.vercel.app. Commits `f56ee41`, `2574942`.
+
+## Findings fixed
+
+| Finding | Fix | Files |
+|---|---|---|
+| T8: raw contract panic text | Done earlier (the contract's own sentence). Errors are now classified: cancelled in the wallet, failed on-chain (with the failed tx), or network unknown ("check before retrying", against double sends) | `web/share.js` (`walletError`), `web/wallet.js` |
+| T11: CSP | Partly done earlier (framing, base, object, form). Script and connect sources stay open on purpose: NEAR Connect loads wallets from many origins | `vercel.json` |
+| T12: E2E flaky under public-RPC 429s | The RPC client no longer retries an answer that is final on every RPC (no such account, a contract refusal). The live feed starts after the page's own reads | `web/near.js`, `web/live.js` |
+| Phones scrolled sideways (39 px on iPhone, CI run 42561548758) | The by-laws grid used `1fr`, which grows to its widest content; now `minmax(0, 1fr)`, and the rebuild commands wrap | `web/style.css` |
+| PRD F7: no way to leave from the page | *Ask to leave* files `RemoveMemberFromRole` for yourself; after the vote, *Close my membership* returns the deposit | `web/wallet.js` |
+
+**No mock data on the page.**
+- Every figure is read from the chain: contract views, the DAO, the token, the staking pool. The live feed adds the
+  NearBlocks indexer.
+- Addresses come from `web/deployment.json`, a copy of `deployment.testnet.json`. NEAR has no ABI; the contract's
+  JSON methods are typed in its source.
+- The only demo data are the 4 receipts from `npm run demo`. The page labels them *Demo market, no model*.
+
+## Wallet and transactions
+
+| Brief | How it works here |
+|---|---|
+| Connect, switch account, disconnect, auto-reconnect | NEAR Connect (Meteor, Intear, Nightly, HOT…). `wallet:signIn` / `wallet:signOut` re-render the panel; `getConnectedWallet()` reconnects on load |
+| Switch network | NEAR has no chain id to switch. The panel checks the signed-in account on this network's RPC: if it does not exist, the panel says the wallet is probably on the other network, explains how to switch (Meteor's network menu), and offers *Disconnect and connect a testnet account*. A new implicit account is told it exists only once funded |
+| Transaction status | *Checking with the chain first* → *Waiting for your signature… NEAR confirms in about 2 seconds* → **confirmed** (tx link), or **failed on-chain** (the contract's sentence and the failed tx link), **cancelled in your wallet** ("nothing was sent"), or **status unknown** (network; check before retrying) |
+| Simulation before sending | NEAR's RPC cannot dry-run a state change, so the page runs the contract's own checks on the current chain state before the wallet opens: task status and roles (`taskCheck`, the same rules as `tasks.rs`), whether a vote is still open and not voted already, whether a claim is still there, whether the account already joined, and whether the account can pay deposit plus gas over its storage lock (`affordable`). A failing check shows **not sent**: the reason, and nothing to sign |
+| Double submit, nonce | One transaction at a time: the panel disables every control while busy. Nonces belong to the wallet's access key; NEAR has no replacement transactions (a transaction lands or expires) |
+
+## On-chain data
+
+| Brief | How it works here |
+|---|---|
+| RPC fallback and retry | 3 RPCs, two rounds, an 8 s timeout each, sticky to the last good RPC; a final answer is not retried |
+| Batch reads | NEAR has no multicall. Independent views run in parallel (`Promise.all`) |
+| Real-time events | **Live activity** section (`#live`, `web/live.js`). The contract emits NEP-297 events (see 03). The NearBlocks v3 indexer lists the latest transactions to the contract and the DAO, and the RPC returns their logs. Polled every 30 s while the tab is visible and on return to the tab. A new event refreshes the wallet panel (cache invalidation) and offers *refresh the figures*. Polling is used because no indexer streams NEP-297 events on testnet: Intear's stream is mainnet-only |
+| Schema validation | No new dependency (the page is plain ES modules). `parseEvents` keeps only logs written by the contract account with `standard: "koperasi"`, a semver version, a known event and object data, so another contract printing `EVENT_JSON` cannot spoof the feed. `txList` checks the indexer's rows (base58 hash, signer, timestamp) |
+
+## Sponsor integrations: before and after this round
+
+| Integration | Before | After |
+|---|---|---|
+| NEAR protocol | Global contracts for vote-only upgrades | Also NEP-297 events read live on the page, and NEP-330 source metadata shown as a **rebuild it yourself** card: commit link, Docker image, the command, and the sha256 it must give |
+| Sputnik DAO | Membership, by-laws, upgrades, bounties, task payouts through role `tasks` | Also: leaving by `RemoveMemberFromRole` from the page, votes checked before signing, every payout proposal visible in the live feed |
+| NEAR Connect | Connect, sign, disconnect | Also: network check, the full transaction lifecycle, checks before signing |
+| Circle USDC | 0 USDC, no profit share on the showcase | Real profit shares #36 (10 USDC) and #46 (1 USDC); claims on-chain; USDC registration from the page |
+| NEAR AI Agent Market | Registered, 0 bids | **9 real bids** live on market.near.ai (agent run of 9 Nov) |
+| NEAR AI Cloud | TEE attestation checked in the browser; inference blocked ($0 credits) | Same. The $10 hackathon credit key was claimed today (NEAR Builders dashboard); a real job waits for the key to be saved in `.env` |
+| Trezu | Display only (mainnet) | Unchanged |
+
+## New features: how to try them
+
+| Feature | Try it | Evidence |
+|---|---|---|
+| Live activity | https://koperasi-kohl.vercel.app/#live. Any transaction to the co-op shows within 30 s | The feed shows flows #44–#47: e.g. "The treasury paid kop-steward-mw4i2iwk 0.02 NEAR for task #6" ([5HQXEikJ…](https://testnet.nearblocks.io/txns/5HQXEikJQs3NYjvcisERj5jciShwDu1SYaqRTX7D5c1K)) |
+| Rebuild card | https://koperasi-kohl.vercel.app/#bylaws, under "Who can change the contract's code?" | `contract_source_metadata` of upgrade #41 |
+| Leave the co-op | Wallet panel → *Ask to leave* → after the vote, *Close my membership* | #39 (join), #40 (leave), [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV): 0.5 NEAR back |
+| Checks before signing | E.g. *Approve* on a task someone already approved: "not sent. This task is Paying now, not NeedsApproval: someone acted first." | unit tests (below) |
+| Wrong network | Sign in with an account that does not exist on testnet | E2E `an account from another network…` |
+
+Previews of each panel state, without a wallet, on localhost: `/?as=<account>`.
+
+## Tests
+
+| Suite | Result |
+|---|---|
+| Unit (`npm run test:unit`) | **19 pass**. New: the event filter (spoofed account, wrong standard, unknown event, bad version, bad data, broken JSON), event sentences, the indexer check, wallet error classes, affordability with the storage lock, every `taskCheck` rule |
+| E2E, local, desktop + Firefox + iPhone | **155 passed**, 3 flaky (public-RPC 429s; passed on retry), 4 skipped (Firefox axe crash, localhost-only previews on live). New: live feed with tx links, the NEP-330 card, the wrong-network state, *Ask to leave* |
+| Accessibility (axe, WCAG 2.1 AA) | 0 serious or critical (the refresh button's contrast was fixed) |
+| Lint, typecheck | clean |
+
+## Blockers that need the owner
+
+1. **NEAR AI key:** save the new $10 key (dashboard → *copy secret*) as `NEARAI_API_KEY` in `.env`. It is shown only
+   once. Then one real Agent Market job runs with its TEE proof.
+2. **Mainnet:** no mainnet support program (answer in the NEAR Builders chat); deploying costs real NEAR. Your decision.
+3. **Gasless / embedded wallet:** NEAR meta-transactions (NEP-366) need a funded relayer, and NEAR Auth (Google sign-in)
+   needs mainnet whitelisting. Not built. Meteor already creates a funded testnet account in a few clicks.
+4. **Video, X post, submission form.**
+
+## Earlier round (8 Nov 2026): tasks with earned trust on the page
 
 Builds on [03-kontrak](03-kontrak.md).
 
