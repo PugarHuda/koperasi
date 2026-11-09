@@ -18,12 +18,25 @@ const seen = new Map();
 
 const provider = new JsonRpcProvider({ url: RPC });
 const view = (contractId, method, args = {}) => provider.callFunction({ contractId, method, args, blockQuery: { finality: "final" } });
+const rpc = (method, params) => fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })
+  .then((r) => r.json());
+/** The chain's view of a delegate: the signing key's nonce (null: not a key of the sender) and the block height. */
+async function onChain(senderId, publicKey) {
+  const [k, b] = await Promise.all([
+    rpc("query", { request_type: "view_access_key", finality: "final", account_id: senderId, public_key: publicKey }),
+    rpc("block", { finality: "final" }),
+  ]);
+  return { nonce: k.result ? BigInt(k.result.nonce) : null, height: BigInt(b.result.header.height) };
+}
+// ponytail: per-instance memory, like the rate limit; a replay that reaches the chain fails on the key's nonce anyway
+const relayed = new Set();
 
 /**
  * Why this signed delegate is refused, or null. Exported for the unit test.
- * @param {any} sd a SignedDelegate as borsh decodes it @param {{ members?: string[] }} [opts]
+ * @param {any} sd a SignedDelegate as borsh decodes it
+ * @param {{ members?: string[], chain?: typeof onChain }} [opts]
  */
-export async function refuse(sd, { members } = {}) {
+export async function refuse(sd, { members, chain = onChain } = {}) {
   const d = sd?.delegateAction;
   if (!d) return "not a signed delegate action";
   if (d.receiverId !== dep.contract && d.receiverId !== dep.dao) return `only calls to ${dep.contract} or ${dep.dao} are relayed`;
@@ -38,7 +51,14 @@ export async function refuse(sd, { members } = {}) {
   if (gas > MAX_GAS) return "more than 300 Tgas";
   const pk = PublicKey.fromString(`ed25519:${baseEncode(new Uint8Array(d.publicKey.ed25519Key?.data ?? []))}`);
   if (!sd.signature?.ed25519Signature) return "only ed25519 signatures";
-  if (!pk.verify(sha256(encodeDelegateAction(d)), new Uint8Array(sd.signature.ed25519Signature.data))) return "bad signature";
+  const hash = sha256(encodeDelegateAction(d));
+  if (!pk.verify(hash, new Uint8Array(sd.signature.ed25519Signature.data))) return "bad signature";
+  // the chain would refuse these too, but only after the relayer paid the gas
+  if (relayed.has(baseEncode(hash))) return "already relayed";
+  const { nonce, height } = await chain(d.senderId, pk.toString());
+  if (nonce === null) return `the signing key is not a key of ${d.senderId}`;
+  if (BigInt(d.nonce) <= nonce) return "nonce already used";
+  if (BigInt(d.maxBlockHeight) <= height) return "expired";
   const open = d.receiverId === dep.contract && d.actions.every((a) => OPEN.has(a.functionCall.methodName));
   if (!open) {
     const list = members ?? /** @type {any} */ (await view(dep.dao, "get_policy")).roles.find((r) => r.name === "member")?.kind?.Group ?? [];
@@ -67,6 +87,7 @@ export async function POST(request) {
   const hits = (seen.get(sd.delegateAction.senderId) ?? []).filter((t) => now - t < 3_600_000);
   if (hits.length >= PER_HOUR) return json({ error: `at most ${PER_HOUR} gasless calls an hour; send it from your wallet instead` }, 429);
   seen.set(sd.delegateAction.senderId, [...hits, now]);
+  relayed.add(baseEncode(sha256(encodeDelegateAction(sd.delegateAction))));
   const relayer = new Account(process.env.RELAYER_ID, provider, /** @type {any} */ (process.env.RELAYER_KEY));
   try {
     const out = await relayer.signAndSendTransaction({ receiverId: sd.delegateAction.senderId, actions: [actions.signedDelegate(sd)] });
