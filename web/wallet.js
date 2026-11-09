@@ -1,6 +1,6 @@
 // Join the co-op from the page with a testnet wallet: pay the deposit, ask the members (a DAO proposal from your own
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
-import { NearConnector } from "https://esm.sh/@hot-labs/near-connect@0.12.0";
+import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
 import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
 import { affordable, nearUnits, oneLine, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 

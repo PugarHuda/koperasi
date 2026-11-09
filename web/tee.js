@@ -13,7 +13,7 @@ const bytes = (hex) => new Uint8Array((hex.replace(/^0x/, "").match(/../g) ?? []
 const sha256 = async (data) => new Uint8Array(await crypto.subtle.digest("SHA-256", data));
 
 let qvl; // loaded on first use: ~150 KB that most visitors never need
-const lib = () => (qvl ??= import("https://esm.sh/@phala/dcap-qvl@0.7.1"));
+const lib = () => (qvl ??= import("./vendor/dcap-qvl-0.7.1.mjs"));
 
 async function bindsAddressAndNonce(att, reportData, nonce) {
   const addr = bytes(att.signing_address); // 0x-prefixed (ecdsa) or bare hex

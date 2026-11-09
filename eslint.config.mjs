@@ -3,7 +3,7 @@ import js from "@eslint/js";
 import globals from "globals";
 
 export default [
-  { ignores: ["node_modules/", "contract/target/", "test-results/", "playwright-report/"] },
+  { ignores: ["node_modules/", "web/vendor/", "contract/target/", "test-results/", "playwright-report/"] },
   js.configs.recommended,
   {
     files: ["agent/**/*.mjs", "scripts/**/*.mjs", "tests/**/*.mjs", "*.mjs"],
