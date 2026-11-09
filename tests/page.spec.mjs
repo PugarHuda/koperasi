@@ -69,6 +69,8 @@ test("copy buttons copy this co-op's real join command", async ({ page, context,
 
 test("no horizontal scrolling and every section anchor exists", async ({ page }) => {
   await ready(page);
+  // late content (the DAO's bounties, members' free text) is what overflowed before: measure once it is in
+  await expect(page.locator("#bounties tbody td").first()).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   for (const href of await page.locator('a[href^="#"]').evaluateAll((as) => as.map((a) => a.getAttribute("href")))) {
