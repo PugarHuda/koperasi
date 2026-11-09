@@ -1501,11 +1501,14 @@ fn s12_a_stake_just_before_a_share_does_not_count_yet() {
     staked(&mut k, "alice.testnet", 100, 0); // alice saves 100 NEAR
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 0, "an increase waits");
     assert_eq!(k.get_pending_savings(acc("alice.testnet")), Some((U128(100 * 10u128.pow(24)), U64(7 * DAY))));
-    staked(&mut k, "mallory.testnet", 9_900, 30 * DAY - 1); // mallory stakes 9 900 NEAR the day before the share
+    staked(&mut k, "alice.testnet", 100, 8 * DAY); // still there a week later: it counts
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 100 * 10u128.pow(24));
+    // mallory stakes 9 900 NEAR and syncs, unstakes, and comes back the day before the share without syncing again
+    staked(&mut k, "mallory.testnet", 9_900, DAY);
     at(&usdc(), 30 * DAY);
     let _ = k.ft_on_transfer(dao(), U128(100_000_000), "share".into()); // 100 USDC: 40 USDC savings pool
-    assert_eq!(k.get_claimable(acc("alice.testnet")).0, 40_000_000, "alice's 100 NEAR waited 7 days: all the pool");
-    assert_eq!(k.get_claimable(acc("mallory.testnet")).0, 0, "mallory's stake does not count yet");
+    assert_eq!(k.get_claimable(acc("alice.testnet")).0, 40_000_000, "alice's 100 NEAR, read twice a week apart: all the pool");
+    assert_eq!(k.get_claimable(acc("mallory.testnet")).0, 0, "mallory's 9 900 counts only if a fresh reading shows it");
     assert_eq!(k.get_pending_savings(acc("alice.testnet")), None);
     // a decrease counts at once and drops the wait
     staked(&mut k, "mallory.testnet", 0, 30 * DAY + 1);

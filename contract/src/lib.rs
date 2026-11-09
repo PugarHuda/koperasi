@@ -69,8 +69,10 @@ fn bump(key: &[u8], by: u128, sub: bool) {
     }
 }
 
-/// A stake increase read by `sync_savings` counts only once it has stayed this long (security finding S12: without it,
-/// a large stake a block before a profit share took the savings pool and left right after). A decrease counts at once.
+/// A stake increase read by `sync_savings` counts only when a fresh reading at least this long after the first still
+/// shows it (security finding S12: without it, a large stake a block before a profit share took the savings pool and
+/// left right after). A decrease counts at once.
+// ponytail: the pool is sampled at two readings, not watched in between; per-epoch stake history would close that.
 const SAVINGS_DELAY_NS: u64 = 7 * 24 * 3600 * 1_000_000_000;
 /// Per-member stake increase waiting for SAVINGS_DELAY_NS: (yoctoNEAR, since) in borsh, keyed by account.
 const PENDING_SAVINGS_PREFIX: &[u8] = b"savings_pending:";
@@ -648,17 +650,6 @@ impl Koperasi {
     /// Credit every member's share and return what stays in the DAO (reserve + rounding + unused pools).
     fn distribute(&mut self, amount: u128) -> u128 {
         require!(!self.members.is_empty(), "no members");
-        // increases that have waited long enough count from now on
-        let now = env::block_timestamp();
-        for (a, m) in self.members.iter_mut() {
-            if let Some((s, since)) = read_pending(a) {
-                if now - since >= SAVINGS_DELAY_NS {
-                    env::storage_remove(&pending_key(a));
-                    m.savings = U128(s);
-                    Event::SavingsSet { account_id: a.clone(), savings: m.savings }.emit();
-                }
-            }
-        }
         let r = &self.share_rule;
         let simp_pool = amount * r.savings_bps as u128 / BPS;
         let points_pool = amount * r.points_bps as u128 / BPS;
