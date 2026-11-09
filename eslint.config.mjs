@@ -6,7 +6,7 @@ export default [
   { ignores: ["node_modules/", "web/vendor/", "contract/target/", "test-results/", "playwright-report/"] },
   js.configs.recommended,
   {
-    files: ["agent/**/*.mjs", "scripts/**/*.mjs", "tests/**/*.mjs", "*.mjs"],
+    files: ["agent/**/*.mjs", "api/**/*.mjs", "scripts/**/*.mjs", "tests/**/*.mjs", "*.mjs"],
     languageOptions: { ecmaVersion: 2025, sourceType: "module", globals: { ...globals.node } },
   },
   {

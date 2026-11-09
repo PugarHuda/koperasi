@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "strict": false
   },
-  "include": ["agent/**/*.mjs", "scripts/**/*.mjs", "tests/unit/**/*.mjs"]
+  "include": ["agent/**/*.mjs", "api/**/*.mjs", "scripts/**/*.mjs", "tests/unit/**/*.mjs"]
 }

@@ -30,15 +30,28 @@ function say(html) {
 /** Thrown before the wallet opens: nothing was signed or sent. */
 const notSent = (msg) => Object.assign(new Error(msg), { notSent: true });
 
+// gasless (NEP-366): wallets that sign delegate actions send co-op calls through the co-op's relayer (api/relay.mjs),
+// which pays the gas; the deposit still comes from the member. Off when the relayer is off (e.g. on localhost).
+const relay = fetch("/api/relay").then((r) => r.ok && r.json()).then((j) => !!j?.on, () => false);
+let gasless = false;
+
 async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } = {}) {
-  // the chain's own numbers first: a call the account cannot pay for is never signed
-  const lack = affordable(await query({ request_type: "view_account", account_id: me }), deposit, tgas);
-  if (lack) throw notSent(lack);
   const wallet = await connector.wallet();
-  const out = await wallet.signAndSendTransaction({
-    receiverId,
-    actions: [{ type: "FunctionCall", params: { methodName, args, gas: (BigInt(tgas) * 10n ** 12n).toString(), deposit: deposit.toString() } }],
-  });
+  const action = { type: "FunctionCall", params: { methodName, args, gas: (BigInt(tgas) * 10n ** 12n).toString(), deposit: deposit.toString() } };
+  gasless = [dep.contract, dep.dao].includes(receiverId) && !!wallet.manifest?.features?.signDelegateActions && await relay;
+  // the chain's own numbers first: a call the account cannot pay for is never signed
+  const lack = affordable(await query({ request_type: "view_account", account_id: me }), deposit, gasless ? 0 : tgas);
+  if (lack) throw notSent(lack);
+  let out;
+  if (gasless) {
+    const { signedDelegateActions: [signedDelegate] } = await wallet.signDelegateActions({ delegateActions: [{ receiverId, actions: [action] }] });
+    const r = await fetch("/api/relay", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ signedDelegate }) });
+    const body = await r.json().catch(() => ({}));
+    if (r.status === 429 || r.status === 503) gasless = false; // relayer busy or off: the member pays the gas instead
+    else if (!r.ok) throw Object.assign(new Error(`the co-op's relayer: ${body.error ?? r.status}`), { hash: body.hash });
+    else out = body.outcome;
+  }
+  out ??= await wallet.signAndSendTransaction({ receiverId, actions: [action] });
   const failure = out?.status?.Failure ?? out?.receipts_outcome?.find((r) => r.outcome.status.Failure)?.outcome.status.Failure;
   if (failure) {
     const s = JSON.stringify(failure);
@@ -143,7 +156,7 @@ async function act(label, fn, check) {
     if (problem) throw notSent(problem);
     say(`${label}: waiting for your signature in the wallet. Once signed, NEAR confirms it in about 2 seconds.`);
     const hash = await fn();
-    note = `<span class="ok">${label}: confirmed on-chain.</span>${hash ? ` <a href="${esc(txUrl(hash))}">See the transaction</a>.` : ""}`;
+    note = `<span class="ok">${label}: confirmed on-chain${gasless ? ", gas paid by the co-op's relayer" : ""}.</span>${hash ? ` <a href="${esc(txUrl(hash))}">See the transaction</a>.` : ""}`;
   } catch (e) {
     const link = e?.hash ? ` <a href="${esc(txUrl(e.hash))}">See the failed transaction</a>.` : "";
     if (e?.notSent) note = `<span class="err">${label}: not sent. ${esc(e.message)}</span>`;
