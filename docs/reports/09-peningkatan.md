@@ -42,7 +42,7 @@ The builder approved the contract change (rule 7: contract architecture).
 | Showcase task #3: `scripts/verify.mjs`, by carol, on earned trust | DAO proposal #31, [7QbPcRmd…](https://testnet.nearblocks.io/txns/7QbPcRmdx6tTYrXsCdwKJrJthCEZvqQNTbbChc9JhNK7) |
 | Bounce test (test co-op `koperasi-mw80aczw`) | DAO proposal #5, `approve_task` [BpccRtdt…](https://testnet.nearblocks.io/txns/BpccRtdtAakvzAakvyxMZCmAFPPsWneMfz53FgWhXXL9): task Cancelled |
 | Showcase task #4: report 09, by bob, on earned trust under #33 | DAO proposal #34; bob 10 → 11 points (5 × 0.1 / 0.5) |
-| Upgrades by vote | #27 `C17FHkdu…`, #32 `AK4hrshT…`, #33 `GjJjx49G…`, #35 `GtB4Dk9J…` (sha256 `ebfb4b82…`, stuck payouts unstick after an hour), 0 full-access keys |
+| Upgrades by vote | #27 `C17FHkdu…`, #32 `AK4hrshT…`, #33 `GjJjx49G…`, #35 `GtB4Dk9J…` (stuck payouts unstick after an hour), #38 `CUY3VjKc…` (sha256 `aa7e56a7…`, four review fixes to #35), 0 full-access keys |
 
 ## Tests
 

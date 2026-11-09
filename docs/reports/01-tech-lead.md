@@ -133,7 +133,7 @@ Grep for `mock|fake|dummy|TODO|FIXME|lorem|placeholder|coming soon|0x000`:
   - A third finding: when `get_proposal` failed, the "wait" branch erased that record, so a later `settle_task` would have taken a bounce as moved. The record now stays until the task settles, and `settle_task` always uses it.
   - A fourth finding: a failed `act_proposal` (e.g. role missing) also looks like "failed", so a later vote by hand would have been refunded although paid. A proposal still InProgress after the contract's vote means the vote failed, not the transfer, so that record is dropped. Left open, and documented in the code: a failed vote together with a failed read, followed by a vote by hand, settles as not paid.
   - Tests `…without_paying_twice_or_counting_a_bounce`, `a_bounce_on_record_still_counts_after_an_unreadable_proposal`, `a_failed_contract_vote_then_a_vote_by_hand_counts_as_paid`; 76 tests pass.
-  - The upgrade (about 33 NEAR) waits for the faucet. No showcase task is Paying, and a failed callback cannot be caused on demand, so nothing is exposed meanwhile.
+  - **On-chain: upgrade by vote #38** (global code `CUY3VjKc…`, sha256 `aa7e56a7…`, 0 full-access keys; `npm run verify` finds #38). The NEAR came from the testnet faucet. #37 was a duplicate filed when the script's first vote failed on the RPC; the members rejected it.
 - E2E resilience + trust, desktop: 23/23 passed.
 
 ## Priorities by impact on the judging criteria
