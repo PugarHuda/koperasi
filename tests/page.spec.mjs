@@ -120,6 +120,14 @@ test("keyboard users see where focus is", async ({ page, isMobile }) => {
   expect(outline).not.toBe("none");
 });
 
+test("the page shows how to rebuild the contract's code, from its NEP-330 metadata", async ({ page }) => {
+  await page.goto("/#bylaws");
+  const card = page.locator("#src-card");
+  await expect(card).toContainText("Rebuild it yourself", { timeout: 30_000 });
+  await expect(card.locator("a")).toHaveAttribute("href", /github\.com\/PugarHuda\/koperasi\/tree\/[0-9a-f]{40}/);
+  await expect(card.locator("pre")).toContainText("cargo near build reproducible-wasm");
+});
+
 test("the page says who can change the contract's code, from the chain", async ({ page }) => {
   await ready(page);
   const box = page.locator("#codegov");
@@ -142,12 +150,30 @@ test("a newcomer is walked through joining", async ({ page }, testInfo) => {
   test.skip(!local(testInfo), "?as= previews run on localhost only");
   const errors = [];
   page.on("pageerror", (e) => { if (!network(e.message)) errors.push(e.message); });
-  await page.goto("/?as=nobody-koperasi-e2e.testnet");
+  // an existing testnet account that never joined
+  await page.goto("/?as=kop-publisher-mw5tkpfo.testnet");
   const panel = page.locator("#joinapp");
-  await expect(panel).toContainText("Signed in as nobody-koperasi-e2e.testnet");
+  await expect(panel).toContainText("Signed in as kop-publisher-mw5tkpfo.testnet");
   await expect(panel.locator("#w-join")).toHaveText(/Pay 0\.5 NEAR/);
   await expect(panel.locator(".jsteps li")).toHaveCount(4);
   expect(errors).toEqual([]);
+});
+
+test("an account from another network is told to switch, not offered a join", async ({ page }, testInfo) => {
+  test.skip(!local(testInfo), "?as= previews run on localhost only");
+  await page.goto("/?as=nobody-koperasi-e2e.testnet");
+  const panel = page.locator("#joinapp");
+  await expect(panel.locator("#w-network")).toContainText("does not exist on NEAR testnet");
+  await expect(panel.locator("#w-switch")).toBeVisible();
+  await expect(panel.locator("#w-join")).toHaveCount(0);
+});
+
+test("the live feed shows the co-op's on-chain events, each with its transaction", async ({ page }) => {
+  await page.goto("/#live");
+  const items = page.locator("#live-list li");
+  await expect(items.first()).toBeVisible({ timeout: 45_000 });
+  await expect(items.first().locator("a")).toHaveAttribute("href", /nearblocks\.io\/txns\//);
+  await expect(page.locator("#live-state")).toContainText(/Updated|No co-op events|Could not read/);
 });
 
 test("a member sees their vote, savings and open proposals", async ({ page }, testInfo) => {

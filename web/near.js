@@ -16,10 +16,17 @@ async function rpc(body) {
     try {
       // a hung RPC must not hang the page: give up after 8 s and try the next one
       const r = await (await fetch(RPCS[i], { method: "POST", headers: { "content-type": "application/json" }, body, signal: AbortSignal.timeout(8000) })).json();
-      if (r.error || r.result?.error) throw new Error(JSON.stringify(r.error ?? r.result.error));
+      if (r.error || r.result?.error) {
+        // the chain's own answer (no such account, a contract's refusal) is the same on every RPC: do not ask the others
+        const final = r.result?.error || /UNKNOWN_ACCOUNT|NO_CONTRACT_CODE|CONTRACT_EXECUTION_ERROR/.test(JSON.stringify(r.error));
+        throw Object.assign(new Error(JSON.stringify(r.error ?? r.result.error)), { final });
+      }
       good = i;
       return r.result;
-    } catch (e) { last = e; }
+    } catch (e) {
+      if (e.final) throw e;
+      last = e;
+    }
   }
   throw last;
 }
@@ -31,6 +38,11 @@ export const txUrl = (hash) => `https://${testnet ? "testnet." : ""}nearblocks.i
 /** Raw RPC `query` (accounts, access keys), with the same fallbacks as `view`. */
 export async function query(params) {
   return rpc(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "query", params: { finality: "final", ...params } }));
+}
+
+/** A transaction's full outcome (all receipts and their logs), once final. */
+export async function txStatus(hash, sender) {
+  return rpc(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "EXPERIMENTAL_tx_status", params: { tx_hash: hash, sender_account_id: sender, wait_until: "FINAL" } }));
 }
 
 export async function view(contract, method, args = {}) {

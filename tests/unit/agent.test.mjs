@@ -126,3 +126,82 @@ test("the page's task amounts and pay path follow the contract (tasks.rs: accept
   assert.equal(trustSources(["task:0", "task:2", "dao-proposal:24"], tasks), 3);
   assert.equal(trustSources(["dao-proposal:1", "dao-proposal:2"], tasks), 1, "the DAO is one source");
 });
+
+// ---------- the page's chain logic (web/share.js): events, indexer, wallet errors, checks before signing ----------
+
+const evlog = (o) => `EVENT_JSON:${JSON.stringify(o)}`;
+const outcome = (executor, logs) => ({ receipts_outcome: [{ outcome: { executor_id: executor, logs } }] });
+
+test("only the contract's own, well-formed NEP-297 events reach the live feed", async () => {
+  const { parseEvents, describeEvent, EVENTS } = await import("../../web/share.js");
+  const good = { standard: "koperasi", version: "1.0.0", event: "task_paid", data: { id: 5, contributor: "carol.testnet", amount: "20000000000000000000000", points: 0 } };
+  const got = parseEvents(outcome("koperasi.testnet", [evlog(good), "plain log"]), "koperasi.testnet");
+  assert.deepEqual(got, [{ event: "task_paid", data: good.data }]);
+  assert.equal(describeEvent(got[0]), "The treasury paid carol 0.02 NEAR for task #5");
+  // NEP-297 allows data as an array of objects
+  assert.equal(parseEvents(outcome("k", [evlog({ ...good, data: [good.data] })]), "k").length, 1);
+  // dropped: another account's log (someone else's contract can print EVENT_JSON too), another standard, an unknown
+  // event, a bad version, data that is not an object, and broken JSON
+  for (const [who, log] of [
+    ["evil.testnet", evlog(good)],
+    ["k", evlog({ ...good, standard: "nep141" })],
+    ["k", evlog({ ...good, event: "drain_treasury" })],
+    ["k", evlog({ ...good, version: "one" })],
+    ["k", evlog({ ...good, data: "x" })],
+    ["k", "EVENT_JSON:{not json"],
+  ]) assert.deepEqual(parseEvents(outcome(who, [log]), "k"), [], log);
+  assert.deepEqual(parseEvents(null, "k"), []);
+  assert.equal(EVENTS.length, 38, "every event in contract/src/events.rs");
+});
+
+test("the indexer's answer is checked before it is used", async () => {
+  const { txList } = await import("../../web/share.js");
+  const hash = "4QZxE4e6vZcXCCW69rqaQLpXoMUYbBCA4yYZXyPJWqBr";
+  const ok = { transaction_hash: hash, signer_account_id: "a.testnet", block_timestamp: "1794197909443378616" };
+  assert.deepEqual(txList({ data: [ok] }), [{ hash, signer: "a.testnet", ts: 1794197909443 }]);
+  for (const bad of [{ ...ok, transaction_hash: "0OIl" }, { ...ok, signer_account_id: 7 }, { ...ok, block_timestamp: "soon" }, null]) {
+    assert.deepEqual(txList({ data: [bad] }), [], JSON.stringify(bad));
+  }
+  assert.deepEqual(txList({ errors: ["retired"] }), []);
+});
+
+test("a failed transaction is explained: cancelled, refused by the contract, or unknown", async () => {
+  const { walletError } = await import("../../web/share.js");
+  assert.equal(walletError(new Error("User rejected the request")).kind, "rejected");
+  assert.equal(walletError(new Error("Wallet closed")).kind, "rejected");
+  const refused = walletError(new Error("Smart contract panicked: the poster is no longer a member"));
+  assert.deepEqual(refused, { kind: "failed", text: "the poster is no longer a member" });
+  // a contract sentence that contains "cancel" is still the contract's refusal, not the user's
+  assert.equal(walletError(new Error("Smart contract panicked: cannot cancel this task")).kind, "failed");
+  assert.equal(walletError(new Error("fetch failed")).kind, "network");
+  assert.equal(walletError(new Error("Request timed out")).kind, "network");
+});
+
+test("a call the account cannot pay for is stopped before the wallet opens", async () => {
+  const { affordable } = await import("../../web/share.js");
+  const NEAR = 10n ** 24n;
+  const acct = (amount, storage = 182) => ({ amount: amount.toString(), storage_usage: storage });
+  assert.equal(affordable(acct(NEAR), NEAR / 2n, 30), null, "0.5 NEAR deposit + 30 Tgas from 1 NEAR");
+  assert.match(affordable(acct(NEAR / 2n), NEAR / 2n, 30), /needs about/, "no room for gas");
+  // storage locks 1 NEAR per 100 kB: 1.2 NEAR with 100 kB stored has 0.2 free
+  assert.match(affordable(acct(12n * NEAR / 10n, 100_000), NEAR / 2n, 30), /0\.2 NEAR free/);
+});
+
+test("task actions are checked against the task's state on-chain, by the contract's rules", async () => {
+  const { taskCheck } = await import("../../web/share.js");
+  const t = (status, extra = {}) => ({ status, poster: "alice", contributor: "carol", amount: "100", ...extra });
+  const ctx = { members: ["alice", "bob"], budget: "100" };
+  assert.equal(taskCheck("claim", t("Open"), "carol"), null);
+  assert.match(taskCheck("claim", t("Open"), "alice"), /posted this task/);
+  assert.match(taskCheck("claim", t("Claimed"), "bob"), /Claimed now, not Open: someone acted first/);
+  assert.equal(taskCheck("submit", t("Claimed"), "carol"), null);
+  assert.match(taskCheck("submit", t("Claimed"), "bob"), /not yours/);
+  assert.equal(taskCheck("accept", t("Submitted"), "alice", ctx), null);
+  assert.match(taskCheck("accept", t("Submitted"), "bob", ctx), /Only the poster/);
+  assert.match(taskCheck("accept", t("Submitted"), "alice", { members: [] }), /no longer a member/);
+  assert.equal(taskCheck("approve", t("NeedsApproval"), "bob", ctx), null);
+  assert.match(taskCheck("approve", t("NeedsApproval"), "carol", ctx), /cannot approve/);
+  assert.match(taskCheck("approve", t("NeedsApproval"), "dave", ctx), /Only a member/);
+  assert.match(taskCheck("approve", t("NeedsApproval", { amount: "101" }), "bob", ctx), /budget is too low/);
+  assert.match(taskCheck("approve", undefined, "bob", ctx), /does not exist/);
+});

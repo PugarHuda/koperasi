@@ -1,8 +1,8 @@
 // Join the co-op from the page with a testnet wallet: pay the deposit, ask the members (a DAO proposal from your own
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "https://esm.sh/@hot-labs/near-connect@0.12.0";
-import { dep, view, all, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
-import { nearUnits, payPath, splitShare, trustSources, usdcExact, usdcUnits } from "./share.js";
+import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
+import { affordable, nearUnits, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
 const preview = (amount, s) => {
@@ -27,7 +27,13 @@ function say(html) {
   line.innerHTML = html;
 }
 
+/** Thrown before the wallet opens: nothing was signed or sent. */
+const notSent = (msg) => Object.assign(new Error(msg), { notSent: true });
+
 async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } = {}) {
+  // the chain's own numbers first: a call the account cannot pay for is never signed
+  const lack = affordable(await query({ request_type: "view_account", account_id: me }), deposit, tgas);
+  if (lack) throw notSent(lack);
   const wallet = await connector.wallet();
   const out = await wallet.signAndSendTransaction({
     receiverId,
@@ -36,7 +42,8 @@ async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } =
   const failure = out?.status?.Failure ?? out?.receipts_outcome?.find((r) => r.outcome.status.Failure)?.outcome.status.Failure;
   if (failure) {
     const s = JSON.stringify(failure);
-    throw new Error(s.match(/"panic_msg":"([^"]+)"/)?.[1] ?? s.match(/ExecutionError":"([^"]+)"/)?.[1] ?? s.slice(0, 160));
+    throw Object.assign(new Error(s.match(/"panic_msg":"([^"]+)"/)?.[1] ?? s.match(/ExecutionError":"([^"]+)"/)?.[1] ?? s.slice(0, 160)),
+      { hash: out?.transaction?.hash ?? out?.transaction_outcome?.id });
   }
   return out?.transaction?.hash ?? out?.transaction_outcome?.id;
 }
@@ -103,6 +110,8 @@ async function load() {
   const needed = Math.floor((group.length * num) / den) + 1;
   const request = [...proposals].reverse().find((p) => kindOf(p) === "AddMemberToRole" && p.kind.AddMemberToRole.member_id === me);
   const leave = [...proposals].reverse().find((p) => kindOf(p) === "RemoveMemberFromRole" && p.kind.RemoveMemberFromRole.member_id === me);
+  const onNetwork = await query({ request_type: "view_account", account_id: me })
+    .then(() => true, (e) => (/does not exist|UNKNOWN_ACCOUNT/i.test(String(e?.message)) ? false : true));
   const claimable = member ? await view(dep.contract, "get_claimable", { account_id: me }) : "0";
   const pool = member ? await view(dep.contract, "get_staking_pool") : null;
   const staked = pool ? await view(pool, "get_account_staked_balance", { account_id: me }).catch(() => "0") : "0";
@@ -115,23 +124,32 @@ async function load() {
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
   const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
-  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims, roster, treasury,
+  return { onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims, roster, treasury,
     board, tasks, records: Object.fromEntries(recs) };
 }
 
-// each button runs one transaction, then the panel re-reads the chain
-async function act(label, fn) {
+// each button runs one transaction, then the panel re-reads the chain. The stages a member sees:
+// checking with the chain → waiting for your signature → confirmed (link) | failed on-chain (reason, link) |
+// cancelled in the wallet | network did not answer (check before retrying). One at a time: the panel is busy meanwhile.
+async function act(label, fn, check) {
   if (busy) return;
   busy = true;
-  note = `${label}: confirm in your wallet…`;
-  await render();
+  box.querySelectorAll("button, input, select").forEach((el) => { el.disabled = true; });
+  say(`${label}: checking with the chain first…`);
   try {
+    const problem = check ? await check() : null;
+    if (problem) throw notSent(problem);
+    say(`${label}: waiting for your signature in the wallet. Once signed, NEAR confirms it in about 2 seconds.`);
     const hash = await fn();
-    note = `${label}: done.${hash ? ` <a href="${esc(txUrl(hash))}">See the transaction</a>.` : ""}`;
+    note = `<span class="ok">${label}: confirmed on-chain.</span>${hash ? ` <a href="${esc(txUrl(hash))}">See the transaction</a>.` : ""}`;
   } catch (e) {
-    // the contract's own sentence ("the poster is no longer a member"), without the VM's prefix
-    const why = String(e?.message ?? e).replace(/^[\s\S]*?Smart contract panicked: /, "").replace(/^panicked at '?|'?, src[\s\S]*$/g, "");
-    note = `<span class="err">${label} failed: ${esc(why)}</span>`;
+    const link = e?.hash ? ` <a href="${esc(txUrl(e.hash))}">See the failed transaction</a>.` : "";
+    if (e?.notSent) note = `<span class="err">${label}: not sent. ${esc(e.message)}</span>`;
+    else {
+      const { kind, text } = walletError(e);
+      note = kind === "rejected" ? `${label}: ${esc(text)}`
+        : `<span class="err">${label} ${kind === "network" ? "status unknown" : e?.hash ? "failed on-chain" : "failed"}: ${esc(text)}</span>${link}`;
+    }
   }
   busy = false;
   await new Promise((r) => setTimeout(r, 1500));
@@ -187,6 +205,17 @@ async function render() {
   let s;
   try { s = await load(); } catch (e) {
     box.innerHTML = `<p class="err">Could not read the co-op: ${esc(e.message)}. Reload to try again.</p>`;
+    return;
+  }
+  if (!s.onNetwork) {
+    box.innerHTML = `<div class="who-bar"><span>Signed in as <strong>${esc(me)}</strong></span>
+      <button type="button" class="linkish" id="w-out">Disconnect</button></div>
+      <p class="err" id="w-network">This account does not exist on NEAR ${esc(dep.network)}, where this co-op runs. If your wallet is
+        set to the other network, switch it to ${esc(dep.network)} (in Meteor: the network menu at the top) and connect again.
+        A new implicit account exists only once it has received some NEAR.</p>
+      <button type="button" class="btn" id="w-switch">Disconnect and connect a ${esc(dep.network)} account</button>`;
+    $("w-out").onclick = () => connector.disconnect().catch(() => {});
+    $("w-switch").onclick = () => connector.disconnect().catch(() => {}).then(() => connector.connect()).catch(() => {});
     return;
   }
   const deposit = BigInt(s.info.join_deposit);
@@ -282,8 +311,10 @@ async function render() {
   box.innerHTML = html;
 
   $("w-out").onclick = () => connector.disconnect().catch(() => {});
-  const on = (id, label, fn) => { const b = $(id); if (b) b.onclick = () => act(label, fn); };
-  on("w-join", "Join deposit", () => send(dep.contract, "join", {}, { deposit, tgas: 30 }));
+  const on = (id, label, fn, check) => { const b = $(id); if (b) b.onclick = () => act(label, fn, check); };
+  on("w-join", "Join deposit", () => send(dep.contract, "join", {}, { deposit, tgas: 30 }), async () =>
+    ((await view(dep.contract, "get_member", { account_id: me })) || (await view(dep.contract, "is_pending", { account_id: me }))
+      ? "You already joined: the panel will refresh." : null));
   on("w-ask", "Membership proposal", () => send(dep.dao, "add_proposal", {
     proposal: { description: `Accept ${me} as a member (asked from the Koperasi page)`, kind: { AddMemberToRole: { member_id: me, role: "member" } } },
   }, { deposit: bond, tgas: 50 }));
@@ -306,7 +337,8 @@ async function render() {
     act(`Stake ${n} NEAR`, () => send(s.pool, "deposit_and_stake", {}, { deposit: BigInt(n) * 10n ** 24n, tgas: 100 }));
   };
   on("w-sync-sav", "Savings sync", () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
-  on("w-claim", "Claim", () => send(dep.contract, "claim_share", {}, { tgas: 60 }));
+  on("w-claim", "Claim", () => send(dep.contract, "claim_share", {}, { tgas: 60 }), async () =>
+    (BigInt(await view(dep.contract, "get_claimable", { account_id: me })) > 0n ? null : "Nothing to claim any more: it was claimed already."));
   const shareIn = $("w-share-amt");
   if (shareIn) {
     // the amount is read on click (act() re-renders the panel), and checked against the treasury before the wallet opens
@@ -351,22 +383,29 @@ async function render() {
     };
   });
   // accept and approve may file and approve the payout proposal in the DAO: up to ~130 Tgas of cross-contract calls
-  const task = (attr, label, method, extra = () => ({}), tgas = 30) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => {
+  // each task action is checked against the task's state on-chain now, by the contract's own rules (share.js: taskCheck)
+  const fresh = async (id, action) => {
+    const [[t], member, board, policy] = await Promise.all([view(dep.contract, "get_tasks", { from: id, limit: 1 }),
+      view(dep.contract, "get_member", { account_id: me }), view(dep.contract, "get_board"), view(dep.dao, "get_policy")]);
+    const members = action === "approve" ? (policy.roles.find((x) => x.name === "member")?.kind?.Group ?? []) : member ? [me] : [];
+    return taskCheck(action, t, me, { members, budget: board.budget });
+  };
+  const task = (attr, label, method, extra = () => ({}), tgas = 30, action = null) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => {
     b.onclick = () => {
       const id = Number(b.dataset[attr]);
       const args = extra(id); // read inputs before act() re-renders the panel
-      if (args) act(`${label} task #${id}`, () => send(dep.contract, method, { id, ...args }, { tgas }));
+      if (args) act(`${label} task #${id}`, () => send(dep.contract, method, { id, ...args }, { tgas }), action ? () => fresh(id, action) : undefined);
     };
   });
-  task("ttake", "Take", "claim_task");
+  task("ttake", "Take", "claim_task", undefined, 30, "claim");
   task("tgiveup", "Give up", "give_up_task");
-  task("taccept", "Accept", "accept_task", undefined, 200);
-  task("tapprove", "Approve", "approve_task", undefined, 300);
+  task("taccept", "Accept", "accept_task", undefined, 200, "accept");
+  task("tapprove", "Approve", "approve_task", undefined, 300, "approve");
   task("tsubmit", "Deliver", "submit_task", (id) => {
     const work = $(`w-tw-${id}`).value.trim();
     if (!work) { say(`<span class="err">Task #${id}: link to the work you delivered first.</span>`); return null; }
     return { deliverable: work };
-  });
+  }, 30, "submit");
   const post = $("w-task-post");
   if (post) post.onclick = () => {
     const desc = $("w-task-desc").value.trim();
@@ -377,13 +416,19 @@ async function render() {
     act(`Post a ${nearAmt(amt)} NEAR task`, () => send(dep.contract, "post_task", { description: desc, amount: amt.toString() }, { deposit: TASK_FEE, tgas: 30 }));
   };
   box.querySelectorAll("[data-vote]").forEach((b) => {
-    b.onclick = () => act(b.dataset.vote === "VoteApprove" ? "Approve" : "Reject", async () => {
-      const p = await view(dep.dao, "get_proposal", { id: Number(b.dataset.id) });
-      return send(dep.dao, "act_proposal", { id: p.id, action: b.dataset.vote, proposal: p.kind }, { tgas: 200 });
-    });
+    let p;
+    b.onclick = () => act(b.dataset.vote === "VoteApprove" ? "Approve" : "Reject",
+      () => send(dep.dao, "act_proposal", { id: p.id, action: b.dataset.vote, proposal: p.kind }, { tgas: 200 }),
+      async () => {
+        p = await view(dep.dao, "get_proposal", { id: Number(b.dataset.id) });
+        if (p.status !== "InProgress") return `Proposal #${p.id} already ended: ${p.status}.`;
+        return p.votes[me] ? `You already voted on proposal #${p.id}.` : null;
+      });
   });
 }
 
+// a new event on-chain (live.js) refreshes the panel, unless a transaction is in progress
+window.addEventListener("koperasi:events", () => { if (me && !busy) render(); });
 connector.on("wallet:signIn", (e) => { me = e?.accounts?.[0]?.accountId ?? ""; note = ""; render(); });
 connector.on("wallet:signOut", () => { me = ""; note = ""; render(); });
 // ponytail: ?as=<account> previews the panel for any account, on localhost only (to test each state without a wallet)

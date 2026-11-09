@@ -262,12 +262,28 @@ try {
     $("treasury").innerHTML = `The DAO treasury holds <strong>${usdc(bal)} USDC</strong> right now, read from <a href="${explorer(dep.usdc)}">${esc(dep.usdc)}</a>. Spending it takes a vote.`;
   }).catch(() => {});
 
+  // NEP-330: the contract names the commit and the pinned build image it came from, so anyone can rebuild the same code
+  const sourceCard = (src) => {
+    const b = src?.build_info;
+    const rev = b?.source_code_snapshot?.match(/[?&]rev=([0-9a-f]{40})$/)?.[1];
+    if (!b || !rev || typeof src.link !== "string" || !/^https:\/\/github\.com\//.test(src.link)) {
+      return `<p class="hint">The contract does not publish a reproducible build yet (NEP-330).</p>`;
+    }
+    return `<div class="src-card" id="src-card"><h4>Rebuild it yourself (NEP-330)</h4>
+      <p>The contract says it was built from commit <a href="${esc(src.link)}"><code>${esc(rev.slice(0, 7))}</code></a>
+        (v${esc(src.version)}) in <code>${esc(b.build_environment.split("@")[0])}</code>, pinned by its image digest.</p>
+      <pre class="does">git checkout ${esc(rev.slice(0, 7))} &amp;&amp; cd ${esc(b.contract_path || ".")}
+cargo near build reproducible-wasm
+# sha256 must be ${esc(dep.codeSha256)}</pre></div>`;
+  };
+
   // who can change the contract's code: the code it runs, the vote that chose it, and any key that could skip the vote
   Promise.all([
     query({ request_type: "view_account", account_id: dep.contract }),
     query({ request_type: "view_access_key_list", account_id: dep.contract }),
     view(dep.dao, "get_last_proposal_id").then((last) => view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 100), limit: 100 })),
-  ]).then(([acct, keys, props]) => {
+    view(dep.contract, "contract_source_metadata").catch(() => null),
+  ]).then(([acct, keys, props, src]) => {
     const code = acct.global_contract_hash ?? acct.code_hash;
     const full = keys.keys.filter((k) => k.access_key.permission === "FullAccess").length;
     const vote = [...props].reverse().find((p) => p.status === "Approved" && p.kind?.FunctionCall?.actions?.some((x) =>
@@ -278,7 +294,7 @@ try {
       A new version is published as an immutable NEAR global contract and the members vote <code>upgrade({code_hash})</code>.</p>
       <p class="match ${full ? "bad" : "ok"}">${full
         ? `The contract account still has ${full} full-access key${full > 1 ? "s" : ""}: whoever holds it could change the code without a vote. Removing it is the next step (<code>scripts/upgrade.mjs --lock</code>).`
-        : "The contract account has no full-access key. Only a members' vote can change its code."}</p>`;
+        : "The contract account has no full-access key. Only a members' vote can change its code."}</p>${sourceCard(src)}`;
     verdict("ck-code", full === 0 && !!vote, full === 0
       ? `The contract account holds <strong>no full-access key</strong>, not even the builder's. Its code is ${vote ? `the version members approved in proposal #${vote.id}` : "not traced to a vote"}; changing it takes another vote.`
       : `The contract account still has ${full} full-access key${full > 1 ? "s" : ""}: someone could change the code without a vote.`);

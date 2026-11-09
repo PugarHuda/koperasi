@@ -58,7 +58,7 @@ test("offline after loading: verify fails with a message, the page stays usable"
 
 test("no wallet: paying the join deposit fails with a readable message, once", async ({ page }, testInfo) => {
   onlyLocal(testInfo);
-  await page.goto("/?as=nobody-koperasi-e2e.testnet");
+  await page.goto("/?as=kop-publisher-mw5tkpfo.testnet"); // exists on testnet, never joined
   const join = page.locator("#w-join");
   await expect(join).toBeVisible();
   await join.dblclick(); // a double submit must not send twice
@@ -68,7 +68,7 @@ test("no wallet: paying the join deposit fails with a readable message, once", a
 
 test("a refresh in the middle of a transaction starts clean", async ({ page }, testInfo) => {
   onlyLocal(testInfo);
-  await page.goto("/?as=nobody-koperasi-e2e.testnet");
+  await page.goto("/?as=kop-publisher-mw5tkpfo.testnet"); // exists on testnet, never joined
   await page.locator("#w-join").click();
   await page.reload();
   await expect(page.locator("#w-join")).toBeVisible();

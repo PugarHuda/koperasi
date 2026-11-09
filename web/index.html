@@ -21,6 +21,7 @@
   <link rel="modulepreload" href="share.js" />
   <script type="module" src="app.js"></script>
   <script type="module" src="wallet.js"></script>
+  <script type="module" src="live.js"></script>
 </head>
 <body>
   <header class="top">
@@ -32,6 +33,7 @@
       <a href="#audit">Audit</a>
       <a href="#shares">Profit shares</a>
       <a href="#trust">Tasks</a>
+      <a href="#live">Live</a>
     </nav>
     <div class="top-actions">
       <a class="quiet" href="https://github.com/PugarHuda/koperasi">Source</a>
@@ -140,6 +142,17 @@
         <li><a href="#shares"><b>Share</b><span>The members vote a profit share and each claims their own.</span><small>Sputnik DAO treasury</small></a></li>
         <li><a href="#trust"><b>Earn trust</b><span>Finished tasks build a record; small payouts then need no vote.</span><small>koperasi contract + DAO bounties</small></a></li>
       </ol>
+    </section>
+
+    <section id="live" class="block live" aria-labelledby="live-title">
+      <div class="rail"><span class="num">00</span><span class="tag">Live</span></div>
+      <h2 id="live-title">What the co-op just did, <span class="dim">on-chain</span></h2>
+      <p class="sub">Every change the contract makes is a standard NEP-297 event. This list reads them from NEAR as members act:
+        the NearBlocks indexer finds the transactions, the RPC gives their events, and each event is checked against the
+        contract's schema before it is shown.</p>
+      <p class="hint" id="live-state" aria-live="polite">Reading the latest transactions…</p>
+      <ol class="live-list" id="live-list" aria-live="polite"></ol>
+      <button type="button" class="btn" id="live-refresh" hidden>New activity: refresh the figures</button>
     </section>
 
     <section id="members" class="block">
