@@ -96,6 +96,21 @@ test("USDC amounts typed by a member are parsed exactly, or refused", async () =
   for (const bad of ["", "0", "0.0", "-1", "1.1234567", "1e3", "abc", "1,5", "1.", ".5", "9999999999999"]) assert.equal(usdcUnits(bad), null, bad);
 });
 
+test("an invitation counts only from a member who voted for the newcomer", async () => {
+  const { inviteParam, joinText, inviteOf } = await import("../../web/share.js");
+  assert.equal(inviteParam("?invite=alice.testnet"), "alice.testnet");
+  for (const bad of ["", "?invite=", "?invite=Alice", "?invite=a<b>", "?x=alice.testnet"]) assert.equal(inviteParam(bad), null, bad);
+  assert.equal(joinText("new.testnet", null), "Accept new.testnet as a member (asked from the Koperasi page)");
+  assert.equal(joinText("new.testnet", "new.testnet"), joinText("new.testnet", null), "nobody invites themselves");
+  const p = (votes, by = "alice.testnet") => ({ description: joinText("new.testnet", by), votes, kind: { AddMemberToRole: { member_id: "new.testnet", role: "member" } } });
+  const members = ["alice.testnet", "bob.testnet"];
+  assert.deepEqual(inviteOf(p({}), members), { by: "alice.testnet", vouched: false });
+  assert.deepEqual(inviteOf(p({ "alice.testnet": "Approve" }), members), { by: "alice.testnet", vouched: true });
+  assert.deepEqual(inviteOf(p({ "bob.testnet": "Approve" }), members), { by: "alice.testnet", vouched: false }, "another member's vote is not the inviter's");
+  assert.equal(inviteOf(p({}, "eve.testnet"), members), null, "a non-member's name is not shown");
+  assert.equal(inviteOf({ description: "Transfer (invited by alice.testnet) to me", votes: {} }, members), null, "only at the end");
+});
+
 test("exact USDC display keeps every unit", async () => {
   const { usdcExact } = await import("../../web/share.js");
   assert.equal(usdcExact(4_000_000n), "4.00");

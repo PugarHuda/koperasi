@@ -190,6 +190,26 @@ export function taskCheck(action, t, me, { members = [], budget = "0" } = {}) {
 /** A proposer's plain string on one short line, so it cannot pose as another line of what a proposal does. */
 export const oneLine = (s) => String(s).replace(/\s+/g, " ").slice(0, 64);
 
+// ---------- invitations: a member shares ?invite=<their account>; the newcomer's proposal names them ----------
+
+const ACCOUNT = /^(?=.{2,64}$)[a-z0-9]+([-_][a-z0-9]+)*(\.[a-z0-9]+([-_][a-z0-9]+)*)*$/;
+/** The inviter in a page URL's query, if it is a NEAR account id. */
+export const inviteParam = (search) => {
+  const v = new URLSearchParams(search).get("invite");
+  return v && ACCOUNT.test(v) ? v : null;
+};
+/** The membership proposal's description, naming the inviter (not oneself). */
+export const joinText = (me, by) => `Accept ${me} as a member (asked from the Koperasi page)${by && by !== me ? ` (invited by ${by})` : ""}`;
+/**
+ * "Invited by X" is the newcomer's own words. It is shown only when X is a member, and it counts as vouching only
+ * once X has voted to approve the proposal on-chain.
+ */
+export function inviteOf(p, members) {
+  const by = /\(invited by ([a-z0-9._-]{2,64})\)$/.exec(String(p?.description ?? ""))?.[1];
+  if (!by || !members.includes(by) || by === p.kind?.AddMemberToRole?.member_id) return null;
+  return { by, vouched: p.votes?.[by] === "Approve" };
+}
+
 /** The by-laws path a DAO vote set, if it is a relative path on this site (never another host or a parent dir). */
 export const byLawsPath = (uri) => /^(?!\/)(?!.*(\/\/|\.\.))[\w./-]+$/.test(String(uri));
 

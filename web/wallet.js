@@ -2,7 +2,7 @@
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
 import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
-import { affordable, nearUnits, oneLine, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
+import { affordable, inviteOf, inviteParam, joinText, nearUnits, oneLine, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
 const preview = (amount, s) => {
@@ -17,6 +17,8 @@ const shareCall = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.rec
 const connector = new NearConnector({ network: dep.network, providers: { [dep.network]: RPC_URLS } });
 const box = $("joinapp");
 let me = "";
+// ?invite=<member>: who shared the link, named in the newcomer's membership proposal
+const invitedBy = inviteParam(location.search);
 let busy = false;
 let note = "";
 /** A validation message, shown in place: no re-render, so nothing the member is typing is lost. */
@@ -139,7 +141,7 @@ async function load() {
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
   const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
-  return { onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
+  return { onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
     board, tasks, records: Object.fromEntries(recs) };
 }
 
@@ -244,6 +246,7 @@ async function render() {
     <button type="button" class="linkish" id="w-out">Disconnect</button></div>`;
 
   if (!s.member) {
+    if (invitedBy && invitedBy !== me) html += `<p class="small">Invited by <strong>${esc(invitedBy)}</strong>. Your request to the members names them, and shows as vouched once they vote for you.</p>`;
     html += `<ol class="jsteps">
       ${step(joined ? "done" : "now", `Pay the join deposit: ${nearAmt(deposit)} NEAR`, joined
         ? "Paid. You get it back if the members remove you, or if you cancel before they vote you in."
@@ -283,6 +286,10 @@ async function render() {
       <div class="stake-row"><label>Stake <input id="w-amt" type="number" min="1" step="1" value="1" inputmode="numeric"> NEAR</label>
         <button type="button" class="btn" id="w-stake">Stake</button>
         <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings || (s.waiting?.[0] === s.staked && BigInt(s.waiting[1]) > BigInt(Date.now()) * 1_000_000n) ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}
+      <h3 class="jh">Invite someone</h3>
+      <p class="small">Share this link. Their membership proposal names you, and it shows as vouched once you vote for them.</p>
+      <div class="stake-row"><input id="w-invite" type="text" readonly value="${esc(`${location.origin}/?invite=${me}#joinapp`)}" aria-label="Your invite link">
+        <button type="button" class="btn ghost" id="w-invite-copy">Copy</button></div>
       <h3 class="jh">Members' meeting: propose a profit share</h3>
       ${s.treasury > 0n
         ? `<p class="small">The treasury holds ${usdc(s.treasury)} USDC. Choose how much to share; everyone sees each member's part before voting.</p>
@@ -306,7 +313,10 @@ async function render() {
         const mine = p.votes[me];
         const hidden = opaque(p);
         return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(safeDescribe(p, s))}</pre>${p.description
-          ? `<span class="claim">Proposer says: “${esc(p.description.slice(0, 200))}”</span>` : ""}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
+          ? `<span class="claim">Proposer says: “${esc(p.description.slice(0, 200))}”</span>` : ""}${(() => {
+            const inv = inviteOf(p, s.group);
+            return inv ? `<span class="claim">${inv.vouched ? `Vouched: ${esc(inv.by)} invited them and voted to approve.` : `Says ${esc(inv.by)} invited them; ${esc(inv.by)} has not approved yet.`}</span>` : "";
+          })()}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
           : hidden ? `<a class="small-link" href="${explorer(dep.dao)}">Inspect in the DAO to vote</a>`
           : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">Approve</button>
              <button type="button" class="btn ghost small" data-vote="VoteReject" data-id="${p.id}">Reject</button></span>`}</li>`;
@@ -329,12 +339,14 @@ async function render() {
   box.innerHTML = html;
 
   $("w-out").onclick = () => connector.disconnect().catch(() => {});
-  const on = (id, label, fn, check) => { const b = $(id); if (b) b.onclick = () => act(label, fn, check); };
+  const copy = $("w-invite-copy");
+  if (copy) copy.onclick = () => navigator.clipboard.writeText($("w-invite").value).then(() => { copy.textContent = "Copied"; }, () => $("w-invite").select());
+  const on =(id, label, fn, check) => { const b = $(id); if (b) b.onclick = () => act(label, fn, check); };
   on("w-join", "Join deposit", () => send(dep.contract, "join", {}, { deposit, tgas: 30 }), async () =>
     ((await view(dep.contract, "get_member", { account_id: me })) || (await view(dep.contract, "is_pending", { account_id: me }))
       ? "You already joined: the panel will refresh." : null));
   on("w-ask", "Membership proposal", () => send(dep.dao, "add_proposal", {
-    proposal: { description: `Accept ${me} as a member (asked from the Koperasi page)`, kind: { AddMemberToRole: { member_id: me, role: "member" } } },
+    proposal: { description: joinText(me, invitedBy), kind: { AddMemberToRole: { member_id: me, role: "member" } } },
   }, { deposit: bond, tgas: 50 }));
   on("w-sync", "Sync membership", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
   on("w-cancel", "Cancel", () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));
