@@ -28,7 +28,7 @@ file is the script.
    - NEAR AI Cloud (TEE, billing);
    - Agent Market;
    - global contracts.
-7. **Validation:** 91 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 26 unit tests, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit share #36, upgrades by vote up to #48.
+7. **Validation:** 92 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 28 unit tests, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit share #36, upgrades by vote up to #50.
 8. **Next:** mainnet with Circle USDC, NEAR AI credits for the organization, independent members, a tighter CSP, a USDC task budget.
 
 ## Submission form text
@@ -45,7 +45,8 @@ file is the script.
   Every point names the task or proposal it came from.
 - **No new multisig:** custody stays in Sputnik.
 - **Gasless for members:** a NEP-366 relayer pays the gas for members' calls to the co-op (deposits stay the member's).
-- **Savings can't be gamed:** a stake counts toward the profit share only after 7 days (security fix S12, upgrade #48 by vote).
+- **Savings can't be gamed:** a stake counts toward the profit share only after 7 days of daily readings (security fix S12, upgrades #48 and #50 by vote).
+- **Invite links:** a member shares a link; the newcomer's proposal names them, shown as vouched once they vote for it.
 - **Evidence:** tasks #0–#6 paid from the treasury by DAO proposals, bounty #24, profit share #36; `npm run verify` checks it all against testnet.
 
 **Autonomous Business.** The agent sells on Agent Market and buys its own inference on NEAR AI Cloud.
