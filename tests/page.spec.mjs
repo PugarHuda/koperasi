@@ -157,6 +157,8 @@ test("a member sees their vote, savings and open proposals", async ({ page }, te
   await expect(panel.locator(".me-card").first()).toContainText(/Your vote\s*1 of \d+/);
   await expect(panel).toContainText("Open proposals");
   await expect(panel.locator("#w-stake")).toBeVisible();
+  // leaving is a DAO proposal to remove yourself; the deposit comes back by sync_member once it passes
+  await expect(panel.locator("#w-leave")).toHaveText("Ask to leave");
   // a share waiting means one button (claim it, or register for USDC first); none waiting, none shown
   const share = await panel.locator(".me-card div", { hasText: "Share to claim" }).locator("strong").textContent();
   await expect(panel.locator("#w-claim, #w-usdc")).toHaveCount(Number.parseFloat(share) > 0 ? 1 : 0);

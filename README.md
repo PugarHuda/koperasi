@@ -111,6 +111,10 @@ Open http://localhost:5173 (or the live page). See:
   audit (every paid job reached the treasury, or how much did not); and, on a click, **the model's TEEs verified with
   your own nonce** (Intel TDX quotes, signing keys, attested compose, GPU nonce), with a table per server. Next to it, a
   four-row comparison with token-launched agents and agent frameworks.
+- **Leave the co-op** (wallet panel, members): *Ask to leave* files a Sputnik `RemoveMemberFromRole` proposal for yourself;
+  once the members approve, *Close my membership* calls `sync_member` and the join deposit comes back (a profit share
+  already credited stays yours to claim). Tested on testnet: `kop-leaver-mw8pw94w.testnet` joined (#39), asked to leave
+  (#40), was voted out and took its 0.5 NEAR back in [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV).
 - **Members' meeting: propose a profit share** (wallet panel, members): type an amount up to the treasury and see, before
   anyone votes, what each member would receive and what stays as reserve, by the contract's own split. An open share
   proposal shows voters the same preview.

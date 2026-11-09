@@ -102,6 +102,7 @@ async function load() {
   const [num, den] = policy.default_vote_policy?.threshold ?? [1, 2];
   const needed = Math.floor((group.length * num) / den) + 1;
   const request = [...proposals].reverse().find((p) => kindOf(p) === "AddMemberToRole" && p.kind.AddMemberToRole.member_id === me);
+  const leave = [...proposals].reverse().find((p) => kindOf(p) === "RemoveMemberFromRole" && p.kind.RemoveMemberFromRole.member_id === me);
   const claimable = member ? await view(dep.contract, "get_claimable", { account_id: me }) : "0";
   const pool = member ? await view(dep.contract, "get_staking_pool") : null;
   const staked = pool ? await view(pool, "get_account_staked_balance", { account_id: me }).catch(() => "0") : "0";
@@ -114,7 +115,7 @@ async function load() {
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
   const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
-  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims, roster, treasury,
+  return { info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, bounties, myClaims, roster, treasury,
     board, tasks, records: Object.fromEntries(recs) };
 }
 
@@ -262,7 +263,19 @@ async function render() {
           : hidden ? `<a class="small-link" href="${explorer(dep.dao)}">Inspect in the DAO to vote</a>`
           : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">Approve</button>
              <button type="button" class="btn ghost small" data-vote="VoteReject" data-id="${p.id}">Reject</button></span>`}</li>`;
-      }).join("")}</ul>` : `<p class="small">Nothing to vote on right now.</p>`}`;
+      }).join("")}</ul>` : `<p class="small">Nothing to vote on right now.</p>`}
+      <h3 class="jh">Leave the co-op</h3>
+      ${!s.inRole
+        ? `<p class="small">The members removed you from the DAO role. Close your membership to get your ${nearAmt(s.member.join_deposit)} NEAR
+             join deposit back; a profit share already credited stays yours to claim.</p>
+           <button type="button" class="btn" id="w-leave-sync">Close my membership and take the deposit back</button>`
+        : s.leave?.status === "InProgress"
+          ? `<p class="small">Your request to leave is <a href="${explorer(dep.dao)}">proposal #${s.leave.id}</a>:
+               ${Object.values(s.leave.votes).filter((v) => v === "Approve").length} of ${s.needed} approvals so far.</p>`
+          : `<p class="small">Asks the members to remove you from the DAO role (bond ${nearAmt(bond)} NEAR, returned when they decide).
+               Once they approve, come back here to take your ${nearAmt(s.member.join_deposit)} NEAR join deposit back.
+               A profit share already credited stays yours to claim.</p>
+             <button type="button" class="btn ghost" id="w-leave">Ask to leave</button>`}`;
   }
   html += tasksPanel(s);
   if (note) html += `<p class="note-line">${note}</p>`;
@@ -276,6 +289,10 @@ async function render() {
   }, { deposit: bond, tgas: 50 }));
   on("w-sync", "Sync membership", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
   on("w-cancel", "Cancel", () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));
+  on("w-leave", "Request to leave", () => send(dep.dao, "add_proposal", {
+    proposal: { description: `Remove ${me} from the members: they asked to leave (from the Koperasi page)`, kind: { RemoveMemberFromRole: { member_id: me, role: "member" } } },
+  }, { deposit: bond, tgas: 50 }));
+  on("w-leave-sync", "Leave", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
   on("w-usdc", "USDC registration", () => send(dep.usdc, "storage_deposit", { account_id: me, registration_only: true }, { deposit: s.usdcStorage, tgas: 30 }));
   // read the amount on click: act() re-renders the panel (and this input) before the transaction runs
   const stake = $("w-stake");
