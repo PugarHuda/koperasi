@@ -54,7 +54,6 @@ export async function refuse(sd, { members, chain = onChain } = {}) {
   const hash = sha256(encodeDelegateAction(d));
   if (!pk.verify(hash, new Uint8Array(sd.signature.ed25519Signature.data))) return "bad signature";
   // the chain would refuse these too, but only after the relayer paid the gas
-  if (relayed.has(baseEncode(hash))) return "already relayed";
   const { nonce, height } = await chain(d.senderId, pk.toString());
   if (nonce === null) return `the signing key is not a key of ${d.senderId}`;
   if (BigInt(d.nonce) <= nonce) return "nonce already used";
@@ -81,13 +80,17 @@ export async function POST(request) {
   } catch {
     return json({ error: "send { signedDelegate: base64 borsh }" }, 400);
   }
+  // reserved before any await, so two copies of one delegate sent at once cannot both pass the check
+  const id = (() => { try { return baseEncode(sha256(encodeDelegateAction(sd.delegateAction))); } catch { return null; } })();
+  if (!id) return json({ error: "not a signed delegate action" }, 400);
+  if (relayed.has(id)) return json({ error: "already relayed" }, 403);
+  relayed.add(id);
   const why = await refuse(sd).catch((e) => `could not check: ${e.message}`);
-  if (why) return json({ error: why }, 403);
+  if (why) { relayed.delete(id); return json({ error: why }, 403); }
   const now = Date.now();
   const hits = (seen.get(sd.delegateAction.senderId) ?? []).filter((t) => now - t < 3_600_000);
-  if (hits.length >= PER_HOUR) return json({ error: `at most ${PER_HOUR} gasless calls an hour; send it from your wallet instead` }, 429);
+  if (hits.length >= PER_HOUR) return relayed.delete(id), json({ error: `at most ${PER_HOUR} gasless calls an hour; send it from your wallet instead` }, 429);
   seen.set(sd.delegateAction.senderId, [...hits, now]);
-  relayed.add(baseEncode(sha256(encodeDelegateAction(sd.delegateAction))));
   const relayer = new Account(process.env.RELAYER_ID, provider, /** @type {any} */ (process.env.RELAYER_KEY));
   try {
     const out = await relayer.signAndSendTransaction({ receiverId: sd.delegateAction.senderId, actions: [actions.signedDelegate(sd)] });
