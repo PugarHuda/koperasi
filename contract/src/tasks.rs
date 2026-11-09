@@ -409,7 +409,16 @@ impl Koperasi {
             }
             // still open (e.g. the role is missing from the policy) or unreadable: the members can vote it by hand,
             // then anyone calls settle_task
-            "InProgress" | "" => log!("task #{}: payout proposal not approved yet", id),
+            // InProgress: the contract's vote did not pass (act_proposal failed), so no transfer ran and the recorded
+            // "failed" was the vote, not a bounce: forget it, a vote by hand settles as moved
+            "InProgress" => {
+                env::storage_remove(&moved_key(id));
+                log!("task #{}: payout proposal not approved yet", id)
+            }
+            // unreadable: keep the record, it may be a bounce
+            // ponytail: a failed vote AND a failed read, then a vote by hand, would settle as not paid (budget refunded,
+            // no credit); the members can lower the budget or pay a bounty
+            "" => log!("task #{}: payout proposal unreadable, settle_task later", id),
             // rejected, removed, expired, failed, or approved but the transfer bounced: the members or the chain said no,
             // so the contract must not file and approve it again on its own; only a new task (or a DAO bounty) pays it
             _ => self.unpay(t, TaskStatus::Cancelled),

@@ -129,7 +129,8 @@ Grep for `mock|fake|dummy|TODO|FIXME|lorem|placeholder|coming soon|0x000`:
   - With no proposal id on record, a proposal may still have been filed. Sending the task back to Submitted would let the contract file and approve a second one, so it is now **Cancelled**. The members can still vote the stray proposal or pay with a bounty.
   - A stuck payout was settled as if the transfer had moved, so a bounce could have counted as paid. `on_payout_voted` now records the transfer's result before it reads the proposal, and settling uses that result. If the result was never read, only the DAO can settle the task (as paid) or cancel it (`cancel_task` now accepts a stuck Paying task, with the budget restored).
   - A third finding: when `get_proposal` failed, the "wait" branch erased that record, so a later `settle_task` would have taken a bounce as moved. The record now stays until the task settles, and `settle_task` always uses it.
-  - Tests `…without_paying_twice_or_counting_a_bounce` and `a_bounce_on_record_still_counts_after_an_unreadable_proposal`; 75 tests pass.
+  - A fourth finding: a failed `act_proposal` (e.g. role missing) also looks like "failed", so a later vote by hand would have been refunded although paid. A proposal still InProgress after the contract's vote means the vote failed, not the transfer, so that record is dropped. Left open, and documented in the code: a failed vote together with a failed read, followed by a vote by hand, settles as not paid.
+  - Tests `…without_paying_twice_or_counting_a_bounce`, `a_bounce_on_record_still_counts_after_an_unreadable_proposal`, `a_failed_contract_vote_then_a_vote_by_hand_counts_as_paid`; 76 tests pass.
   - The upgrade (about 33 NEAR) waits for the faucet. No showcase task is Paying, and a failed callback cannot be caused on demand, so nothing is exposed meanwhile.
 - E2E resilience + trust, desktop: 23/23 passed.
 
