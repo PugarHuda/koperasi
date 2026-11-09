@@ -1,7 +1,8 @@
 // The co-op's keeper (Vercel cron, twice a day): reads the stake of every member whose savings increase is waiting
 // (S12), so the run of readings at most a day apart is not broken while nobody opens the page. Paid by the relayer
-// account. Anyone may call it: it only reads members not read in the last 6 hours, so calling it often costs nothing.
-// Env: RELAYER_ID, RELAYER_KEY.
+// account. Only Vercel's cron may run it (it sends CRON_SECRET), so nobody can make the relayer pay for the same
+// reading many times over; it reads only members not read in the last 6 hours.
+// Env: RELAYER_ID, RELAYER_KEY, CRON_SECRET.
 import { Account, JsonRpcProvider } from "near-api-js";
 import dep from "../deployment.testnet.json" with { type: "json" };
 
@@ -22,8 +23,9 @@ export async function stale(now, read = view) {
   }
 }
 
-export async function GET() {
-  if (!process.env.RELAYER_ID || !process.env.RELAYER_KEY) return Response.json({ error: "the keeper is off" }, { status: 503 });
+export async function GET(request) {
+  if (!process.env.RELAYER_ID || !process.env.RELAYER_KEY || !process.env.CRON_SECRET) return Response.json({ error: "the keeper is off" }, { status: 503 });
+  if (request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) return Response.json({ error: "only the co-op's cron" }, { status: 401 });
   const ids = await stale(BigInt(Date.now()) * 1_000_000n);
   const keeper = new Account(process.env.RELAYER_ID, provider, /** @type {any} */ (process.env.RELAYER_KEY));
   const read = [];
