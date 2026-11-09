@@ -124,6 +124,7 @@ Grep for `mock|fake|dummy|TODO|FIXME|lorem|placeholder|coming soon|0x000`:
 - **T8 fixed.** A failed transaction shows the contract's own sentence without the VM's prefix (`web/wallet.js`).
 - **T11 partly fixed.** CSP `frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`. Script and connect sources stay open on purpose, because NEAR Connect loads wallets from many origins.
 - **T15 fixed.** The README documents `cargo near build … --no-abi`.
+- **T6 fixed (9 Nov), showcase upgraded by vote #35** (global code `GtB4Dk9J…`, sha256 `ebfb4b82…`, 0 full-access keys; `npm run verify` finds #35 itself). The `inflight:` flag now holds the time it was set. `settle_task` refuses while it is younger than an hour; after that, a task with no proposal on record goes back to Submitted with the budget restored, and a task with a proposal is settled from that proposal as usual. Flags written by the old code (one byte) count as stuck. Test `a_payout_whose_callback_failed_is_unstuck_after_an_hour`; 74 contract tests pass. Not shown on testnet: the callbacks have fixed gas, so a failed callback cannot be caused on demand. The ~34 NEAR came from unused test accounts of this builder (old co-op tags), not the faucet.
 - E2E resilience + trust, desktop: 23/23 passed.
 
 ## Priorities by impact on the judging criteria
@@ -132,5 +133,5 @@ Grep for `mock|fake|dummy|TODO|FIXME|lorem|placeholder|coming soon|0x000`:
 2. **T4:** video + X post. Required; Design + Impact.
 3. **T2:** USDC + one real profit share on the showcase. Impact, Social Money fit.
 4. **T1:** NEAR AI credits → one real job. Impact, Autonomous Business.
-5. **T6:** next upgrade, when the faucet allows (~33 NEAR). Technical.
+5. ~~T6~~: done, #35.
 6. T8, T11, T15: polish.

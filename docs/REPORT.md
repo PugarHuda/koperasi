@@ -34,6 +34,7 @@ with testnet evidence in [02](reports/02-strategi.md#social-money-checklist-the-
 | S6 | Medium | collusion between two members up to `one_vote_max`, capped by the voted budget | **mitigated** (#27/#32): trust needs different posters, a daily no-vote limit per poster, points follow the pay; three colluding members remain a known limit |
 | S12–S14 | High/Medium | points farmed with tiny tasks; a bounced transfer left Approved by Sputnik counted as paid; a rejected payout refiled | **fixed**, proposal #32, bounce proven on testnet ([09](reports/09-peningkatan.md)) |
 | S15–S16 | Medium | `settle_task` racing the contract's own check; points unclamped after `one_vote_max` drops | **fixed**, proposal #33 |
+| S17 | Medium | A payout whose own callback failed stayed Paying for good (T6 in [01-tech-lead](reports/01-tech-lead.md)) | **fixed**, proposal #35: `settle_task` unsticks it after an hour |
 | S8, S9 | Low | `TASK_FEE` slightly below the largest task's storage; contributor protection goes through the DAO | known issue |
 
 Scanners:
@@ -47,7 +48,7 @@ Scanners:
 |---|---|---|
 | Sputnik DAO | Deep | Deeper: the contract is a member of the DAO through role `tasks` (transfer proposals only), so every task payout is a Transfer from the treasury it files and approves under the members' rule; approval rights from `get_policy`; `BountyDone` read through `get_proposal` onto the record; budget and rule only by `FunctionCall` proposals |
 | Trezu | Shallow (displays the treasury on mainnet) | Unchanged; the tiers are what its single Finance threshold lacks |
-| NEAR AI Cloud, Agent Market, global contracts | Deep | Unchanged; global contracts were used for vote-only upgrades (#19, #25, #27, #32, #33) |
+| NEAR AI Cloud, Agent Market, global contracts | Deep | Unchanged; global contracts were used for vote-only upgrades (#19, #25, #27, #32, #33, #35) |
 
 ## 4. Competitors and positioning
 

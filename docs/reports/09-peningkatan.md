@@ -42,11 +42,11 @@ The builder approved the contract change (rule 7: contract architecture).
 | Showcase task #3: `scripts/verify.mjs`, by carol, on earned trust | DAO proposal #31, [7QbPcRmd…](https://testnet.nearblocks.io/txns/7QbPcRmdx6tTYrXsCdwKJrJthCEZvqQNTbbChc9JhNK7) |
 | Bounce test (test co-op `koperasi-mw80aczw`) | DAO proposal #5, `approve_task` [BpccRtdt…](https://testnet.nearblocks.io/txns/BpccRtdtAakvzAakvyxMZCmAFPPsWneMfz53FgWhXXL9): task Cancelled |
 | Showcase task #4: report 09, by bob, on earned trust under #33 | DAO proposal #34; bob 10 → 11 points (5 × 0.1 / 0.5) |
-| Upgrades by vote | #27 `C17FHkdu…`, #32 `AK4hrshT…`, #33 `GjJjx49G…` (sha256 `e9b5c1d3…`), 0 full-access keys |
+| Upgrades by vote | #27 `C17FHkdu…`, #32 `AK4hrshT…`, #33 `GjJjx49G…`, #35 `GtB4Dk9J…` (sha256 `ebfb4b82…`, stuck payouts unstick after an hour), 0 full-access keys |
 
 ## Tests
 
-- **Contract:** 73 passed. 13 task tests were rewritten for the DAO path; new: different posters, daily limit, points, the DAO said no, a payout still open, a bounced transfer.
+- **Contract:** 74 passed (73 at #33, plus the stuck-payout test of #35). 13 task tests were rewritten for the DAO path; new: different posters, daily limit, points, the DAO said no, a payout still open, a bounced transfer.
 - **Unit:** 14 passed. `trustSources` in `web/share.js` mirrors the contract.
 - **E2E** (`trust`, `page`, `checks` × desktop, firefox, iphone):
   - Parallel run: 95 passed. 3 failed and 4 were flaky, all on desktop from public-RPC 429s.

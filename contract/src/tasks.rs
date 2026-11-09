@@ -32,6 +32,8 @@ pub const TASKS_ROLE: &str = "tasks";
 // Sputnik when the payout is approved; read it from the policy if a DAO ever votes a different bond.
 pub const PAYOUT_BOND: NearToken = NearToken::from_millinear(100);
 const DAY_NS: u64 = 86_400_000_000_000;
+/// The contract's own payout chain ends in a few blocks; a flag older than this means a callback failed (e.g. gas).
+const STUCK_NS: u64 = 3_600_000_000_000;
 const GAS_PROPOSE: Gas = Gas::from_tgas(15);
 const GAS_ACT: Gas = Gas::from_tgas(50);
 const GAS_PROPOSED: Gas = Gas::from_tgas(100);
@@ -302,7 +304,7 @@ impl Koperasi {
         let tier = approver.as_ref().map_or("earned trust, no vote".to_string(), |a| format!("approved by {a}"));
         t.approved_by = approver;
         save(&task_key(t.id), t);
-        env::storage_write(&inflight_key(t.id), &[1]);
+        env::storage_write(&inflight_key(t.id), &env::block_timestamp().to_le_bytes());
         let description = format!("Koperasi task #{}: pay {} for \"{}\" ({tier})", t.id, t.contributor.as_ref().unwrap(), t.description);
         let _ = ext_dao_proposals::ext(self.dao_id.clone())
             .with_attached_deposit(PAYOUT_BOND)
@@ -340,15 +342,25 @@ impl Koperasi {
     }
 
     /// Anyone: re-read a payout's DAO proposal (e.g. one the members approved or rejected by hand) and settle the task.
+    /// If a callback of the contract's own chain failed, the task is unstuck an hour later: with no proposal on record
+    /// it goes back to Submitted (budget restored); otherwise the proposal is read as usual.
     // ponytail: a payout the members approved by hand is taken as moved; their own vote transaction shows the transfer
-    pub fn settle_task(&mut self, id: u32) -> Promise {
-        require!(task(id).status == TaskStatus::Paying, "no payout in flight");
-        require!(env::storage_read(&inflight_key(id)).is_none(), "the contract is still settling this payout");
-        let pid = read_u128(&payout_key(id)).unwrap_or_else(|| env::panic_str("no payout proposal yet")) as u64;
-        ext_dao_proposals::ext(self.dao_id.clone())
+    pub fn settle_task(&mut self, id: u32) -> PromiseOrValue<()> {
+        let t = task(id);
+        require!(t.status == TaskStatus::Paying, "no payout in flight");
+        // flags written before this rule hold one byte: read as time 0, so they count as stuck
+        let since = env::storage_read(&inflight_key(id))
+            .map(|v| v.try_into().map_or(0, u64::from_le_bytes));
+        require!(since.is_none_or(|s| env::block_timestamp().saturating_sub(s) > STUCK_NS),
+            "the contract is still settling this payout");
+        let Some(pid) = read_u128(&payout_key(id)) else {
+            self.unpay(t, TaskStatus::Submitted);
+            return PromiseOrValue::Value(());
+        };
+        PromiseOrValue::Promise(ext_dao_proposals::ext(self.dao_id.clone())
             .with_static_gas(GAS_VIEW)
-            .get_proposal(pid)
-            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id, true))
+            .get_proposal(pid as u64)
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CHECKED).on_payout_checked(id, true)))
     }
 
     /// Paid only when the DAO's Transfer proposal is Approved and its transfer went through.

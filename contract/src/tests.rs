@@ -916,6 +916,35 @@ fn a_payout_still_open_in_the_dao_waits_and_settles_once() {
 }
 
 #[test]
+fn a_payout_whose_callback_failed_is_unstuck_after_an_hour() {
+    let at = |who: &str, ns: u64| {
+        let mut b = VMContextBuilder::new();
+        b.current_account_id(me()).predecessor_account_id(acc(who)).block_timestamp(ns);
+        testing_env!(b.build());
+    };
+    let settle = |k: &mut Koperasi, id| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| { let _ = k.settle_task(id); }));
+    let mut k = board();
+    // on_payout_proposed ran out of gas: Paying, no proposal on record, the flag never cleared
+    let (a, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, a);
+    // on_payout_checked ran out of gas after the proposal was filed
+    let (b, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, b);
+    as_(&me(), near(0));
+    let _ = k.on_payout_proposed(b, Ok(100 + b as u64));
+    assert_eq!(k.get_board().budget.0, 900 * MILLI);
+    at("anyone.testnet", 3_600_000_000_000);
+    assert!(settle(&mut k, a).is_err(), "not before an hour");
+    at("anyone.testnet", 3_600_000_000_001);
+    assert!(settle(&mut k, a).is_ok());
+    assert_eq!((k.get_tasks(None, None)[a as usize].status.clone(), k.get_board().budget.0), (TaskStatus::Submitted, 950 * MILLI));
+    assert!(settle(&mut k, b).is_ok(), "reads the proposal");
+    as_(&me(), near(0));
+    k.on_payout_checked(b, true, Ok(json!({ "status": "Approved" })));
+    assert_eq!(k.get_tasks(None, None)[b as usize].status, TaskStatus::Paid);
+}
+
+#[test]
 fn a_trusted_contributor_still_needs_a_vote_above_auto_max() {
     let mut k = board();
     let (id, _) = deliver(&mut k, 50 * MILLI);
