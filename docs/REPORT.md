@@ -1,7 +1,7 @@
 # Koperasi: final report (8 Nov 2026)
 
 Per-phase detail is in [`docs/reports/`](reports): [01 audit](reports/01-audit.md) · [02 strategy](reports/02-strategi.md) ·
-[03 contract](reports/03-kontrak.md) · [04 dApp](reports/04-dapp.md) · [05 security](reports/05-keamanan.md) ·
+[03 contract](reports/03-kontrak.md) · [03 contracts, quality pass](reports/03-contracts.md) · [04 dApp](reports/04-dapp.md) · [05 security](reports/05-keamanan.md) ·
 [06 QA](reports/06-qa.md) · [09 improvements toward the top 3](reports/09-peningkatan.md) · [submission materials](submission.md).
 
 ## 1. Judges' scorecard and checklist
@@ -48,7 +48,7 @@ Scanners:
 |---|---|---|
 | Sputnik DAO | Deep | Deeper: the contract is a member of the DAO through role `tasks` (transfer proposals only), so every task payout is a Transfer from the treasury it files and approves under the members' rule; approval rights from `get_policy`; `BountyDone` read through `get_proposal` onto the record; budget and rule only by `FunctionCall` proposals |
 | Trezu | Shallow (displays the treasury on mainnet) | Unchanged; the tiers are what its single Finance threshold lacks |
-| NEAR AI Cloud, Agent Market, global contracts | Deep | Unchanged; global contracts were used for vote-only upgrades (#19, #25, #27, #32, #33, #35) |
+| NEAR AI Cloud, Agent Market, global contracts | Deep | Unchanged; global contracts were used for vote-only upgrades (#19, #25, #27, #32, #33, #35, #41) |
 
 ## 4. Competitors and positioning
 
