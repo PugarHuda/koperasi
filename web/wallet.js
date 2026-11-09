@@ -282,7 +282,8 @@ async function render() {
       </div>
       ${s.waiting ? `<p class="small">${nearAmt(s.waiting[0])} NEAR waits to count: a stake increase counts as savings after 7 days
         in the pool, from ${new Date(Number(BigInt(s.waiting[1]) / 1_000_000n)).toLocaleString("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-        (sync again then). A decrease counts at once.</p>` : `<p class="small">A stake increase counts as savings after 7 days in the pool; a decrease counts at once.</p>`}
+        (sync again then). The co-op's keeper reads it twice a day meanwhile: a gap of more than a day between readings
+        starts the wait again. A decrease counts at once.</p>` : `<p class="small">A stake increase counts as savings after 7 days in the pool, read at least once a day (the co-op's keeper does it); a decrease counts at once.</p>`}
       <div class="stake-row"><label>Stake <input id="w-amt" type="number" min="1" step="1" value="1" inputmode="numeric"> NEAR</label>
         <button type="button" class="btn" id="w-stake">Stake</button>
         <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings || (s.waiting?.[0] === s.staked && BigInt(s.waiting[1]) > BigInt(Date.now()) * 1_000_000n) ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}

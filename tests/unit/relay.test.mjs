@@ -48,3 +48,12 @@ test("a delegate changed after signing is refused", async () => {
   other.signature.ed25519Signature.data[0] ^= 1;
   assert.equal(await refuse(other, members), "bad signature");
 });
+
+test("the keeper reads only members whose waiting stake was not read for 6 hours", async () => {
+  const { stale } = await import("../../api/keeper.mjs");
+  const H = 3600n * 10n ** 9n;
+  const now = 100n * H;
+  const pending = { "a.testnet": [1, 0, String(now - 7n * H)], "b.testnet": [1, 0, String(now - 5n * H)], "c.testnet": null };
+  const read = async (/** @type {string} */ m, /** @type {any} */ a) => (m === "get_members" ? Object.keys(pending).map((id) => [id, {}]) : pending[a.account_id]);
+  assert.deepEqual(await stale(now, read), ["a.testnet"]);
+});

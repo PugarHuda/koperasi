@@ -1,6 +1,6 @@
 [package]
 name = "koperasi"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 description = "Koperasi: an AI agent co-op owned by its members through a Sputnik DAO"

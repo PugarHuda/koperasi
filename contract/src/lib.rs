@@ -69,18 +69,22 @@ fn bump(key: &[u8], by: u128, sub: bool) {
     }
 }
 
-/// A stake increase read by `sync_savings` counts only when a fresh reading at least this long after the first still
-/// shows it (security finding S12: without it, a large stake a block before a profit share took the savings pool and
-/// left right after). A decrease counts at once.
-// ponytail: the pool is sampled at two readings, not watched in between; per-epoch stake history would close that.
+/// A stake increase read by `sync_savings` counts only after an unbroken run of readings this long still shows it
+/// (security finding S12: without it, a large stake a block before a profit share took the savings pool and left
+/// right after). A decrease counts at once.
 const SAVINGS_DELAY_NS: u64 = 7 * 24 * 3600 * 1_000_000_000;
-/// Per-member stake increase waiting for SAVINGS_DELAY_NS: (yoctoNEAR, since) in borsh, keyed by account.
+/// The longest gap between two readings of a waiting increase; a longer one restarts the wait, so a stake that left
+/// and came back between readings cannot count. Anyone can read; the co-op's keeper (`api/keeper.mjs`) reads twice a day.
+// ponytail: a dip shorter than this between two readings is not seen; reading every epoch would close the rest.
+const SAVINGS_GAP_NS: u64 = 24 * 3600 * 1_000_000_000;
+/// Per-member stake increase waiting for SAVINGS_DELAY_NS: (yoctoNEAR, since, last reading) in borsh, keyed by account.
+/// An entry from before the gap rule (two fields) no longer decodes, so its wait restarts at the next reading.
 const PENDING_SAVINGS_PREFIX: &[u8] = b"savings_pending:";
 
 fn pending_key(a: &AccountId) -> Vec<u8> {
     [PENDING_SAVINGS_PREFIX, a.as_bytes()].concat()
 }
-fn read_pending(a: &AccountId) -> Option<(u128, u64)> {
+fn read_pending(a: &AccountId) -> Option<(u128, u64, u64)> {
     env::storage_read(&pending_key(a)).and_then(|b| near_sdk::borsh::from_slice(&b).ok())
 }
 
@@ -450,9 +454,10 @@ impl Koperasi {
             }
             return;
         }
-        // an increase waits; a larger one restarts the wait, a smaller one keeps it (that much was there since then)
+        // an increase waits; a larger one restarts the wait, a smaller one keeps it (that much was there since then),
+        // and so does a reading more than a day after the last (what happened in between was not seen)
         let since = match read_pending(&account_id) {
-            Some((p, since)) if staked <= p => since,
+            Some((p, since, seen)) if staked <= p && now - seen <= SAVINGS_GAP_NS => since,
             _ => now,
         };
         if now - since >= SAVINGS_DELAY_NS {
@@ -460,14 +465,15 @@ impl Koperasi {
             m.savings = U128(staked);
             Event::SavingsSet { account_id, savings: m.savings }.emit();
         } else {
-            env::storage_write(&pending_key(&account_id), &near_sdk::borsh::to_vec(&(staked, since)).unwrap());
+            env::storage_write(&pending_key(&account_id), &near_sdk::borsh::to_vec(&(staked, since, now)).unwrap());
             Event::SavingsPending { account_id, savings: U128(staked), counts_from: U64(since + SAVINGS_DELAY_NS) }.emit();
         }
     }
 
-    /// A stake increase `sync_savings` read that does not count yet: (yoctoNEAR, counts from, ns).
-    pub fn get_pending_savings(&self, account_id: AccountId) -> Option<(U128, U64)> {
-        read_pending(&account_id).map(|(s, since)| (U128(s), U64(since + SAVINGS_DELAY_NS)))
+    /// A stake increase `sync_savings` read that does not count yet: (yoctoNEAR, counts from, last read), in ns. It
+    /// counts from then only if no two readings until then are more than a day apart.
+    pub fn get_pending_savings(&self, account_id: AccountId) -> Option<(U128, U64, U64)> {
+        read_pending(&account_id).map(|(s, since, seen)| (U128(s), U64(since + SAVINGS_DELAY_NS), U64(seen)))
     }
 
     /// DAO only: the profit-share rule (reserve, savings, contribution), adding up to 10000 bps.

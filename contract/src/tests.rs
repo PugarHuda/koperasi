@@ -1500,8 +1500,10 @@ fn s12_a_stake_just_before_a_share_does_not_count_yet() {
     };
     staked(&mut k, "alice.testnet", 100, 0); // alice saves 100 NEAR
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 0, "an increase waits");
-    assert_eq!(k.get_pending_savings(acc("alice.testnet")), Some((U128(100 * 10u128.pow(24)), U64(7 * DAY))));
-    staked(&mut k, "alice.testnet", 100, 8 * DAY); // still there a week later: it counts
+    assert_eq!(k.get_pending_savings(acc("alice.testnet")), Some((U128(100 * 10u128.pow(24)), U64(7 * DAY), U64(0))));
+    for d in 1..=7 {
+        staked(&mut k, "alice.testnet", 100, d * DAY); // read every day (the keeper), still there a week later: it counts
+    }
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 100 * 10u128.pow(24));
     // mallory stakes 9 900 NEAR and syncs, unstakes, and comes back the day before the share without syncing again
     staked(&mut k, "mallory.testnet", 9_900, DAY);
@@ -1517,6 +1519,34 @@ fn s12_a_stake_just_before_a_share_does_not_count_yet() {
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 40 * 10u128.pow(24));
 }
 
+/// S12's ceiling (was: only two readings, so a stake that left and came back between them counted): a gap of more
+/// than a day between readings restarts the wait.
+#[test]
+fn a_stake_that_was_not_read_for_more_than_a_day_waits_again() {
+    let mut k = setup();
+    with_members(&mut k, &["mallory.testnet"]);
+    let staked = |k: &mut Koperasi, ns: u64| {
+        at(&me(), ns);
+        k.on_staked(acc("mallory.testnet"), Ok(U128(9_900 * 10u128.pow(24))));
+    };
+    // mallory stakes and syncs on day 0, unstakes on day 1 (nobody reads), restakes and syncs on day 7
+    staked(&mut k, 0);
+    staked(&mut k, 7 * DAY);
+    assert_eq!(k.get_member(acc("mallory.testnet")).unwrap().savings.0, 0, "a week between two readings is not a week staked");
+    assert_eq!(k.get_pending_savings(acc("mallory.testnet")), Some((U128(9_900 * 10u128.pow(24)), U64(14 * DAY), U64(7 * DAY))));
+    // read at most a day apart, the wait runs (24 h + 1 ns: below, it restarts)
+    for d in 8..=13 {
+        staked(&mut k, d * DAY);
+    }
+    staked(&mut k, 14 * DAY); // exactly a day after the last reading: still unbroken
+    assert_eq!(k.get_member(acc("mallory.testnet")).unwrap().savings.0, 9_900 * 10u128.pow(24));
+    let mut k = setup();
+    with_members(&mut k, &["mallory.testnet"]);
+    staked(&mut k, 0);
+    staked(&mut k, DAY + 1);
+    assert_eq!(k.get_pending_savings(acc("mallory.testnet")).unwrap().1, U64(DAY + 1 + 7 * DAY), "restarted");
+}
+
 #[test]
 fn a_larger_stake_restarts_the_wait_and_a_smaller_one_keeps_it() {
     let mut k = setup();
@@ -1525,11 +1555,16 @@ fn a_larger_stake_restarts_the_wait_and_a_smaller_one_keeps_it() {
         at(&me(), ns);
         k.on_staked(acc("alice.testnet"), Ok(U128(n * 10u128.pow(24))));
     };
-    staked(&mut k, 1, 0);
+    for d in 0..6 {
+        staked(&mut k, 1, d * DAY);
+    }
     staked(&mut k, 500, 6 * DAY); // a top-up a day before the first would count: waits 7 days from now
     staked(&mut k, 500, 7 * DAY);
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 0);
-    staked(&mut k, 300, 10 * DAY); // less than what waits: 300 was there since day 6
+    for d in 8..=12 {
+        staked(&mut k, 300, d * DAY); // less than what waits: 300 was there since day 6
+    }
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 0);
     staked(&mut k, 300, 13 * DAY);
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 300 * 10u128.pow(24));
     // a members' vote counts at once

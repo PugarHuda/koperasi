@@ -4,6 +4,7 @@
   "installCommand": "npm ci --omit=dev",
   "buildCommand": "npm run web:files",
   "outputDirectory": "web",
+  "crons": [{ "path": "/api/keeper", "schedule": "0 */12 * * *" }],
   "headers": [
     {
       "source": "/(.*)",
