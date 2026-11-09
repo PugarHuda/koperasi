@@ -29,6 +29,7 @@ Sister project by the same builder, independent of this one: [Pusaka](https://gi
 | USDC | Circle's USDC on NEAR testnet, `3e2210e1…afcb8af` (moved by vote, proposal #18). Real profit share on the showcase: proposal #36: 10 of the 20 Circle testnet USDC from faucet.circle.com shared with the 4 members (bob 4.33 USDC, most of it from his 11 task points; guest 2.33, alice 0.67, steward 0.67; 2 USDC reserve back in the DAO); bob claimed his in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd). The demo deploys its own co-op on the mintable `usdc.fakes.testnet`, so anyone can run it without a faucet |
 | By-laws the agent runs | **v3** ([`config/config.v3.yaml`](config/config.v3.yaml), `6c237221…`): a member found that v2's model is not served by NEAR AI Cloud and proposed a switch to `z-ai/glm-5.3-flash`; the members approved it as DAO proposal #7 |
 | Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR; source in `web/`) |
+| Gasless calls | Members whose wallet signs NEP-366 delegate actions (Meteor, Intear, Ledger on testnet) pay no gas: `api/relay.mjs` relays calls to the co-op's contract and DAO only, members only (or someone joining), and the member still pays any deposit. Through production: [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) |
 
 ## Check it in 2 minutes (no wallet, no keys)
 
@@ -51,7 +52,7 @@ npm install
 npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `89 passed` for the contract and `pass 14` for the agent, scripts and page logic: response-signature recovery, the TDX quote
+See: `91 passed` for the contract and `pass 26` for the agent, scripts and page logic: response-signature recovery, the TDX quote
 binding the server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market
 check, the page's profit-share preview matching the contract's split to the last USDC unit, views that move past a
 rate-limited RPC, and the agent's money path when a job fails half-way (a billed inference that then fails is booked at
