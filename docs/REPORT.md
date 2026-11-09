@@ -1,7 +1,7 @@
 # Koperasi: final report (8 Nov 2026)
 
 Per-phase detail is in [`docs/reports/`](reports): [01 audit](reports/01-audit.md) · [02 strategy](reports/02-strategi.md) ·
-[03 contract](reports/03-kontrak.md) · [03 contracts, quality pass](reports/03-contracts.md) · [04 dApp](reports/04-dapp.md) · [05 security](reports/05-keamanan.md) ·
+[03 contract](reports/03-kontrak.md) · [03 contracts, quality pass](reports/03-contracts.md) · [04 dApp](reports/04-dapp.md) · [05 security](reports/05-keamanan.md) · [05 security, round 2](reports/05-security.md) ·
 [06 QA](reports/06-qa.md) · [09 improvements toward the top 3](reports/09-peningkatan.md) · [submission materials](submission.md).
 
 ## 1. Judges' scorecard and checklist

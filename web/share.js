@@ -132,7 +132,7 @@ export function describeEvent({ event: e, data: d }) {
 export function txList(json) {
   const rows = Array.isArray(json?.data) ? json.data : [];
   return rows.filter((t) => typeof t?.transaction_hash === "string" && /^[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(t.transaction_hash)
-    && typeof t.signer_account_id === "string" && /^\d+$/.test(String(t.block_timestamp ?? "")))
+    && typeof t.signer_account_id === "string" && /^\d{1,19}$/.test(String(t.block_timestamp ?? "")))
     .map((t) => ({ hash: t.transaction_hash, signer: t.signer_account_id, ts: Number(BigInt(t.block_timestamp) / 1_000_000n) }));
 }
 
@@ -182,4 +182,24 @@ export function taskCheck(action, t, me, { members = [], budget = "0" } = {}) {
   if (action === "approve" && !members.includes(me)) return "Only a member of the DAO approves.";
   if (action === "approve" && BigInt(t.amount) > BigInt(budget)) return "The task budget is too low: the members must raise it first.";
   return null;
+}
+
+// ---------- proposals are anyone's data (security S14–S16) ----------
+
+/** A proposer's plain string on one short line, so it cannot pose as another line of what a proposal does. */
+export const oneLine = (s) => String(s).replace(/\s+/g, " ").slice(0, 64);
+
+/** The by-laws path a DAO vote set, if it is a relative path on this site (never another host or a parent dir). */
+export const byLawsPath = (uri) => /^(?!\/)(?!.*(\/\/|\.\.))[\w./-]+$/.test(String(uri));
+
+/**
+ * The vote that set these by-laws: the newest *approved* proposal calling `set_config` on this contract with this hash.
+ * Anyone can file a proposal, so an open, rejected or foreign one never counts; unreadable args never match.
+ */
+export function configVote(props, contract, hash) {
+  return [...props].reverse().find((p) => p?.status === "Approved" && p.kind?.FunctionCall?.receiver_id === contract
+    && p.kind.FunctionCall.actions?.some((x) => {
+      if (x?.method_name !== "set_config") return false;
+      try { return JSON.parse(atob(x.args)).hash === hash; } catch { return false; }
+    }));
 }

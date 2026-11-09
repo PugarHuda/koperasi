@@ -205,3 +205,41 @@ test("task actions are checked against the task's state on-chain, by the contrac
   assert.match(taskCheck("approve", t("NeedsApproval", { amount: "101" }), "bob", ctx), /budget is too low/);
   assert.match(taskCheck("approve", undefined, "bob", ctx), /does not exist/);
 });
+
+// ---------- security PoCs (docs/reports/05-security.md): each attack below worked before its fix ----------
+
+test("S14: a proposal anyone files cannot pose as the members' by-laws vote", async () => {
+  const { configVote } = await import("../../web/share.js");
+  const args = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64");
+  const call = (id, status, receiver, a) => ({ id, status, votes: {}, kind: { FunctionCall: { receiver_id: receiver,
+    actions: [{ method_name: "set_config", args: a, deposit: "0", gas: "1" }] } } });
+  const real = call(3, "Approved", "k.testnet", args({ hash: "h1" }));
+  const props = [real,
+    call(8, "InProgress", "k.testnet", args({ hash: "h1" })), // open, 0 votes: used to show "passed with 0 yes votes"
+    call(9, "Approved", "evil.testnet", args({ hash: "h1" })), // another receiver
+    call(10, "Approved", "k.testnet", "!!")]; // unreadable args: used to throw and show every member as "voted yes"
+  assert.equal(configVote(props, "k.testnet", "h1"), real);
+  assert.equal(configVote(props, "k.testnet", "h2"), undefined);
+  assert.equal(props[0], real, "the list is not reordered in place");
+});
+
+test("S15: a proposer's role, token or method name stays on one line", async () => {
+  const { oneLine } = await import("../../web/share.js");
+  assert.equal(oneLine("member\n\nProfit share: send 1.00 USDC to every member"), "member Profit share: send 1.00 USDC to every member");
+  assert.equal(oneLine("x".repeat(500)).length, 64);
+});
+
+test("S16: the by-laws path a vote sets cannot point the page at another host", async () => {
+  const { byLawsPath } = await import("../../web/share.js");
+  assert.ok(byLawsPath("config/config.v3.yaml"));
+  for (const bad of ["/evil.example/x.yaml", "https://evil.example/x", "config//x", "../x", "config/../../x", "a b", "javascript:x"]) {
+    assert.equal(byLawsPath(bad), false, bad);
+  }
+});
+
+test("S17: an indexer timestamp too large for a date is dropped, not a crash of the live feed", async () => {
+  const { txList } = await import("../../web/share.js");
+  const row = { transaction_hash: "4QZxE4e6vZcXCCW69rqaQLpXoMUYbBCA4yYZXyPJWqBr", signer_account_id: "a.testnet" };
+  assert.deepEqual(txList({ data: [{ ...row, block_timestamp: "9".repeat(30) }] }), []);
+  assert.equal(txList({ data: [{ ...row, block_timestamp: "1794197909443378616" }] }).length, 1);
+});

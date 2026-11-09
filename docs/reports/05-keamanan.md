@@ -48,3 +48,5 @@ are clippy for wasm and a manual review; there is a PoC test for every flow-leve
 ## Known issues (not fixed)
 
 S6, S7, S8 and S9; CSP; `cargo audit` not run.
+
+The next round is in [05-security](05-security.md).

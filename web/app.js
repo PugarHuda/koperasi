@@ -15,7 +15,8 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
 
 import { dep, testnet, RAW, explorer, view, all, query, $, esc, usdc, nearAmt } from "./near.js";
 import { verifyInBrowser } from "./tee.js";
-import { trustSources } from "./share.js";
+import { byLawsPath, configVote, trustSources } from "./share.js";
+const byLawsUrl = (uri) => (byLawsPath(uri) ? `${RAW}${uri}` : "about:blank#refused");
 
 // "Don't trust us": each check writes its verdict into its card
 const verdict = (id, ok, html) => {
@@ -83,25 +84,24 @@ try {
   try {
     const last = await view(dep.dao, "get_last_proposal_id");
     const props = await view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 100), limit: 100 });
-    const match = props.reverse().find((p) => p.kind?.FunctionCall?.actions?.some((x) => x.method_name === "set_config"
-      && JSON.parse(atob(x.args)).hash === info.config.hash));
+    const match = configVote(props, dep.contract, info.config.hash);
     if (match) {
       proposalId = match.id;
       approvedBy = new Set(Object.entries(match.votes).filter(([, x]) => x === "Approve").map(([k]) => k));
     }
   } catch (e) { console.warn("could not read the DAO's proposals", e); }
   $("p-voters").innerHTML = members.slice(0, 6).map(([a]) => {
-    const yes = !approvedBy || approvedBy.has(a);
-    return `<li class="${yes ? "yes" : "no"}" title="${esc(a)}"><span class="mark" aria-hidden="true">${yes ? "✓" : "–"}</span>${esc(nick(a))}<em>${yes ? "voted yes" : "didn't vote"}</em></li>`;
+    const yes = approvedBy?.has(a);
+    return `<li class="${yes ? "yes" : "no"}" title="${esc(a)}"><span class="mark" aria-hidden="true">${yes ? "✓" : "–"}</span>${esc(nick(a))}<em>${yes ? "voted yes" : approvedBy ? "didn't vote" : "vote not found"}</em></li>`;
   }).join("") + (members.length > 6 ? `<li class="no">+${members.length - 6} more</li>` : "");
-  const yesCount = approvedBy ? members.filter(([a]) => approvedBy.has(a)).length : members.length;
+  const yesCount = approvedBy ? members.filter(([a]) => approvedBy.has(a)).length : 0;
   $("p-tally").innerHTML = proposalId !== null
     ? `<a href="${explorer(dep.dao)}">Proposal #${proposalId}</a> passed with ${yesCount} yes ${yesCount === 1 ? "vote" : "votes"}: by-laws v${v}.`
     : `By-laws v${v} were approved by a member vote.`;
   $("p-lock").href = explorer(dep.dao);
   const termsBox = $("p-terms");
   termsBox.innerHTML = `<div><dt>Rule book</dt><dd>by-laws v${v}</dd></div><div><dt>Fingerprint</dt><dd>${short(info.config.hash)}</dd></div>`;
-  fetch(`${RAW}${info.config.uri}`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`)))).then(async (raw) => {
+  fetch(byLawsUrl(info.config.uri)).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`)))).then(async (raw) => {
     const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", raw))].map((b) => b.toString(16).padStart(2, "0")).join("");
     verdict("ck-bylaws", hex === info.config.hash, hex === info.config.hash
       ? `Your browser hashed <code>${esc(info.config.uri)}</code>: <code>${short(hex)}</code>, the hash the members voted for v${v}. The contract refuses receipts under any other.`
@@ -203,7 +203,7 @@ try {
   box.querySelector("button").onclick = async () => {
     box.innerHTML = `<p class="hint">Hashing ${esc(current.uri)}…</p>`;
     try {
-      const raw = await (await fetch(`${RAW}${current.uri}`, { cache: "no-store" })).arrayBuffer();
+      const raw = await (await fetch(byLawsUrl(current.uri), { cache: "no-store" })).arrayBuffer();
       const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", raw))].map((b) => b.toString(16).padStart(2, "0")).join("");
       const text = new TextDecoder().decode(raw);
       const pick = (re) => esc(text.match(re)?.[1]?.trim() ?? "not set");

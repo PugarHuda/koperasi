@@ -1476,3 +1476,25 @@ fn members_are_read_a_page_at_a_time() {
     assert_eq!(k.get_members(Some(1), Some(1)).len(), 1);
     assert_eq!(k.get_members(Some(3), None).len(), 0);
 }
+
+/// Security PoC S12 (known issue, docs/reports/05-security.md): savings are the stake read at the last sync, so a member
+/// who stakes a large amount just before a profit share, syncs, and unstakes after takes most of the savings pool.
+/// The cost is only the stake's lock-up (unstaking takes about 4 epochs). Fixing it (count a raise only after a delay)
+/// needs an upgrade by vote; this test shows the current behaviour and flips when the fix lands.
+#[test]
+fn poc_s12_stake_just_before_a_share_takes_the_savings_pool() {
+    let mut k = setup(); // 20% reserve, 40% savings, 40% points
+    with_members(&mut k, &["alice.testnet", "mallory.testnet"]);
+    as_(&dao(), near(0));
+    k.set_staking_pool(Some(acc("pool.testnet")));
+    let staked = |k: &mut Koperasi, who: &str, n: u128| {
+        as_(&acc("koperasi.testnet"), near(0));
+        k.on_staked(acc(who), Ok(U128(n * 10u128.pow(24))));
+    };
+    staked(&mut k, "alice.testnet", 100); // alice has saved 100 NEAR for months
+    staked(&mut k, "mallory.testnet", 9_900); // mallory stakes 9 900 NEAR the day before the share is paid
+    share(&mut k, 100_000_000); // 100 USDC: 40 USDC savings pool
+    assert_eq!(k.get_claimable(acc("mallory.testnet")).0, 39_600_000, "99% of the savings pool");
+    assert_eq!(k.get_claimable(acc("alice.testnet")).0, 400_000);
+    staked(&mut k, "mallory.testnet", 0); // and unstakes after
+}

@@ -2,7 +2,7 @@
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "https://esm.sh/@hot-labs/near-connect@0.12.0";
 import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
-import { affordable, nearUnits, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
+import { affordable, nearUnits, oneLine, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
 const preview = (amount, s) => {
@@ -68,8 +68,8 @@ const describe = (p, s) => {
   const k = kindOf(p);
   const shared = s && shareCall(p);
   if (shared) return `Profit share: send ${usdc(shared)} USDC from the treasury to the co-op contract, split by its rule.\nIf approved now:\n  ${preview(shared, s).join("\n  ")}`;
-  if (k === "AddMemberToRole") return `Add ${p.kind.AddMemberToRole.member_id} to role ${p.kind.AddMemberToRole.role}`;
-  if (k === "RemoveMemberFromRole") return `Remove ${p.kind.RemoveMemberFromRole.member_id} from role ${p.kind.RemoveMemberFromRole.role}`;
+  if (k === "AddMemberToRole") return `Add ${p.kind.AddMemberToRole.member_id} to role ${oneLine(p.kind.AddMemberToRole.role)}`;
+  if (k === "RemoveMemberFromRole") return `Remove ${p.kind.RemoveMemberFromRole.member_id} from role ${oneLine(p.kind.RemoveMemberFromRole.role)}`;
   if (k === "AddBounty") {
     const b = p.kind.AddBounty.bounty;
     // the terms first, from the proposal's own fields; the proposer's task text last, on one line and cut, so it
@@ -79,10 +79,10 @@ const describe = (p, s) => {
       + `${Number(BigInt(b.max_deadline) / DAY_NS)} days to deliver once taken\nTask text (proposer's words): “${task}”`;
   }
   if (k === "BountyDone") return `Pay task #${p.kind.BountyDone.bounty_id} to ${p.kind.BountyDone.receiver_id} from the treasury`;
-  if (k === "Transfer") return `Transfer ${p.kind.Transfer.amount} of ${p.kind.Transfer.token_id || "NEAR"} to ${p.kind.Transfer.receiver_id}`;
+  if (k === "Transfer") return `Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${p.kind.Transfer.receiver_id}`;
   if (k === "FunctionCall") {
     const f = p.kind.FunctionCall;
-    return f.actions.map((a) => `Call ${f.receiver_id} ${a.method_name}${yocto(a.deposit)}\n${argsOf(a.args) ?? "(binary args: inspect in the DAO)"}`).join("\n\n");
+    return f.actions.map((a) => `Call ${f.receiver_id} ${oneLine(a.method_name)}${yocto(a.deposit)}\n${argsOf(a.args) ?? "(binary args: inspect in the DAO)"}`).join("\n\n");
   }
   return `${k} (open the DAO to inspect)`;
 };
