@@ -40,7 +40,7 @@ Built at NEAR HACKATHON (Nov 2026). Main track: **Social Money**. Also Autonomou
 | Profit share, real Circle testnet USDC | Proposal #36: 10 USDC shared with 4 members. Bob got 4.33, mostly from his task points, and claimed it in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd). 2 USDC reserve went back to the DAO |
 | Task payouts from the treasury | Task #2 needed one other member's approval (#30). Tasks #3 and #4 were paid on earned trust with no vote (#31, #34). Each was a DAO `Transfer` filed by the contract |
 | Join and leave | `kop-guest-984702.testnet` asked from the page and was voted in (#8). `kop-leaver-mw8pw94w.testnet` left and got its deposit back in [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV) |
-| By-laws vote | A member found that v2's model was not served and proposed v3. The members approved it as proposal #7, and the agent runs only `6c237221…` |
+| By-laws votes | A member found that v2's model was not served and proposed v3 (proposal #7). Another proposed v4 (#55): at 10 members or 25 paid jobs the steward proposes a second steward and a 90-day rotation; the page shows the count against both, read from the chain. The agent runs only `4e28de45…` |
 | Agent account | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, only `record_receipt` / `update_receipt` on the contract |
 | Gasless for members | NEP-366 relayer (`api/relay.mjs`, members and joiners only, contract and DAO only, calls without a deposit: under NEP-366 the relayer would pay it): [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) |
 | Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR) |
@@ -121,8 +121,8 @@ Rules in plain words: [`RULES.md`](RULES.md).
 
 | Cost | Who pays | Bounded by |
 |---|---|---|
-| The agent's inference | NEAR AI credits from the members' staking yield (Staking for Inference, mainnet), so the principal stays theirs | the by-laws: at most $0.50 a job and $3 a day (v3) |
-| A job's margin | the buyer: 4 USDC a job (by-laws v3), minus Agent Market's 5% fee and the inference, leaves at least 3.30 USDC for the treasury | the audit nets out the fee and checks every payout reached the DAO |
+| The agent's inference | NEAR AI credits from the members' staking yield (Staking for Inference, mainnet), so the principal stays theirs | the by-laws: at most $0.50 a job and $3 a day (v4) |
+| A job's margin | the buyer: 4 USDC a job (by-laws v4), minus Agent Market's 5% fee and the inference, leaves at least 3.30 USDC for the treasury | the audit nets out the fee and checks every payout reached the DAO |
 | Task payouts | the treasury, within the task budget the members voted (`set_task_budget`) | the trust tiers and the daily limit per poster |
 | Members' gas | the co-op's relayer account (`api/relay.mjs`) for contract and DAO calls; the keeper reads stakes twice a day (`api/keeper.mjs`) | members and joiners only; refills by vote like any transfer |
 | Code changes | whoever publishes the global contract (about 33 NEAR for 330 KB); the switch is a vote | members only; nobody holds a full-access key |
