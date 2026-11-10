@@ -110,7 +110,7 @@ More in [`docs/DETAILS.md`](docs/DETAILS.md#prior-art-and-what-is-different).
 
 ```sh
 npm install
-npm test        # lint, typecheck, 29 unit tests, 104 contract tests (unit, fuzz, invariant)
+npm test        # lint, typecheck, 30 unit tests, 104 contract tests (unit, fuzz, invariant)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 
