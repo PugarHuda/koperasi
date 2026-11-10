@@ -110,7 +110,12 @@ for (const [who, rec] of contributors) {
     `${rec.refs.join(", ")}; trusted by ${sources} different source(s)${bad.length ? `; does not check out: ${bad.join(", ")}` : ""}`);
 }
 
-// 6. what the README admits: no real jobs yet, audit red on purpose, treasury empty
+// 6. profit shares: USDC left the treasury only by a members' vote, through the contract's split
+const shares = proposals.filter((p) => p.status === "Approved" && argsOf(p).some((a) => a.method === "ft_transfer_call" && a.args.receiver_id === d.contract && a.args.msg === "share"));
+check(shares.length > 0, "the members voted every profit share out of the treasury, split by the contract",
+  shares.map((p) => `#${p.id}: ${usd(argsOf(p)[0].args.amount)} USDC, approved by ${Object.keys(p.votes).length} members`).join("; ") || "none");
+
+// 7. what the README admits: no real jobs yet, audit red on purpose, treasury empty
 const receipts = await view(d.contract, "get_receipts", { from: 0, limit: 200 });
 const proven = (await Promise.all(receipts.map((x) => view(d.contract, "get_proof", { job_id: x.job_id })))).filter(Boolean).length;
 console.log(`INFO  receipts: ${receipts.length}, ${proven} with a TEE inference proof (0 = no real Agent Market job yet, as the README says)`);

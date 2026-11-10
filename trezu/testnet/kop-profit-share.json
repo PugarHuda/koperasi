@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "id": "kop-profit-share",
+  "title": "Koperasi: share profit with the members",
+  "description": "Sends USDC from the treasury to the Koperasi contract with msg \"share\". The contract splits it by the voted share rule (reserve back to the DAO, the rest by savings and contribution points); each member then claims their part. Contribution points reset after a share.",
+  "summary": "Share {{amount}} USDC base units with the Koperasi members",
+  "binding": {
+    "receiver_id": "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af",
+    "method_name": "ft_transfer_call",
+    "deposit": "1",
+    "gas": "200000000000000"
+  },
+  "fields": [
+    {
+      "name": "amount",
+      "label": "USDC to share (base units, 6 decimals: 1000000 = 1 USDC)",
+      "type": "amount",
+      "required": true,
+      "validation": {
+        "min": "1"
+      }
+    }
+  ],
+  "args": {
+    "receiver_id": "koperasi-mw4i2iwk.testnet",
+    "amount": "{{amount}}",
+    "msg": "share"
+  }
+}

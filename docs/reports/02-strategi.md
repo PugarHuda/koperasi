@@ -1,6 +1,6 @@
 # 02 · Strategy and differentiation (Hackathon Strategist), 8 Nov 2026
 
-Builds on [01-audit](01-audit.md). The full competitor analysis, with sources, is in [README › Prior art](../README.md#prior-art-and-what-is-different).
+Builds on [01-audit](01-audit.md). The full competitor analysis, with sources, is in [README › Prior art](../DETAILS.md#prior-art-and-what-is-different).
 This report covers what changed this round.
 
 ## Scorecard (self-assessment, 1–10)

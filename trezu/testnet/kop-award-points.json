@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "kop-award-points",
+  "title": "Koperasi: award contribution points",
+  "description": "Points weigh a member's part of the next profit share. Only members can receive them.",
+  "summary": "{{points}} Koperasi points to {{account_id}}: {{reason}}",
+  "binding": {
+    "receiver_id": "koperasi-mw4i2iwk.testnet",
+    "method_name": "award_points",
+    "deposit": "0",
+    "gas": "30000000000000"
+  },
+  "fields": [
+    {
+      "name": "account_id",
+      "label": "Member",
+      "type": "account",
+      "required": true
+    },
+    {
+      "name": "points",
+      "label": "Points",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "reason",
+      "label": "Why",
+      "type": "text",
+      "required": true
+    }
+  ],
+  "args": {
+    "account_id": "{{account_id}}",
+    "points": "{{points}}",
+    "reason": "{{reason}}"
+  }
+}

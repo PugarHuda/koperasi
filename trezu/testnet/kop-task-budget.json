@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "id": "kop-task-budget",
+  "title": "Koperasi: set the task budget",
+  "description": "How much the contract may still pay from the treasury for tasks (replaces what is left). Each payout is still a Transfer proposal of this DAO.",
+  "summary": "Koperasi task budget: {{amount}} yoctoNEAR",
+  "binding": {
+    "receiver_id": "koperasi-mw4i2iwk.testnet",
+    "method_name": "set_task_budget",
+    "deposit": "0",
+    "gas": "30000000000000"
+  },
+  "fields": [
+    {
+      "name": "amount",
+      "label": "Budget",
+      "type": "amount",
+      "required": true,
+      "help": "Amount in yoctoNEAR (1 NEAR = 1 followed by 24 zeros)."
+    }
+  ],
+  "args": {
+    "amount": "{{amount}}"
+  }
+}
