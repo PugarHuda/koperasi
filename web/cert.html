@@ -42,15 +42,18 @@
   </main>
   <script type="module">
     import { dep, explorer, view, all, $, esc, nearAmt } from "./near.js";
-    const who = new URLSearchParams(location.search).get("who")?.trim() ?? "";
+    // only a well-formed NEAR account id is ever rendered or put in a link (the query string is the visitor's input)
+    const ACCOUNT = /^(?=.{2,64}$)(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
+    const asked = new URLSearchParams(location.search).get("who")?.trim().toLowerCase() ?? "";
+    const who = ACCOUNT.test(asked) ? asked : "";
     $("cert-input").value = who;
     $("cert-form").onsubmit = (e) => { e.preventDefault(); location.search = `?who=${encodeURIComponent($("cert-input").value.trim())}`; };
     const rows = (id, html) => { $(id).tBodies[0].innerHTML = html || `<tr><td colspan="3" class="muted">Nothing yet.</td></tr>`; };
     $("cert-net").textContent = `Read live from ${dep.network}: ${dep.contract}, DAO ${dep.dao}`;
     if (!who) {
-      $("cert-who").textContent = "Whose work record?";
+      $("cert-who").textContent = asked ? "That is not a NEAR account id." : "Whose work record?";
     } else {
-      $("cert-who").innerHTML = `Work record of <a href="${explorer(who)}">${esc(who)}</a>`;
+      $("cert-who").innerHTML = `Work record of <a href="${esc(explorer(who))}">${esc(who)}</a>`;
       try {
         const [member, recs, tasks, pledges, claims, cases, standing] = await Promise.all([
           view(dep.contract, "get_member", { account_id: who }), view(dep.contract, "get_contributors"), all(dep.contract, "get_tasks"),
