@@ -24,6 +24,10 @@ business, every member has one vote, and profit is shared by savings and by cont
 
 Built at NEAR HACKATHON (Nov 2026). Main track: **Social Money**. Also Autonomous Business and Agent Economy.
 
+| The live page: who controls the agent, read from the DAO | Tasks paid from the treasury, by earned trust or by vote |
+|---|---|
+| [![Who controls this AI agent](docs/img/page-top.png)](https://koperasi-kohl.vercel.app) | [![Tasks and trust](docs/img/page-trust.png)](https://koperasi-kohl.vercel.app/#trust) |
+
 ## Proof on testnet
 
 | What | Where |
@@ -161,6 +165,12 @@ person is why the steward exists. Both are listed under *Trust assumptions*.
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
    code. It is not listed for hire until the co-op's NEAR AI organization has credits, so no buyer can hire an agent
    that cannot deliver.
+6. **The contract's DAO role.** Role `tasks` may file *and* approve `transfer` proposals, nothing else. It must file
+   them: a small payout to a trusted contributor is paid when the poster accepts, with no member left to file it, which
+   is the point of the tier. A role with only `VoteApprove` (members file, the contract adds a vote) would keep every
+   payout waiting on a human. What bounds it is the contract's code, which only a vote can change: it files only for an
+   accepted task, within the voted budget, the tier limits and each poster's daily limit, to the task's contributor.
+   `npm run verify` checks that every Transfer the contract filed matches a paid task.
 
 ## Built with
 
