@@ -14,7 +14,7 @@ const samples = {
   "kop-profit-share": { amount: "100000" },
   "kop-trust-rule": { auto_max: String(YOCTO / 10n), one_vote_max: String(YOCTO / 2n), trusted_after: 2, poster_daily_auto: String(YOCTO / 5n), points: 5 },
   "kop-task-budget": { amount: String(YOCTO) },
-  "kop-award-points": { account_id: "kop-alice-mw4i2iwk.testnet", points: 1, reason: "filed from a Trezu template" },
+  "kop-award-points": { account_id: "kop-alice-mw4i3w8f.testnet", points: 1, reason: "filed from a Trezu template" },
 };
 
 const compiled = {};
@@ -40,7 +40,7 @@ if (process.argv.includes("--submit") && !process.exitCode) {
   const before = BigInt(await view(dep.usdc, "ft_balance_of", { account_id: dep.dao }));
   const id = await propose(account(tag("alice")), dep.dao, description, kind);
   console.log(`filed DAO proposal #${id} from the Trezu template kop-profit-share`);
-  for (const m of ["bob", "steward", "carol"].map(tag).filter(Boolean)) {
+  for (const m of ["alice", "bob", "steward", "carol"].map(tag).filter(Boolean)) {
     if ((await view(dep.dao, "get_proposal", { id })).status !== "InProgress") break;
     const r = await vote(account(m), dep.dao, id);
     if (r?.transaction) console.log(`  ${m} approved: ${txUrl(r.transaction.hash)}`);

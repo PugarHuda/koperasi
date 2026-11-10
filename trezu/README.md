@@ -35,3 +35,9 @@ npm i --no-save zod@4 clsx date-fns tailwind-merge big.js tsx
 npx tsx --tsconfig trezu/tsconfig.json trezu/check.mjs            # one ✓ line per template
 npx tsx --tsconfig trezu/tsconfig.json trezu/check.mjs --submit   # file + approve on testnet
 ```
+
+Done on testnet (10 Nov 2026). Trezu compiled the `kop-profit-share` form into DAO proposal **#51**, with the
+`[trezu-tmpl:kop-profit-share]` tag in its description. Bob ([5ZJtXu1D…](https://testnet.nearblocks.io/txns/5ZJtXu1DsMkaVFrDskUhExNmf7CGkoxdTV83cmaH1Txx)),
+the steward ([BejGeRtT…](https://testnet.nearblocks.io/txns/BejGeRtTib7heo7Dd9iRMB8UC7reei7kpY1qheWo6zNf)) and Alice
+([CWtub2GV…](https://testnet.nearblocks.io/txns/CWtub2GVvFreiceKwRGM5S6Q9e8WjirqZcgc38oobPgq)) approved it. 0.1 USDC left
+the treasury through the contract's split, and the reserve came back: 11.600005 → 11.560007 USDC.
