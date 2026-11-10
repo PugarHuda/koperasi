@@ -542,12 +542,18 @@ impl Koperasi {
     /// on every paid job's earnings; if they still owe any, it goes to the DAO (settle before handing over).
     pub fn set_steward(&mut self, steward: Option<AccountId>) {
         self.assert_dao();
+        self.replace_steward(steward);
+    }
+
+    /// Settle the old steward's bond and start the new steward's term (also when a term runs out: `None`).
+    fn replace_steward(&mut self, steward: Option<AccountId>) {
         let mut returned = NearToken::from_yoctonear(0);
         if let Some(old) = self.steward.take() {
             let bond = std::mem::replace(&mut self.steward_bond, NearToken::from_yoctonear(0));
             // a steward appointed before this code had no such rule: their bond goes back as it used to
             let owes = read_u128(KEY_STEWARD_PAID).is_some_and(|paid| paid > self.deposited - read_u128(KEY_STEWARD_DEPOSITED).unwrap_or(0));
             if !bond.is_zero() && owes {
+                commons::mark(&old, |s| s.slashed += 1);
                 Event::StewardSlashed { amount: bond }.emit();
                 let _ = Promise::new(self.dao_id.clone()).transfer(bond);
             } else if !bond.is_zero() {
@@ -569,6 +575,9 @@ impl Koperasi {
         let bond = self.steward_bond;
         require!(!bond.is_zero(), "no bond");
         self.steward_bond = NearToken::from_yoctonear(0);
+        if let Some(s) = &self.steward {
+            commons::mark(s, |x| x.slashed += 1);
+        }
         Event::StewardSlashed { amount: bond }.emit();
         let _ = Promise::new(self.dao_id.clone()).transfer(bond);
         bond
@@ -583,6 +592,9 @@ impl Koperasi {
         require!(overdue > 0, "nothing is overdue: every job paid more than 7 days ago was passed on");
         let bond = std::mem::replace(&mut self.steward_bond, NearToken::from_yoctonear(0));
         require!(!bond.is_zero(), "no bond");
+        if let Some(s) = &self.steward {
+            commons::mark(s, |x| x.slashed += 1);
+        }
         Event::StewardSlashedOverdue { amount: bond, overdue: U128(overdue) }.emit();
         let _ = Promise::new(self.dao_id.clone()).transfer(bond);
         bond
@@ -943,4 +955,6 @@ impl Koperasi {
 #[cfg(test)]
 mod tests;
 mod tasks;
+mod commons;
+pub use commons::*;
 pub use tasks::*;

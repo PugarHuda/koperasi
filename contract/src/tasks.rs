@@ -31,18 +31,18 @@ pub const TASKS_ROLE: &str = "tasks";
 // ponytail: the DAO's proposal bond (0.1 NEAR on Koperasi DAOs), fronted from the contract's balance and returned by
 // Sputnik when the payout is approved; read it from the policy if a DAO ever votes a different bond.
 pub const PAYOUT_BOND: NearToken = NearToken::from_millinear(100);
-const DAY_NS: u64 = 86_400_000_000_000;
+pub(crate) const DAY_NS: u64 = 86_400_000_000_000;
 /// The contract's own payout chain ends in a few blocks; a flag older than this means a callback failed (e.g. gas).
 const STUCK_NS: u64 = 3_600_000_000_000;
-const GAS_PROPOSE: Gas = Gas::from_tgas(15);
-const GAS_ACT: Gas = Gas::from_tgas(50);
+pub(crate) const GAS_PROPOSE: Gas = Gas::from_tgas(15);
+pub(crate) const GAS_ACT: Gas = Gas::from_tgas(50);
 const GAS_PROPOSED: Gas = Gas::from_tgas(100);
 const GAS_VOTED: Gas = Gas::from_tgas(30);
 const GAS_CHECKED: Gas = Gas::from_tgas(15);
 
 #[ext_contract(ext_dao_proposals)]
 #[allow(dead_code)]
-trait SputnikProposals {
+pub(crate) trait SputnikProposals {
     fn get_proposal(&self, id: u64) -> Value;
     fn add_proposal(&mut self, proposal: Value) -> u64;
     fn act_proposal(&mut self, id: u64, action: String, proposal: Value, memo: Option<String>);
@@ -112,10 +112,10 @@ pub struct Board {
     pub tasks: u32,
 }
 
-fn load<T: BorshDeserialize>(key: &[u8]) -> Option<T> {
+pub(crate) fn load<T: BorshDeserialize>(key: &[u8]) -> Option<T> {
     env::storage_read(key).map(|b| T::try_from_slice(&b).unwrap_or_else(|_| env::panic_str("bad task state")))
 }
-fn save<T: BorshSerialize>(key: &[u8], v: &T) {
+pub(crate) fn save<T: BorshSerialize>(key: &[u8], v: &T) {
     env::storage_write(key, &borsh::to_vec(v).unwrap());
 }
 fn task_key(id: u32) -> Vec<u8> {

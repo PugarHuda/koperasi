@@ -1736,3 +1736,239 @@ fn staking_rewards_do_not_restart_the_wait() {
     }
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 10u128.pow(24), "the first reading's stake counts");
 }
+
+// ---------- commons: pledges, the court, standing, the steward's term ----------
+
+fn at_paying(who: &AccountId, ns: u64, deposit: NearToken) {
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(who.clone()).attached_deposit(deposit)
+        .account_balance(near(100)).block_timestamp(ns).random_seed([7; 32]);
+    testing_env!(b.build());
+}
+
+fn logs_have(s: &str) -> bool {
+    near_sdk::test_utils::get_logs().iter().any(|l| l.contains(s))
+}
+
+fn fails(f: impl FnOnce()) -> bool {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).is_err()
+}
+
+#[test]
+fn a_kept_pledge_earns_the_issuer_points_and_standing() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    at(&acc("alice.testnet"), DAY);
+    let id = k.pledge("review one pull request".into(), 2);
+    at(&acc("bob.testnet"), DAY);
+    let c = k.redeem_pledge(id);
+    k.settle_pledge(c, true);
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().points, PLEDGE_POINTS);
+    let (s, good) = k.get_standing(acc("alice.testnet"));
+    assert_eq!((s.pledges_honored, good), (1, true));
+    assert_eq!(k.get_pledges(None, None)[0].called, 1);
+}
+
+#[test]
+#[should_panic(expected = "your own pledge")]
+fn nobody_calls_in_their_own_pledge() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    at(&acc("alice.testnet"), DAY);
+    let id = k.pledge("one design review".into(), 1);
+    k.redeem_pledge(id);
+}
+
+#[test]
+#[should_panic(expected = "only a member")]
+fn only_members_pledge() {
+    let mut k = setup();
+    at(&acc("outsider.testnet"), DAY);
+    k.pledge("anything".into(), 1);
+}
+
+#[test]
+#[should_panic(expected = "every unit")]
+fn a_pledge_is_called_in_at_most_units_times() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    at(&acc("alice.testnet"), DAY);
+    let id = k.pledge("one translation".into(), 1);
+    at(&acc("bob.testnet"), DAY);
+    k.redeem_pledge(id);
+    k.redeem_pledge(id);
+}
+
+#[test]
+fn a_pledge_is_broken_only_after_14_days_and_only_by_its_holder() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet", "carol.testnet"]);
+    at(&acc("alice.testnet"), DAY);
+    let id = k.pledge("one review".into(), 1);
+    at(&acc("bob.testnet"), DAY);
+    let c = k.redeem_pledge(id);
+    at(&acc("bob.testnet"), 14 * DAY);
+    assert!(fails(|| k.settle_pledge(c, false)), "too early");
+    at(&acc("carol.testnet"), 16 * DAY);
+    assert!(fails(|| k.settle_pledge(c, true)), "not the holder");
+    at(&acc("bob.testnet"), 15 * DAY);
+    k.settle_pledge(c, false);
+    let (s, good) = k.get_standing(acc("alice.testnet"));
+    assert_eq!((s.pledges_broken, good), (1, false));
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().points, 0);
+}
+
+const JURY: [&str; 5] = ["alice.testnet", "bob.testnet", "carol.testnet", "dave.testnet", "erin.testnet"];
+
+/// Five members, a steward, and one paid 10 USDC job.
+fn court() -> Koperasi {
+    let mut k = setup();
+    with_members(&mut k, &JURY);
+    as_(&dao(), near(0));
+    k.set_steward(Some(steward()));
+    receipt(&mut k, "job-1", 10_000_000, H1);
+    at(&agent(), DAY);
+    k.update_receipt("job-1".into(), ReceiptStatus::Paid);
+    k
+}
+
+fn open(k: &mut Koperasi, claimant: &str, ns: u64) -> u32 {
+    at_paying(&acc(claimant), ns, COURT_BOND);
+    k.open_case("job-1".into(), acc(claimant), U128(4_000_000), "the report missed half the brief".into())
+}
+
+#[test]
+fn the_jury_upholds_a_dispute_and_the_contract_files_the_refund() {
+    let mut k = court();
+    let id = open(&mut k, "buyer.testnet", 2 * DAY);
+    let c = k.get_cases(None, None)[0].clone();
+    let mut j = c.jurors.clone();
+    j.sort();
+    j.dedup();
+    assert_eq!(j.len(), JURORS, "three different jurors");
+    assert!(c.jurors.iter().all(|x| JURY.contains(&x.as_str())), "only members, never the steward or the claimant");
+    for juror in c.jurors.iter().take(2) {
+        at(juror, 2 * DAY + 1);
+        k.rule_case(id, true);
+    }
+    assert!(logs_have("\"case_closed\"") && logs_have("\"upheld\":true"));
+    assert_eq!(k.get_cases(None, None)[0].status, CaseStatus::Upheld);
+    for juror in c.jurors.iter().take(2) {
+        assert_eq!(k.get_member(juror.clone()).unwrap().points, JUROR_POINTS);
+        assert_eq!(k.get_standing(juror.clone()).0.juries_served, 1);
+    }
+    assert_eq!(k.get_standing(c.jurors[2].clone()).0.juries_missed, 0, "closed early: the third juror missed nothing");
+    at(&me(), 2 * DAY + 2);
+    let _ = k.on_refund_filed(id, Ok(70));
+    assert_eq!(k.get_cases(None, None)[0].refund_proposal, Some(70));
+}
+
+#[test]
+fn a_dispute_nobody_upholds_is_dismissed_after_3_days_and_silent_jurors_lose_standing() {
+    let mut k = court();
+    let id = open(&mut k, "buyer.testnet", 2 * DAY);
+    let jurors = k.get_cases(None, None)[0].jurors.clone();
+    at(&jurors[0], 3 * DAY);
+    k.rule_case(id, false);
+    at(&acc("anyone.testnet"), 4 * DAY);
+    assert!(fails(|| k.close_case(id)), "jurors have 3 days");
+    at(&acc("anyone.testnet"), 5 * DAY);
+    k.close_case(id);
+    assert_eq!(k.get_cases(None, None)[0].status, CaseStatus::Dismissed);
+    for j in &jurors[1..] {
+        let (s, good) = k.get_standing(j.clone());
+        assert_eq!((s.juries_missed, good), (1, false));
+    }
+    assert!(k.get_standing(jurors[0].clone()).1);
+}
+
+#[test]
+fn a_juror_out_of_good_standing_is_not_drawn() {
+    let mut k = court();
+    commons::mark(&acc("alice.testnet"), |s| s.pledges_broken += 1);
+    commons::mark(&acc("bob.testnet"), |s| s.slashed += 1);
+    open(&mut k, "buyer.testnet", 2 * DAY);
+    let mut j: Vec<String> = k.get_cases(None, None)[0].jurors.iter().map(|a| a.to_string()).collect();
+    j.sort();
+    assert_eq!(j, ["carol.testnet", "dave.testnet", "erin.testnet"]);
+}
+
+#[test]
+#[should_panic(expected = "fewer than 3 members")]
+fn no_court_without_three_eligible_jurors() {
+    let mut k = court();
+    for m in ["alice.testnet", "bob.testnet", "carol.testnet"] {
+        commons::mark(&acc(m), |s| s.juries_missed += 1);
+    }
+    open(&mut k, "dave.testnet", 2 * DAY); // dave is the claimant: only erin is left
+}
+
+#[test]
+#[should_panic(expected = "already disputed")]
+fn a_job_is_disputed_once() {
+    let mut k = court();
+    open(&mut k, "buyer.testnet", 2 * DAY);
+    open(&mut k, "buyer.testnet", 2 * DAY);
+}
+
+#[test]
+#[should_panic(expected = "at most the job")]
+fn a_refund_is_at_most_the_price() {
+    let mut k = court();
+    at_paying(&acc("buyer.testnet"), 2 * DAY, COURT_BOND);
+    k.open_case("job-1".into(), acc("buyer.testnet"), U128(10_000_001), "x".into());
+}
+
+#[test]
+#[should_panic(expected = "court bond")]
+fn a_dispute_needs_the_bond() {
+    let mut k = court();
+    at_paying(&acc("buyer.testnet"), 2 * DAY, NearToken::from_millinear(499));
+    k.open_case("job-1".into(), acc("buyer.testnet"), U128(1), "x".into());
+}
+
+#[test]
+#[should_panic(expected = "only a paid")]
+fn only_a_paid_job_is_disputed() {
+    let mut k = court();
+    receipt(&mut k, "job-2", 10_000_000, H1);
+    at_paying(&acc("buyer.testnet"), 2 * DAY, COURT_BOND);
+    k.open_case("job-2".into(), acc("buyer.testnet"), U128(1), "x".into());
+}
+
+#[test]
+#[should_panic(expected = "only a juror")]
+fn only_jurors_rule() {
+    let mut k = court();
+    let id = open(&mut k, "buyer.testnet", 2 * DAY);
+    at(&acc("buyer.testnet"), 2 * DAY);
+    k.rule_case(id, true);
+}
+
+#[test]
+fn a_steward_term_runs_out_and_anyone_ends_it_with_the_bond_returned() {
+    let mut k = setup();
+    as_(&dao(), near(0));
+    k.set_steward(Some(steward()));
+    k.set_steward_term(30);
+    as_(&steward(), near(2));
+    k.bond_steward();
+    let (days, ends) = k.get_steward_term();
+    assert_eq!((days, ends.unwrap().0), (30, 30 * DAY));
+    at(&acc("anyone.testnet"), 30 * DAY - 1);
+    assert!(fails(|| k.end_steward_term()), "not yet");
+    at(&acc("anyone.testnet"), 30 * DAY);
+    k.end_steward_term();
+    assert!(k.get_info().steward.is_none());
+    assert!(logs_have("\"steward_term_ended\"") && logs_have("\"bond_returned\":\"2000000000000000000000000\""));
+    assert_eq!(k.get_steward_term().1, None);
+}
+
+#[test]
+fn a_slashed_steward_is_out_of_good_standing() {
+    let mut k = owing_steward();
+    at(&acc("anyone.testnet"), 9 * DAY);
+    k.slash_overdue();
+    let (s, good) = k.get_standing(steward());
+    assert_eq!((s.slashed, good), (1, false));
+}

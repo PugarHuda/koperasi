@@ -141,4 +141,33 @@ pub enum Event {
     /// One more point on a record, from `source` ("task:<id>" or "dao-proposal:<id>").
     #[event_version("1.0.0")]
     RecordCredited { account_id: AccountId, source: String, points: u64 },
+
+    // ---------- commons: pledges, the co-op court, standing, the steward's term ----------
+    /// A member promised a service to the co-op, `units` times (a commitment voucher).
+    #[event_version("1.0.0")]
+    PledgeMade { id: u32, issuer: AccountId, what: String, units: u32 },
+    /// Another member called in one unit of a pledge.
+    #[event_version("1.0.0")]
+    PledgeRedeemed { id: u32, claim: u32, holder: AccountId },
+    /// The holder said whether the pledge was kept (or, after the due time, that it was not).
+    #[event_version("1.0.0")]
+    PledgeSettled { claim: u32, issuer: AccountId, honored: bool },
+    /// Someone disputed a paid job; three members were drawn at random as jurors.
+    #[event_version("1.0.0")]
+    CaseOpened { id: u32, job_id: String, claimant: AccountId, refund_to: AccountId, amount: U128, jurors: Vec<AccountId> },
+    /// A juror's ruling.
+    #[event_version("1.0.0")]
+    CaseVoted { id: u32, juror: AccountId, uphold: bool },
+    /// The jury decided; an upheld case refunds `amount` USDC from the treasury.
+    #[event_version("1.0.0")]
+    CaseClosed { id: u32, upheld: bool, missed: Vec<AccountId> },
+    /// The contract filed (and approved, as role `tasks`) the refund of an upheld case.
+    #[event_version("1.0.0")]
+    RefundFiled { id: u32, proposal_id: u64 },
+    /// How long a steward serves before the role lapses unless the members re-appoint them (0: no limit).
+    #[event_version("1.0.0")]
+    StewardTermSet { days: u32 },
+    /// The steward's term ran out: the role is empty until the members appoint one.
+    #[event_version("1.0.0")]
+    StewardTermEnded { steward: AccountId },
 }
