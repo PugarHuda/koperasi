@@ -1872,6 +1872,7 @@ fn a_dispute_nobody_upholds_is_dismissed_after_3_days_and_silent_jurors_lose_sta
     let jurors = k.get_cases(None, None)[0].jurors.clone();
     at(&jurors[0], 3 * DAY);
     k.rule_case(id, false);
+    assert_eq!(k.get_member(jurors[0].clone()).unwrap().points, 0);
     at(&acc("anyone.testnet"), 4 * DAY);
     assert!(fails(|| k.close_case(id)), "jurors have 3 days");
     at(&acc("anyone.testnet"), 5 * DAY);
@@ -1907,28 +1908,37 @@ fn no_court_without_three_eligible_jurors() {
 }
 
 #[test]
-#[should_panic(expected = "a case for this job is open")]
-fn one_open_case_per_job() {
+#[should_panic(expected = "already had its case")]
+fn one_case_per_job() {
     let mut k = court();
     open(&mut k, "frank.testnet", 2 * DAY);
     open(&mut k, "frank.testnet", 2 * DAY);
 }
 
 #[test]
-fn an_upheld_job_is_closed_to_new_cases_and_a_rejected_one_is_not() {
+fn a_rejected_case_closes_the_job_and_a_lone_ruling_earns_no_points() {
     let mut k = court();
     let id = open(&mut k, "frank.testnet", 2 * DAY);
-    for j in k.get_cases(None, None)[0].jurors.clone().iter().take(2) {
+    let jurors = k.get_cases(None, None)[0].jurors.clone();
+    for j in jurors.iter().take(2) {
         at(j, 2 * DAY + 1);
         k.rule_case(id, false);
     }
     assert!(logs_have("\"upheld\":false"));
-    let id = open(&mut k, "frank.testnet", 6 * DAY);
-    for j in k.get_cases(None, None)[1].jurors.clone().iter().take(2) {
-        at(j, 6 * DAY + 1);
-        k.rule_case(id, true);
-    }
-    assert!(fails(|| { open(&mut k, "frank.testnet", 9 * DAY); }), "refunded once");
+    assert_eq!(k.get_member(jurors[0].clone()).unwrap().points, JUROR_POINTS, "a verdict earns points");
+    assert!(fails(|| { open(&mut k, "frank.testnet", 6 * DAY); }), "no second jury for the same job");
+}
+
+#[test]
+#[should_panic(expected = "ruled for the agent")]
+fn a_job_still_disputed_on_the_market_is_not_taken_to_court() {
+    let mut k = setup();
+    with_members(&mut k, &JURY);
+    with_members(&mut k, &["frank.testnet"]);
+    receipt(&mut k, "job-1", 10_000_000, H1);
+    at(&agent(), DAY);
+    k.update_receipt("job-1".into(), ReceiptStatus::Disputed);
+    open(&mut k, "frank.testnet", 2 * DAY);
 }
 
 #[test]
