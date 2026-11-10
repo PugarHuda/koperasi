@@ -36,7 +36,7 @@ Built at NEAR HACKATHON (Nov 2026). Main track: **Social Money**. Also Autonomou
 | What | Where |
 |---|---|
 | The co-op's DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet): Sputnik v2, role `member`, RoleWeight, threshold 1/2 |
-| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys, so its code changes only by vote (now proposal #50) |
+| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys, so its code changes only by vote (now proposal #53) |
 | Profit share, real Circle testnet USDC | Proposal #36: 10 USDC shared with 4 members. Bob got 4.33, mostly from his task points, and claimed it in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd). 2 USDC reserve went back to the DAO |
 | Task payouts from the treasury | Task #2 needed one other member's approval (#30). Tasks #3 and #4 were paid on earned trust with no vote (#31, #34). Each was a DAO `Transfer` filed by the contract |
 | Join and leave | `kop-guest-984702.testnet` asked from the page and was voted in (#8). `kop-leaver-mw8pw94w.testnet` left and got its deposit back in [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV) |
@@ -159,7 +159,7 @@ person is why the steward exists. Both are listed under *Trust assumptions*.
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
-4. **The contract's code.** It runs a global contract the members approved, now proposal #50. `upgrade` obeys only the
+4. **The contract's code.** It runs a global contract the members approved, now proposal #53. `upgrade` obeys only the
    DAO, and the contract account has no full-access key left, so nobody can deploy code without a vote, the builder
    included. The live page shows the key count from the chain. Every upgrade and what it fixed:
    [`docs/DETAILS.md`](docs/DETAILS.md#code-upgrades-each-by-a-members-vote). Each upgrade publishes a global contract
