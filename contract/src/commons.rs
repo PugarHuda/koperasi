@@ -8,9 +8,8 @@
 //!   that status) and the market ruled for the agent (Paid, final), a member can take the buyer's case to the co-op
 //!   with a bond. Three other members in good standing are drawn at random; two of the three must uphold. Upheld: the
 //!   bond comes back and the contract files and approves (as role `tasks`) a USDC refund from the treasury, at most the
-//!   job's price. One open case per job and one refund per job; each member takes a given job to court once, so a
-//!   bogus case (wrong receiver, token amount) cannot block the real one, and nobody shops for juries without losing a
-//!   bond each time. Not upheld: the bond goes to the DAO, unless no juror ruled at all. Jurors earn points only when the jury reached a verdict; jurors who let the
+//!   job's price. One open case per job, at most two cases and one refund per job, and each member takes a given job
+//!   to court once: a bogus case (wrong receiver, token amount) cannot block the real one, and a lost case costs a bond. Not upheld: the bond goes to the DAO, unless no juror ruled at all. Jurors earn points only when the jury reached a verdict; jurors who let the
 //!   deadline pass are marked. The market names buyers by its own ids, not NEAR accounts, so the contract cannot
 //!   check that `refund_to` is the buyer: the jurors do, from the market's job page (trust assumptions in the README).
 //! - **Standing** (after Hats Protocol): each account's kept and broken pledges, juries served and missed, and slashes,
@@ -129,6 +128,11 @@ fn case_key(id: u32) -> Vec<u8> {
 fn job_case_key(job: &str) -> Vec<u8> {
     format!("job_case:{job}").into_bytes()
 }
+/// How many cases this job had: at most `MAX_CASES_PER_JOB`.
+fn job_tries_key(job: &str) -> Vec<u8> {
+    format!("job_tries:{job}").into_bytes()
+}
+const MAX_CASES_PER_JOB: u8 = 2;
 /// This member already took this job to court.
 fn case_by_key(job: &str, claimant: &AccountId) -> Vec<u8> {
     format!("case_by:{job}:{claimant}").into_bytes()
@@ -250,6 +254,9 @@ impl Koperasi {
             None => {}
         }
         require!(env::storage_read(&case_by_key(&job_id, &claimant)).is_none(), "you already took this job to court");
+        let tries = env::storage_read(&job_tries_key(&job_id)).map_or(0, |b| b[0]);
+        require!(tries < MAX_CASES_PER_JOB, "this job had its two cases");
+        env::storage_write(&job_tries_key(&job_id), &[tries + 1]);
         let mut pool: Vec<AccountId> = self.members.keys()
             .filter(|m| **m != claimant && **m != refund_to && Some(*m) != self.steward.as_ref() && standing(m).good())
             .cloned()

@@ -1938,6 +1938,20 @@ fn a_rejected_case_closes_the_job_and_a_lone_ruling_earns_no_points() {
 }
 
 #[test]
+#[should_panic(expected = "two cases")]
+fn a_job_has_at_most_two_cases() {
+    let mut k = court();
+    for (n, who) in ["frank.testnet", "erin.testnet"].iter().enumerate() {
+        let id = open(&mut k, who, (2 + n as u64) * DAY);
+        for j in k.get_cases(None, None)[n].jurors.clone().iter().take(2) {
+            at(j, (2 + n as u64) * DAY + 1);
+            k.rule_case(id, false);
+        }
+    }
+    open(&mut k, "dave.testnet", 20 * DAY);
+}
+
+#[test]
 #[should_panic(expected = "ruled for the agent")]
 fn a_job_still_disputed_on_the_market_is_not_taken_to_court() {
     let mut k = setup();
