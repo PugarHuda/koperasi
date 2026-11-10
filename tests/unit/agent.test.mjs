@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { ethAddressOf, recoverPersonal } from "../../agent/sig.mjs";
-import { bindsAddressAndNonce, composeMatches } from "../../agent/tee.mjs";
+import { bindsAddressAndNonce, chutesBinds, chutesRow, composeMatches } from "../../agent/tee.mjs";
 import { OverBudget, isLocal, maxTokensWithin } from "../../agent/runtime.mjs";
 
 const personalSign = (msg, priv) => {
@@ -47,6 +47,18 @@ test("the attested docker compose must match mr_config_id", () => {
   assert.equal(composeMatches(att, `01${hash}${"0".repeat(30)}`).ok, true);
   assert.equal(composeMatches(att, `01${"f".repeat(64)}`).ok, false);
   assert.equal(composeMatches({ info: {} }, `01${hash}`).ok, false, "no compose, no pass");
+});
+
+test("Chutes: report_data binds our nonce and the instance cert; registers must equal a pinned measurement", async () => {
+  const fx = (await import("./chutes-attestation.json", { with: { type: "json" } })).default;
+  assert.deepEqual(({ ...chutesBinds(fx, fx.report_data, fx.nonce), fresh: undefined }), { fresh: undefined, nonce: true, cert: true });
+  assert.equal(chutesBinds(fx, fx.report_data, crypto.randomBytes(32).toString("hex")).nonce, false, "a replayed quote fails");
+  assert.equal(chutesBinds({ ...fx, e2e_pubkey: `${fx.e2e_pubkey}x` }, fx.report_data, fx.nonce).nonce, false, "another instance key fails");
+  const flipped = fx.report_data.slice(0, 64) + (fx.report_data[64] === "0" ? "1" : "0") + fx.report_data.slice(65);
+  assert.equal(chutesBinds(fx, flipped, fx.nonce).cert, false, "another TLS cert fails");
+  assert.ok(chutesRow(fx.regs), "the live quote matches a pinned Chutes row");
+  assert.equal(chutesRow({ ...fx.regs, rtmr3: "00".repeat(48) }), undefined, "modified runtime software fails");
+  assert.equal(chutesRow({ ...fx.regs, mrtd: "" }), undefined, "a missing register fails");
 });
 
 test("max_tokens keeps a job's worst case under the by-laws' per-job cap", () => {

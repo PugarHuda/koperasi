@@ -6,6 +6,12 @@
 //   4. model servers only: the NVIDIA GPU evidence carries our nonce and NVIDIA NRAS says the GPUs pass.
 // Any failure means "not verified" and the runtime refuses to send the job.
 //
+// Models NEAR AI serves through Chutes (provider "chutes") have Chutes' own bindings (nearai/cloud-api,
+// inference_providers/src/attested/chutes): the TDX quote verifies as in 1; report_data[0:32] = sha256(our nonce ‖
+// e2e_pubkey) and report_data[32:64] = sha256(SPKI(instance certificate)); MRTD and RTMR0-3 equal a row of Chutes'
+// published measurements (pinned in chutes-measurements.json); NRAS passes the GPU evidence, whose nonce is that same
+// report_data[0:32]. Other third-party formats (e.g. Tinfoil's SEV-SNP router) are not verified here: not verified.
+//
 //   node agent/tee.mjs [model]      prints the checks and writes evidence/tee-<model>.json
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -29,15 +35,41 @@ async function getJson(url, init = {}, tries = 4) {
   }
 }
 
-async function checkTdx(att) {
-  const quote = Buffer.from(att.intel_quote, "hex");
+async function checkTdx(quote) {
   const collateral = await getCollateralFromPcs(quote); // straight from Intel's PCS
   const res = verifyQuote(quote, collateral, Math.floor(Date.now() / 1000));
   const r = res?.report;
   /** @type {any} */
   const td = r?.asTd10?.() ?? r?.asTd15?.()?.base ?? r?.asTd15Ex?.()?.base ?? {};
   const hex = (b) => (b ? Buffer.from(b).toString("hex") : "");
-  return { status: res?.status, ok: TDX_OK.has(res?.status), reportData: hex(td.reportData), mrConfig: hex(td.mrConfigId) };
+  return { status: res?.status, ok: TDX_OK.has(res?.status), reportData: hex(td.reportData), mrConfig: hex(td.mrConfigId),
+    regs: { mrtd: hex(td.mrTd), rtmr0: hex(td.rtMr0), rtmr1: hex(td.rtMr1), rtmr2: hex(td.rtMr2), rtmr3: hex(td.rtMr3) } };
+}
+
+const CHUTES = JSON.parse(fs.readFileSync(new URL("./chutes-measurements.json", import.meta.url), "utf8")).rows;
+/** The pinned Chutes row whose MRTD and RTMR0-3 all equal the quote's, or undefined. */
+export const chutesRow = (regs, rows = CHUTES) =>
+  rows.find((x) => ["mrtd", "rtmr0", "rtmr1", "rtmr2", "rtmr3"].every((k) => regs[k] && x[k] === regs[k]));
+
+/** Chutes' report_data: [0:32] = sha256(nonce ‖ e2e_pubkey) over the verbatim strings, [32:64] = sha256(SPKI(cert)). */
+export function chutesBinds(att, reportDataHex, nonce) {
+  const rd = Buffer.from(reportDataHex, "hex");
+  const fresh = crypto.createHash("sha256").update(`${nonce}${att.e2e_pubkey}`).digest();
+  const spki = new crypto.X509Certificate(Buffer.from(att.certificate_b64, "base64")).publicKey.export({ type: "spki", format: "der" });
+  return { fresh, nonce: rd.subarray(0, 32).equals(fresh), cert: rd.subarray(32, 64).equals(crypto.createHash("sha256").update(spki).digest()) };
+}
+
+async function checkChutes(att, nonce) {
+  const tdx = await checkTdx(Buffer.from(att.quote_b64, "base64"));
+  const bind = tdx.reportData ? chutesBinds(att, tdx.reportData, nonce) : { nonce: false, cert: false, fresh: Buffer.alloc(0) };
+  const row = chutesRow(tdx.regs);
+  const archs = new Set((att.gpu_evidence ?? []).map((g) => g.arch));
+  const g = archs.size === 1 && bind.nonce
+    ? await nras({ nonce: bind.fresh.toString("hex"), arch: [...archs][0], evidence_list: att.gpu_evidence.map(({ certificate, evidence }) => ({ certificate, evidence })) }, bind.fresh.toString("hex"))
+    : { ok: false, verdict: "no single-arch GPU evidence bound to our nonce" };
+  const ok = tdx.ok && bind.nonce && bind.cert && Boolean(row) && g.ok;
+  return { provider: "chutes", instance_id: att.instance_id, tdx_status: tdx.status, binds_nonce: bind.nonce, binds_cert: bind.cert,
+    measurement: row ? `${row.name} v${row.version}` : null, gpus: att.gpu_evidence?.length ?? 0, gpu: g, ok };
 }
 
 export function bindsAddressAndNonce(att, reportDataHex, nonce) {
@@ -58,9 +90,7 @@ export function composeMatches(att, mrConfigHex) {
   return { ok: mrConfigHex.toLowerCase().startsWith(`01${hash}`), hash };
 }
 
-async function checkGpu(att, nonce) {
-  if (!att.nvidia_payload) return { ok: false, verdict: "no GPU evidence" };
-  const payload = JSON.parse(att.nvidia_payload);
+async function nras(payload, nonce) {
   const body = await getJson(NRAS, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(payload) });
   const jwt = body?.[0]?.[1] ?? "";
   const claims = JSON.parse(Buffer.from(jwt.split(".")[1] ?? "", "base64url").toString() || "{}");
@@ -68,8 +98,15 @@ async function checkGpu(att, nonce) {
   return { ok: payload.nonce?.toLowerCase() === nonce && verdict === true, verdict, nonceMatches: payload.nonce?.toLowerCase() === nonce };
 }
 
+async function checkGpu(att, nonce) {
+  if (!att.nvidia_payload) return { ok: false, verdict: "no GPU evidence" };
+  return nras(JSON.parse(att.nvidia_payload), nonce);
+}
+
 async function checkOne(att, nonce, gpu) {
-  const tdx = await checkTdx(att);
+  if (att.provider === "chutes") return checkChutes(att, nonce);
+  if (att.provider) return { provider: att.provider, ok: false, reason: `${att.provider} attestations are not verified by this agent` };
+  const tdx = await checkTdx(Buffer.from(att.intel_quote, "hex"));
   const bind = tdx.reportData ? bindsAddressAndNonce(att, tdx.reportData, nonce) : { address: false, nonce: false };
   const compose = composeMatches(att, tdx.mrConfig);
   const g = gpu ? await checkGpu(att, nonce) : null;
@@ -98,7 +135,9 @@ export async function verifyModel(model, { apiKey = process.env.NEARAI_API_KEY }
 if (process.argv[1]?.endsWith("tee.mjs")) {
   const model = process.argv[2] ?? "z-ai/glm-5.3-flash";
   const r = await verifyModel(model);
-  const line = (n, x) => console.log(`${n.padEnd(10)} TDX ${x.tdx_status ?? "-"} | binds address ${x.binds_address} | binds our nonce ${x.binds_nonce} | compose ${x.compose_matches}${x.gpu ? ` | NVIDIA ${x.gpu.verdict} (nonce ${x.gpu.nonceMatches})` : ""} → ${x.ok ? "OK" : "FAIL"}`);
+  const line = (n, x) => x.provider === "chutes"
+    ? console.log(`${n.padEnd(10)} Chutes TDX ${x.tdx_status ?? "-"} | binds our nonce ${x.binds_nonce} | binds cert ${x.binds_cert} | measurement ${x.measurement ?? "no pinned match"} | NVIDIA ${x.gpu?.verdict} x${x.gpus} → ${x.ok ? "OK" : "FAIL"}`)
+    : x.provider ? console.log(`${n.padEnd(10)} ${x.reason} → FAIL`) : console.log(`${n.padEnd(10)} TDX ${x.tdx_status ?? "-"} | binds address ${x.binds_address} | binds our nonce ${x.binds_nonce} | compose ${x.compose_matches}${x.gpu ? ` | NVIDIA ${x.gpu.verdict} (nonce ${x.gpu.nonceMatches})` : ""} → ${x.ok ? "OK" : "FAIL"}`);
   if (r.gateway) line("gateway", r.gateway);
   (r.models ?? []).forEach((m, i) => line(`model #${i + 1}`, m));
   console.log(`${model}: ${r.ok ? "VERIFIED" : `NOT VERIFIED (${r.reason})`}`);

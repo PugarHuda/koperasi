@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "model": "moonshotai/kimi-k2.6",
+  "at": "2026-11-10T02:44:03.713Z",
+  "nonce": "03af4409a4246d0eeaa1437e547e7feb99c5e3f4f8e8a1728e476487ce6b8547",
+  "gateway": {
+    "signing_address": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
+    "signing_algo": "ecdsa",
+    "tdx_status": "UpToDate",
+    "binds_address": true,
+    "binds_nonce": true,
+    "compose_sha256": "73dbb78cccfdfd6919aa4058de67ae0375d6f6c6f38eedfa78c609761c2d6db6",
+    "compose_matches": true,
+    "gpu": null,
+    "ok": true
+  },
+  "models": [
+    {
+      "provider": "chutes",
+      "instance_id": "03185e1f-4fdc-42d0-8cc0-8241a4fe85c5",
+      "tdx_status": "UpToDate",
+      "binds_nonce": true,
+      "binds_cert": true,
+      "measurement": "8xh200 [10.2.1, numa-188c-1128g-nvsw-node1] v1.5.0",
+      "gpus": 8,
+      "gpu": {
+        "ok": true,
+        "verdict": true,
+        "nonceMatches": true
+      },
+      "ok": true
+    }
+  ],
+  "reason": null
+}

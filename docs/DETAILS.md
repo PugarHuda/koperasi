@@ -15,7 +15,7 @@ npm install
 npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `92 passed` for the contract and `pass 28` for the agent, scripts and page logic: response-signature recovery, the TDX quote
+See: `92 passed` for the contract and `pass 29` for the agent, scripts and page logic: response-signature recovery, the TDX quote
 binding the server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market
 check, the page's profit-share preview matching the contract's split to the last USDC unit, views that move past a
 rate-limited RPC, and the agent's money path when a job fails half-way (a billed inference that then fails is booked at

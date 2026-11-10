@@ -1,0 +1,25 @@
+{
+  "ok": false,
+  "model": "z-ai/glm-5.3",
+  "at": "2026-11-10T02:44:34.265Z",
+  "nonce": "fc4edbf4ccaf52586e7ed17e8af2485c0a145a388d22442c70c4b56104445a96",
+  "gateway": {
+    "signing_address": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
+    "signing_algo": "ecdsa",
+    "tdx_status": "UpToDate",
+    "binds_address": true,
+    "binds_nonce": true,
+    "compose_sha256": "73dbb78cccfdfd6919aa4058de67ae0375d6f6c6f38eedfa78c609761c2d6db6",
+    "compose_matches": true,
+    "gpu": null,
+    "ok": true
+  },
+  "models": [
+    {
+      "provider": "tinfoil",
+      "ok": false,
+      "reason": "tinfoil attestations are not verified by this agent"
+    }
+  ],
+  "reason": "a check failed"
+}
