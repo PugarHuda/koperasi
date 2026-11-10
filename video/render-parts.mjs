@@ -1,0 +1,31 @@
+// node video/render-parts.mjs [chrome-headless-shell path]: renders the video one scene at a time (a long single render
+// fails on a nearly full disk: Chrome starts refusing the video frames), then joins the parts with ffmpeg.
+// Parts already rendered are kept, so a failed run resumes where it stopped.
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+
+const ROOT = import.meta.dirname;
+const out = (p) => path.join(ROOT, "out", p);
+const timeline = JSON.parse(fs.readFileSync(path.join(ROOT, "src/timeline.json"), "utf8"));
+const browser = process.argv[2];
+const f = (ms) => Math.round((ms / 1000) * 30);
+let from = 0;
+const parts = [];
+for (const s of timeline) {
+  const to = from + f(s.durMs) - 1;
+  const file = out(`part-${s.id}.mp4`);
+  parts.push(file);
+  // relative to video/: the repo path has spaces, and npx on Windows goes through a shell
+  const rel = `out/part-${s.id}.mp4`;
+  if (!fs.existsSync(file)) {
+    console.log(`${s.id}: frames ${from}-${to}`);
+    execFileSync(process.platform === "win32" ? "npx.cmd" : "npx", ["remotion", "render", "src/index.ts", "Koperasi", rel, "--codec", "h264", "--crf", "20",
+      "--concurrency", "3", `--frames=${from}-${to}`, ...(browser ? [`--browser-executable=${browser}`] : [])], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"], shell: true });
+  }
+  from = to + 1;
+}
+fs.writeFileSync(out("parts.txt"), parts.map((p) => `file '${p.replace(/\\/g, "/")}'`).join("\n"));
+// video copied as is; audio re-encoded once so the joins have no gaps
+execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", out("parts.txt"), "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", out("koperasi.mp4")]);
+console.log("out/koperasi.mp4");
