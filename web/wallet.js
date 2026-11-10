@@ -2,7 +2,7 @@
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
 import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
-import { affordable, inviteOf, inviteParam, joinText, nearUnits, oneLine, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
+import { affordable, checkVouch, inviteOf, inviteParam, joinText, vouchParam, vouchSuffix, vouchText, nearUnits, oneLine, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
 const preview = (amount, s) => {
@@ -247,7 +247,9 @@ async function render() {
     <button type="button" class="linkish" id="w-out">Disconnect</button></div>`;
 
   if (!s.member) {
-    if (invitedBy && invitedBy !== me) html += `<p class="small">Invited by <strong>${esc(invitedBy)}</strong>. Your request to the members names them, and shows as vouched once they vote for you.</p>`;
+    if (invitedBy && invitedBy !== me) html += `<p class="small">Invited by <strong>${esc(invitedBy)}</strong>${vouchParam(location.search, me)
+      ? ", who signed a vouch for your account with their wallet (NEP-413). Your request carries it, so every member can check it in their browser"
+      : ". Your request to the members names them"}, and it shows as vouched once they vote for you.</p>`;
     html += `<ol class="jsteps">
       ${step(joined ? "done" : "now", `Pay the join deposit: ${nearAmt(deposit)} NEAR`, joined
         ? "Paid. You get it back if the members remove you, or if you cancel before they vote you in."
@@ -289,7 +291,11 @@ async function render() {
         <button type="button" class="btn" id="w-stake">Stake</button>
         <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings || (s.waiting?.[0] === s.staked && BigInt(s.waiting[1]) > BigInt(Date.now()) * 1_000_000n) ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}
       <h3 class="jh">Invite someone</h3>
-      <p class="small">Share this link. Their membership proposal names you, and it shows as vouched once you vote for them.</p>
+      <p class="small">Share this link. Their membership proposal names you, and it shows as vouched once you vote for them.
+        Know their account? Sign a vouch for it with your wallet (NEP-413, no transaction, no gas): the link then carries
+        your signature, their request carries it to the members, and anyone can check it against your keys on-chain.</p>
+      <div class="stake-row"><input id="w-vouch-for" type="text" autocomplete="off" placeholder="their-account.testnet" aria-label="Account to vouch for">
+        <button type="button" class="btn ghost" id="w-vouch">Sign a vouch</button></div>
       <div class="stake-row"><input id="w-invite" type="text" readonly value="${esc(`${location.origin}/?invite=${me}#joinapp`)}" aria-label="Your invite link">
         <button type="button" class="btn ghost" id="w-invite-copy">Copy</button></div>
       <h3 class="jh">Members' meeting: propose a profit share</h3>
@@ -317,7 +323,8 @@ async function render() {
         return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(safeDescribe(p, s))}</pre>${p.description
           ? `<span class="claim">Proposer says: “${esc(p.description.slice(0, 200))}”</span>` : ""}${(() => {
             const inv = inviteOf(p, s.group);
-            return inv ? `<span class="claim">${inv.vouched ? `Vouched: ${esc(inv.by)} invited them and voted to approve.` : `Says ${esc(inv.by)} invited them; ${esc(inv.by)} has not approved yet.`}</span>` : "";
+            return inv ? `<span class="claim">${inv.vouched ? `Vouched: ${esc(inv.by)} invited them and voted to approve.` : `Says ${esc(inv.by)} invited them; ${esc(inv.by)} has not approved yet.`}</span>${inv.signed
+              ? `<span class="claim" data-vouch="${esc(JSON.stringify({ by: inv.by, member: p.kind.AddMemberToRole.member_id, ...inv.signed }))}">Checking ${esc(inv.by)}'s signed vouch…</span>` : ""}` : "";
           })()}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
           : hidden ? `<a class="small-link" href="${explorer(dep.dao)}">Inspect in the DAO to vote</a>`
           : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">Approve</button>
@@ -343,12 +350,40 @@ async function render() {
   $("w-out").onclick = () => connector.disconnect().catch(() => {});
   const copy = $("w-invite-copy");
   if (copy) copy.onclick = () => navigator.clipboard.writeText($("w-invite").value).then(() => { copy.textContent = "Copied"; }, () => $("w-invite").select());
+  const vouch = $("w-vouch");
+  if (vouch) vouch.onclick = async () => {
+    const who = $("w-vouch-for").value.trim();
+    if (!/^(?=.{2,64}$)[a-z0-9]+([-_][a-z0-9]+)*(\.[a-z0-9]+([-_][a-z0-9]+)*)*$/.test(who) || who === me) { $("w-vouch-for").focus(); return; }
+    try {
+      const nonce = crypto.getRandomValues(new Uint8Array(32));
+      const w = await connector.wallet();
+      if (!w.signMessage) throw new Error("this wallet cannot sign messages (NEP-413); share the plain link");
+      const r = await w.signMessage({ message: vouchText(me, who, dep.dao), recipient: dep.dao, nonce });
+      const sig = typeof r.signature === "string" ? r.signature : btoa(String.fromCharCode(...new Uint8Array(r.signature)));
+      const v = { pk: String(r.publicKey), sig, nonce: btoa(String.fromCharCode(...nonce)) };
+      if (!(await checkVouch({ by: me, member: who, dao: dep.dao, ...v }))) throw new Error("the wallet's signature does not verify");
+      $("w-invite").value = `${location.origin}/?${new URLSearchParams({ invite: me, for: who, pk: v.pk, sig: v.sig, n: v.nonce })}#joinapp`;
+      vouch.textContent = "Signed: copy the link";
+    } catch (e) {
+      vouch.textContent = `Not signed: ${e.message ?? e}`.slice(0, 80);
+    }
+  };
+  // a signed vouch on an open request: the signature, and that the key is a full-access key of the inviter, today
+  box.querySelectorAll("[data-vouch]").forEach(async (el) => {
+    const v = JSON.parse(el.getAttribute("data-vouch"));
+    const sigOk = await checkVouch({ ...v, dao: dep.dao });
+    const key = sigOk ? await query({ request_type: "view_access_key", account_id: v.by, public_key: v.pk }).catch(() => null) : null;
+    el.textContent = sigOk && key?.permission === "FullAccess"
+      ? `Signed vouch: ${v.by} signed "I vouch for ${v.member}" with a full-access key of their account. Verified in your browser (NEP-413).`
+      : `A signed vouch is attached, but it does not verify against ${v.by}'s keys: treat the request as unvouched.`;
+  });
   const on =(id, label, fn, check) => { const b = $(id); if (b) b.onclick = () => act(label, fn, check); };
   on("w-join", "Join deposit", () => send(dep.contract, "join", {}, { deposit, tgas: 30 }), async () =>
     ((await view(dep.contract, "get_member", { account_id: me })) || (await view(dep.contract, "is_pending", { account_id: me }))
       ? "You already joined: the panel will refresh." : null));
   on("w-ask", "Membership proposal", () => send(dep.dao, "add_proposal", {
-    proposal: { description: joinText(me, invitedBy), kind: { AddMemberToRole: { member_id: me, role: "member" } } },
+    proposal: { description: joinText(me, invitedBy) + (invitedBy && vouchParam(location.search, me) ? vouchSuffix(vouchParam(location.search, me)) : ""),
+      kind: { AddMemberToRole: { member_id: me, role: "member" } } },
   }, { deposit: bond, tgas: 50 }));
   on("w-sync", "Sync membership", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
   on("w-cancel", "Cancel", () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));

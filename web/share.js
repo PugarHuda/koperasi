@@ -211,9 +211,67 @@ export function inviteOf(p, members) {
   // only a membership proposal in this page's exact words: free text on any other proposal never shows as vouched
   const add = p?.kind?.AddMemberToRole;
   if (!add || add.role !== "member") return null;
-  const by = /\(invited by ([a-z0-9._-]{2,64})\)$/.exec(String(p.description ?? ""))?.[1];
-  if (!by || !members.includes(by) || p.description !== joinText(add.member_id, by)) return null;
-  return { by, vouched: p.votes?.[by] === "Approve" };
+  const text = String(p.description ?? "");
+  const signed = SIGNED.exec(text);
+  const plain = signed ? text.slice(0, signed.index) : text;
+  const by = /\(invited by ([a-z0-9._-]{2,64})\)$/.exec(plain)?.[1];
+  if (!by || !members.includes(by) || plain !== joinText(add.member_id, by)) return null;
+  return { by, vouched: p.votes?.[by] === "Approve", signed: signed ? { pk: signed[1], sig: signed[2], nonce: signed[3] } : null };
+}
+
+// ---------- signed vouches (NEP-413): a member signs "I vouch for X" with their wallet; anyone checks it here ----------
+
+const B64 = "[A-Za-z0-9+/]+={0,2}";
+/** The signed vouch a membership proposal carries after the page's own words. */
+const SIGNED = new RegExp(String.raw` \[nep413 (ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}) (${B64}) (${B64})\]$`);
+/** What the inviter signs. Names both accounts and the DAO, so it cannot be reused for anyone or anywhere else. */
+export const vouchText = (by, member, dao) => `I, ${by}, vouch for ${member} joining the Koperasi co-op ${dao}.`;
+/** The suffix a newcomer's membership proposal carries. */
+export const vouchSuffix = ({ pk, sig, nonce }) => ` [nep413 ${pk} ${sig} ${nonce}]`;
+/** A signed vouch from the page URL, if it is for `me` and well formed. */
+export function vouchParam(search, me) {
+  const q = new URLSearchParams(search);
+  const v = { pk: q.get("pk") ?? "", sig: q.get("sig") ?? "", nonce: q.get("n") ?? "" };
+  return q.get("for") === me && SIGNED.test(vouchSuffix(v)) ? v : null;
+}
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+export function b58decode(s) {
+  let n = 0n;
+  for (const c of s) {
+    const i = B58.indexOf(c);
+    if (i < 0) throw new Error("not base58");
+    n = n * 58n + BigInt(i);
+  }
+  const out = [];
+  for (; n > 0n; n >>= 8n) out.unshift(Number(n & 255n));
+  for (const c of s) { if (c !== "1") break; out.unshift(0); }
+  return new Uint8Array(out);
+}
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+/** NEP-413: sha256 of borsh(tag 2^31+413, { message, nonce[32], recipient, callbackUrl: None }). */
+export async function nep413Hash(message, nonce, recipient) {
+  const enc = new TextEncoder();
+  const str = (t) => { const b = enc.encode(t); const len = new Uint8Array(4); new DataView(len.buffer).setUint32(0, b.length, true); return [len, b]; };
+  const tag = new Uint8Array(4);
+  new DataView(tag.buffer).setUint32(0, 2 ** 31 + 413, true);
+  const parts = [tag, ...str(message), nonce, ...str(recipient), new Uint8Array([0])];
+  const all = new Uint8Array(parts.reduce((n, x) => n + x.length, 0));
+  parts.reduce((o, x) => (all.set(x, o), o + x.length), 0);
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", all));
+}
+
+/** Whether `sig` is an ed25519 signature by `pk` of the vouch `by` → `member` for `dao` (recipient: the DAO). */
+export async function checkVouch({ by, member, dao, pk, sig, nonce }) {
+  try {
+    const n = b64(nonce);
+    if (n.length !== 32 || !pk.startsWith("ed25519:")) return false;
+    const key = await crypto.subtle.importKey("raw", b58decode(pk.slice(8)), { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, b64(sig), await nep413Hash(vouchText(by, member, dao), n, dao));
+  } catch {
+    return false;
+  }
 }
 
 /** The by-laws path a DAO vote set, if it is a relative path on this site (never another host or a parent dir). */

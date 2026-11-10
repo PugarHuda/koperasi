@@ -116,9 +116,9 @@ test("an invitation counts only from a member who voted for the newcomer", async
   assert.equal(joinText("new.testnet", "new.testnet"), joinText("new.testnet", null), "nobody invites themselves");
   const p = (votes, by = "alice.testnet") => ({ description: joinText("new.testnet", by), votes, kind: { AddMemberToRole: { member_id: "new.testnet", role: "member" } } });
   const members = ["alice.testnet", "bob.testnet"];
-  assert.deepEqual(inviteOf(p({}), members), { by: "alice.testnet", vouched: false });
-  assert.deepEqual(inviteOf(p({ "alice.testnet": "Approve" }), members), { by: "alice.testnet", vouched: true });
-  assert.deepEqual(inviteOf(p({ "bob.testnet": "Approve" }), members), { by: "alice.testnet", vouched: false }, "another member's vote is not the inviter's");
+  assert.deepEqual(inviteOf(p({}), members), { by: "alice.testnet", vouched: false, signed: null });
+  assert.deepEqual(inviteOf(p({ "alice.testnet": "Approve" }), members), { by: "alice.testnet", vouched: true, signed: null });
+  assert.deepEqual(inviteOf(p({ "bob.testnet": "Approve" }), members), { by: "alice.testnet", vouched: false, signed: null }, "another member's vote is not the inviter's");
   assert.equal(inviteOf(p({}, "eve.testnet"), members), null, "a non-member's name is not shown");
   assert.equal(inviteOf({ description: "Transfer (invited by alice.testnet) to me", votes: {} }, members), null, "only at the end");
   const spoof = (kind, description) => inviteOf({ description, votes: { "alice.testnet": "Approve" }, kind }, members);
@@ -275,4 +275,30 @@ test("S17: an indexer timestamp too large for a date is dropped, not a crash of 
   const row = { transaction_hash: "4QZxE4e6vZcXCCW69rqaQLpXoMUYbBCA4yYZXyPJWqBr", signer_account_id: "a.testnet" };
   assert.deepEqual(txList({ data: [{ ...row, block_timestamp: "9".repeat(30) }] }), []);
   assert.equal(txList({ data: [{ ...row, block_timestamp: "1794197909443378616" }] }).length, 1);
+});
+
+test("signed vouch (NEP-413): signed by near-api-js's own signer, checked by the page; any change fails", async () => {
+  const { Account, KeyPair, KeyPairSigner } = await import("near-api-js");
+  const { signMessage } = await import("near-api-js/nep413");
+  const { checkVouch, inviteOf, joinText, vouchParam, vouchSuffix, vouchText } = await import("../../web/share.js");
+  const dao = "koperasi-mw4i2iwk.sputnik-v2.testnet";
+  const key = KeyPair.fromRandom("ed25519");
+  const alice = new Account("alice.testnet", /** @type {any} */ (null), new KeyPairSigner(key));
+  const nonce = crypto.randomBytes(32);
+  const signed = await signMessage({ signerAccount: alice, payload: { message: vouchText("alice.testnet", "new.testnet", dao), recipient: dao, nonce } });
+  const v = { pk: signed.publicKey.toString(), sig: Buffer.from(signed.signature).toString("base64"), nonce: nonce.toString("base64") };
+  const ok = (o) => checkVouch({ by: "alice.testnet", member: "new.testnet", dao, ...v, ...o });
+  assert.equal(await ok({}), true, "the official NEP-413 signature verifies");
+  assert.equal(await ok({ member: "eve.testnet" }), false, "a vouch for someone else does not carry over");
+  assert.equal(await ok({ dao: "other.sputnik-v2.testnet" }), false, "nor to another DAO");
+  assert.equal(await ok({ by: "bob.testnet" }), false, "nor to another inviter");
+  assert.equal(await ok({ pk: KeyPair.fromRandom("ed25519").getPublicKey().toString() }), false, "another key fails");
+  assert.equal(await ok({ nonce: crypto.randomBytes(32).toString("base64") }), false, "another nonce fails");
+  // the link and the proposal carry it; only the page's exact words plus the suffix parse
+  const search = `?invite=alice.testnet&for=new.testnet&pk=${encodeURIComponent(v.pk)}&sig=${encodeURIComponent(v.sig)}&n=${encodeURIComponent(v.nonce)}`;
+  assert.deepEqual(vouchParam(search, "new.testnet"), v);
+  assert.equal(vouchParam(search, "eve.testnet"), null, "a link for another account is ignored");
+  const p = { kind: { AddMemberToRole: { member_id: "new.testnet", role: "member" } }, votes: {}, description: joinText("new.testnet", "alice.testnet") + vouchSuffix(v) };
+  assert.deepEqual(inviteOf(p, ["alice.testnet"]), { by: "alice.testnet", vouched: false, signed: v });
+  assert.equal(inviteOf({ ...p, description: `${p.description} extra` }, ["alice.testnet"]), null, "free text after it does not parse");
 });
