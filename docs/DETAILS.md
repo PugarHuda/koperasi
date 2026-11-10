@@ -204,6 +204,7 @@ Competitor scan, 7 Nov 2026 (sources linked; "inferred" where we could not confi
 | [AjoAI](https://www.karmahq.xyz/project/ajoai/about) (Celo) | an agent that runs a savings circle (*ajo*, like *arisan*) | the circle's rules | none shown (inferred) | rotates to members | the agent runs the circle; the members do not own or steer an agent that earns |
 | [Ronda](https://ethglobal.com/showcase/ronda-7ck82) (ETHGlobal, Celo prize) | on-chain rotating savings | the circle | none | rotates to members | savings only, no shared business or profit |
 | [Moloch / DAOhaus](https://hackmd.io/@daohaus/ryXWI_4q_) | grant and venture DAOs with *ragequit* | shares, one vote per share | none | treasury; a member can leave with their part | no reputation tiers; every payout is a vote |
+| [DAO Genie](https://ethglobal.com/showcase/daogenie-nha62) (ETHGlobal Bangkok 2024, finalist) | members vote, an AI agent acts in the world | the members' vote | none shown | donations, purchases | the vote does not pin what the agent runs |
 | [Coordinape](https://gitcoin.co/apps/coordinape) | members allocate GIVE to each other each epoch | peers | none | pays by GIVE received | contribution is a popularity vote, not a record of paid work |
 
 **What is the same** (parity, not a selling point): TEE inference and input hashes (NEAR AI, Shade), an agent that sells

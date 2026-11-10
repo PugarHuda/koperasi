@@ -114,6 +114,13 @@ for (const [who, rec] of contributors) {
     `${rec.refs.join(", ")}; trusted by ${sources} different source(s)${bad.length ? `; does not check out: ${bad.join(", ")}` : ""}`);
 }
 
+// the person in the middle: bonded, and appointed under the code where anyone can slash a late payout
+const steward = await view(d.contract, "get_info");
+const overdue = await view(d.contract, "get_overdue");
+check(steward.steward && BigInt(steward.steward_bond) > 0n && approvedCall("set_steward", (a) => a.steward === steward.steward),
+  "the steward was appointed by a vote and is bonded; anyone can slash the bond once a paid job's earnings are 7 days late",
+  `${steward.steward}, bond ${near(steward.steward_bond)} NEAR, overdue now ${usd(overdue)} USDC`);
+
 // 6. profit shares: USDC left the treasury only by a members' vote, through the contract's split
 const shares = proposals.filter((p) => p.status === "Approved" && argsOf(p).some((a) => a.method === "ft_transfer_call" && a.args.receiver_id === d.contract && a.args.msg === "share"));
 check(shares.length > 0, "the members voted every profit share out of the treasury, split by the contract",

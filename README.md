@@ -31,24 +31,33 @@ Built at NEAR HACKATHON (Nov 2026). Main track: **Social Money**. Also Autonomou
 |---|---|
 | [![Who controls this AI agent](docs/img/page-top.png)](https://koperasi-kohl.vercel.app) | [![Tasks and trust](docs/img/page-trust.png)](https://koperasi-kohl.vercel.app/#trust) |
 
-## Proof on testnet
+## Every claim, its evidence, and the check that reads it
 
-| What | Where |
-|---|---|
-| The co-op's DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet): Sputnik v2, role `member`, RoleWeight, threshold 1/2 |
-| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys, so its code changes only by vote (now proposal #53) |
-| Profit share, real Circle testnet USDC | Proposal #36: 10 USDC shared with 4 members. Bob got 4.33, mostly from his task points, and claimed it in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd). 2 USDC reserve went back to the DAO |
-| Task payouts from the treasury | Task #2 needed one other member's approval (#30). Tasks #3 and #4 were paid on earned trust with no vote (#31, #34). Each was a DAO `Transfer` filed by the contract |
-| Join and leave | `kop-guest-984702.testnet` asked from the page and was voted in (#8). `kop-leaver-mw8pw94w.testnet` left and got its deposit back in [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV) |
-| By-laws votes | A member found that v2's model was not served and proposed v3 (proposal #7). Another proposed v4 (#55): at 10 members or 25 paid jobs the steward proposes a second steward and a 90-day rotation; the page shows the count against both, read from the chain. The agent runs only `4e28de45…` |
-| Agent account | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, only `record_receipt` / `update_receipt` on the contract |
-| Gasless for members | NEP-366 relayer (`api/relay.mjs`, members and joiners only, contract and DAO only, calls without a deposit: under NEP-366 the relayer would pay it): [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) |
-| Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR) |
+Testnet. `npm run verify` (read-only, no keys) reads each row from the chain and prints PASS or FAIL; the last column
+quotes its line.
+
+| Claim | On-chain evidence | `npm run verify` line |
+|---|---|---|
+| The members own the co-op, one vote each | DAO [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet): role `member`, RoleWeight, threshold 1/2 | *every member in the contract holds role `member`*; *one member, one vote* |
+| No role can act alone | `member` votes, `tasks` only files and approves transfers, outsiders only file proposals (with a bond) | *no role can act alone* |
+| The agent runs only by-laws the members voted | v3 by proposal #7 (a member found v2's model was not served), v4 by #55 (the steward's handover); the agent runs only `4e28de45…` | *the agent's by-laws … are the ones the members voted* |
+| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys; upgrades only by vote, now #53 | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
+| The agent can only record receipts | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, `record_receipt` / `update_receipt` | *the agent account has only function-call keys …* |
+| Small payouts on earned trust, from the treasury itself | Task #2 needed another member (#30); #3 and #4 paid on trust, no vote (#31, #34); #5, #6 (#44, #45). Each a DAO `Transfer` the contract filed | *task #n was paid from the treasury by DAO proposal #m, filed by the contract*; *the trust tiers were voted* |
+| Every point on a record names its source | carol 5 tasks, bob 2, the steward 1, each linked to a task or a DAO bounty | *…'s record: n finished, each traced to its source* |
+| Profit is shared only by a members' vote, split by the contract | #36: 10 Circle testnet USDC to 4 members; bob claimed his 4.33 in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd); #51 filed from a [Trezu](trezu/README.md) form | *the members voted every profit share out of the treasury* |
+| The person in the middle is bonded | Appointed by vote #54 under contract 0.2.3, 1 NEAR bond [k6MzrgXV…](https://testnet.nearblocks.io/txns/k6MzrgXVf9E8styeNa5zNoYryY9aLCPvAqoPV1waFKZ); anyone can slash it once a paid job's earnings are 7 days late | *the steward was appointed by a vote and is bonded* |
+| Anyone can join and leave | `kop-guest-984702.testnet` asked from the page and was voted in (#8); `kop-leaver-mw8pw94w.testnet` left with its deposit in [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV) | (page flows; E2E tests) |
+| Members pay no gas | NEP-366 relayer, calls without a deposit: [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) | (unit tests of `api/relay.mjs`) |
+| The model runs in a TEE, checkable by you | Intel TDX + NVIDIA attestation, re-verified by the agent within the hour before each job (last saved in [`evidence/`](evidence), 10 Nov); the page checks it with your browser's nonce | `node agent/tee.mjs z-ai/glm-5.3-flash` → `VERIFIED` |
+
+Live page: **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR).
 
 The accounts alice, bob, carol and the steward are the builder's demo members. They show that the mechanism works,
 but they are not independent people. The agent has done **no real paid job yet**: the 4 receipts come from `npm run
-demo` against a local stand-in for Agent Market, which has no testnet. Real jobs wait for NEAR AI credits (see
-*Sustainability*).
+demo` against a local stand-in for Agent Market, which has no testnet. The co-op's NEAR AI credits are in place and the
+agent has bid on 9 real Agent Market jobs; none was awarded yet. The old audit shortfall (7.60 USDC) dates from before
+the steward's appointment under 0.2.3, so it is not slashable; it stays red on purpose (the demo's last step).
 
 ## For judges: 60 seconds, no wallet, no keys
 
@@ -63,6 +72,38 @@ demo` against a local stand-in for Agent Market, which has no testnet. Real jobs
 
 Want to join? Open the page with a member's invite link (`?invite=<member>`), connect a testnet wallet, and ask.
 The members vote you in.
+
+## What is new here
+
+The closest earlier projects let a DAO own an AI agent; none lets the owners check what the agent runs or audit who
+holds its money:
+
+- [**Agents With Benefits**](https://devfolio.co/projects/agents-with-benefits-3569) (ETHDenver 2024, on NEAR): DAOs
+  register agents and share their revenue. Koperasi adds by-laws the contract enforces by hash, the model's TEE checked
+  against the visitor's own nonce, a bonded and audited steward, and payouts tiered by trust earned on-chain.
+- [**DAO Genie**](https://ethglobal.com/showcase/daogenie-nha62) (ETHGlobal Bangkok 2024 finalist): members vote and an
+  agent acts. Here the vote pins the agent itself (prompt, model, prices, caps), and every claim is checked on-chain by
+  `npm run verify`.
+- Savings circles (Celo's [AjoAI](https://www.karmahq.xyz/project/ajoai/about), [Tanda](https://ethglobal.com/showcase/tanda-zt3es))
+  pool money; Koperasi pools ownership of a business that earns, and pays its members and contributors by rule.
+
+More in [`docs/DETAILS.md`](docs/DETAILS.md#prior-art-and-what-is-different).
+
+## Built on NEAR, end to end
+
+| NEAR piece | What it does here |
+|---|---|
+| **Sputnik DAO v2** | membership (role `member`), every vote, the treasury; the contract holds role `tasks` (file and approve transfers only); bounties for large tasks |
+| **Trezu** | [custom proposal templates](trezu/README.md) for profit shares, trust rules, budgets, points, slashing, pause; #51 was filed from one |
+| **Global contracts** | the code is a global contract the members switch to by vote (`upgrade({code_hash})`); the account has no full-access key |
+| **NEP-141** | Circle's USDC on NEAR: earnings in (`ft_transfer_call` "earnings"), profit shares (`"share"`), claims |
+| **NEP-297 / NEP-330** | an event for every state change (the page's live feed); source metadata of a reproducible `cargo near` build |
+| **NEP-366** | meta-transactions: members pay no gas for calls without a deposit |
+| **Function-call access keys** | the agent's only key can call `record_receipt` / `update_receipt`, nothing else |
+| **Staking pools** | savings are NEAR staked in the pool the DAO chose, read on-chain (`sync_savings`); on mainnet the yield buys NEAR AI credits (Staking for Inference) |
+| **NEAR AI Cloud** | private inference in TEEs (Intel TDX + NVIDIA, also Chutes-served models), attestation, signed responses, billing per request |
+| **NEAR AI Agent Market** | where the agent bids, delivers and is paid |
+| **NEAR Connect, near-api-js 7** | wallets on the page; every script and the relayer |
 
 ## Run it yourself
 
@@ -124,7 +165,7 @@ Rules in plain words: [`RULES.md`](RULES.md).
 | The agent's inference | NEAR AI credits from the members' staking yield (Staking for Inference, mainnet), so the principal stays theirs | the by-laws: at most $0.50 a job and $3 a day (v4) |
 | A job's margin | the buyer: 4 USDC a job (by-laws v4), minus Agent Market's 5% fee and the inference, leaves at least 3.30 USDC for the treasury | the audit nets out the fee and checks every payout reached the DAO |
 | Task payouts | the treasury, within the task budget the members voted (`set_task_budget`) | the trust tiers and the daily limit per poster |
-| Members' gas | the co-op's relayer account (`api/relay.mjs`) for contract and DAO calls; the keeper reads stakes twice a day (`api/keeper.mjs`) | members and joiners only; refills by vote like any transfer |
+| Members' gas | the co-op's relayer account (`api/relay.mjs`) for contract and DAO calls without a deposit; the keeper reads stakes twice a day (`api/keeper.mjs`) | members and joiners only; refills by vote like any transfer |
 | Code changes | whoever publishes the global contract (about 33 NEAR for 330 KB); the switch is a vote | members only; nobody holds a full-access key |
 
 **What the members do, and what nobody has to.** Members vote on the by-laws, tasks above the trust limit, profit
