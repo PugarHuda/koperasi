@@ -104,6 +104,8 @@ async function checkGpu(att, nonce) {
 }
 
 async function checkOne(att, nonce, gpu) {
+  // only model servers may use a third-party format; the gateway signs every response, so it must bind its own address
+  if (att.provider && !gpu) return { provider: att.provider, ok: false, reason: "the gateway must present NEAR AI's own TDX attestation" };
   if (att.provider === "chutes") return checkChutes(att, nonce);
   if (att.provider) return { provider: att.provider, ok: false, reason: `${att.provider} attestations are not verified by this agent` };
   const tdx = await checkTdx(Buffer.from(att.intel_quote, "hex"));
