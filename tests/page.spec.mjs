@@ -173,9 +173,11 @@ test("an account from another network is told to switch, not offered a join", as
 test("the live feed shows the co-op's on-chain events, each with its transaction", async ({ page }) => {
   await page.goto("/#live");
   const items = page.locator("#live-list li");
-  await expect(items.first()).toBeVisible({ timeout: 45_000 });
-  await expect(items.first().locator("a")).toHaveAttribute("href", /nearblocks\.io\/txns\//);
-  await expect(page.locator("#live-state")).toContainText(/Updated|No co-op events|Could not read/);
+  const state = page.locator("#live-state");
+  // NearBlocks' free API rate-limits (429) when many browsers poll at once: then the page must say so, not show nothing
+  await expect(items.first().or(state.filter({ hasText: /Could not read the indexer \(indexer 429\)/ }))).toBeVisible({ timeout: 45_000 });
+  if (await items.count()) await expect(items.first().locator("a")).toHaveAttribute("href", /nearblocks\.io\/txns\//);
+  await expect(state).toContainText(/Updated|No co-op events|Could not read/);
 });
 
 test("a member sees their vote, savings and open proposals", async ({ page }, testInfo) => {
