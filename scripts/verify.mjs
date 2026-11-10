@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { baseEncode } from "near-api-js";
 import { DEPLOYMENT, ROOT, rawQuery, sha256, accountUrl } from "./lib.mjs";
+import { SIGNER, PATH, daoAddress, signerOf, statement } from "./chainsig.mjs";
 
 const d = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 // ponytail: rawQuery (plain fetch with a timeout, RPC failover) for every read, so a hung RPC fails instead of hanging
@@ -120,6 +121,40 @@ const overdue = await view(d.contract, "get_overdue");
 check(steward.steward && BigInt(steward.steward_bond) > 0n && approvedCall("set_steward", (a) => a.steward === steward.steward),
   "the steward was appointed by a vote and is bonded; anyone can slash the bond once a paid job's earnings are 7 days late",
   `${steward.steward}, bond ${near(steward.steward_bond)} NEAR, overdue now ${usd(overdue)} USDC`);
+
+// the steward's term (after Hats Protocol): voted by the members, and anyone ends it once it runs out
+const [termDays, termEnds] = await view(d.contract, "get_steward_term");
+check(termDays > 0 && approvedCall("set_steward_term", (a) => a.days === termDays),
+  "the steward serves a term the members voted; once it runs out anyone ends it",
+  `${termDays} days${termEnds ? `, the current term ends ${new Date(Number(BigInt(termEnds) / 1_000_000n)).toISOString().slice(0, 10)}` : ""}`);
+
+// the co-op court: every upheld case was refunded by a DAO proposal the contract filed, at most the job's price
+const cases = await view(d.contract, "get_cases", { from: 0, limit: 200 });
+const allReceipts = await view(d.contract, "get_receipts", { from: 0, limit: 500 });
+for (const c of cases.filter((x) => x.status === "Upheld")) {
+  const p = c.refund_proposal === null ? null : await proposal(c.refund_proposal);
+  const tr = p?.kind.Transfer;
+  const price = allReceipts.find((r) => r.job_id === c.job_id)?.price ?? "0";
+  check(p?.status === "Approved" && p.proposer === d.contract && tr?.token_id === info.usdc_id && tr.receiver_id === c.refund_to
+    && tr.amount === c.amount && BigInt(c.amount) <= BigInt(price),
+    `court case #${c.id}: the jury upheld it and the contract refunded the buyer from the treasury`,
+    `${usd(c.amount)} USDC (job ${c.job_id}, price ${usd(price)}) to ${c.refund_to}; jurors ${c.votes.map(([j, v]) => `${j} ${v ? "upheld" : "rejected"}`).join(", ")}; DAO proposal #${c.refund_proposal} ${p?.status}`);
+}
+const pledges = await view(d.contract, "get_pledges", { from: 0, limit: 200 });
+const pclaims = await view(d.contract, "get_pledge_claims", { from: 0, limit: 200 });
+console.log(`INFO  pledges: ${pledges.length}, called in ${pclaims.length} times, kept ${pclaims.filter((c) => c.status === "Honored").length}, broken ${pclaims.filter((c) => c.status === "Broken").length}; court cases: ${cases.length}`);
+
+// a multichain treasury: the DAO's Ethereum address (NEAR Chain Signatures) signed, by a vote, a statement naming it
+if (d.chainSignatures) {
+  const c = d.chainSignatures;
+  const derived = await daoAddress(d.dao);
+  const signed = proposals.find((p) => p.id === c.proposal);
+  const action = signed?.kind.FunctionCall?.actions[0];
+  check(c.signer === SIGNER && c.path === PATH && derived === c.address && signerOf(statement(d.dao, derived), c.signature) === derived
+    && signed?.status === "Approved" && signed.kind.FunctionCall.receiver_id === SIGNER && action?.method_name === "sign",
+    "the DAO holds an Ethereum address with no private key, and signs with it only by a members' vote (Chain Signatures)",
+    `${derived} (MPC ${SIGNER}, path ${PATH}); proposal #${c.proposal} ${signed?.status} asked ${SIGNER} to sign; the signature recovers ${signerOf(statement(d.dao, derived), c.signature)}`);
+}
 
 // 6. profit shares: USDC left the treasury only by a members' vote, through the contract's split
 const shares = proposals.filter((p) => p.status === "Approved" && argsOf(p).some((a) => a.method === "ft_transfer_call" && a.args.receiver_id === d.contract && a.args.msg === "share"));

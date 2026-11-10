@@ -13,7 +13,7 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
   }, { passive: true });
 }
 
-import { dep, testnet, RAW, explorer, view, all, query, $, esc, usdc, nearAmt } from "./near.js";
+import { dep, testnet, RAW, explorer, txUrl, view, all, query, $, esc, usdc, nearAmt } from "./near.js";
 import { verifyInBrowser } from "./tee.js";
 import { byLawsPath, configVote, trustSources } from "./share.js";
 const byLawsUrl = (uri) => (byLawsPath(uri) ? `${RAW}${uri}` : "about:blank#refused");
@@ -363,6 +363,34 @@ cargo near build reproducible-wasm
     rows($("tasks").tBodies[0], "");
     rows($("records").tBodies[0], "");
   });
+  // what members owe each other (contract 0.2.4), the steward's term, and the treasury's Ethereum address
+  Promise.all([all(dep.contract, "get_pledges"), all(dep.contract, "get_pledge_claims"), all(dep.contract, "get_cases"), view(dep.contract, "get_steward_term"),
+    Promise.all(members.map(([a]) => view(dep.contract, "get_standing", { account_id: a })))]).then(([pledges, claims, cases, [days, ends], standing]) => {
+    const kept = (id, st) => claims.filter((c) => c.pledge === id && c.status === st).length;
+    rows($("pledges").tBodies[0], [...pledges].reverse().map((p) => `<tr><td><strong>#${p.id}</strong> ${esc(p.what)}</td>
+      <td data-label="By"><a href="cert.html?who=${encodeURIComponent(p.issuer)}">${esc(p.issuer)}</a></td>
+      <td class="num" data-label="Called in">${p.called} of ${p.units}</td><td data-label="Kept / broken">${kept(p.id, "Honored")} / ${kept(p.id, "Broken")}</td></tr>`).join(""));
+    const OUT = { Open: "jury out", Upheld: "upheld: refunded", Dismissed: "not upheld" };
+    rows($("cases").tBodies[0], [...cases].reverse().map((c) => `<tr><td><strong>#${c.id}</strong> job ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, brought by ${esc(c.claimant)} for ${esc(c.refund_to)}</span></td>
+      <td class="num" data-label="Refund">${usdc(c.amount)} USDC</td>
+      <td data-label="Jurors">${c.jurors.map((j) => { const v = c.votes.find(([x]) => x === j); return `${esc(j)}: ${v ? (v[1] ? "uphold" : "reject") : "–"}`; }).join("<br>")}</td>
+      <td data-label="Outcome">${OUT[c.status] ?? esc(c.status)}${c.refund_proposal !== null ? `; <a href="${explorer(dep.dao)}">DAO proposal #${esc(c.refund_proposal)}</a>` : ""}</td></tr>`).join(""));
+    $("standing").innerHTML = members.map(([a], i) => {
+      const [x, good] = standing[i];
+      return `<li><b><a href="cert.html?who=${encodeURIComponent(a)}">${esc(a)}</a>: ${good ? "good standing" : "not in good standing"}</b>
+        <span>${x.pledges_honored} pledge(s) kept, ${x.pledges_broken} broken; ${x.juries_served} jury ruling(s), ${x.juries_missed} missed${x.slashed ? `; slashed ${x.slashed} time(s)` : ""}</span></li>`;
+    }).join("");
+    if (info.steward && ends) $("audit-term").innerHTML = `The steward serves ${days} days by the members' vote, until <strong>${date(ends)}</strong>; then anyone can end the term and the role waits for a new vote.`;
+  }).catch(() => {
+    rows($("pledges").tBodies[0], "");
+    rows($("cases").tBodies[0], "");
+  });
+  if (dep.chainSignatures) {
+    const c = dep.chainSignatures;
+    $("multichain").innerHTML = `The co-op also holds an Ethereum address, <a href="https://sepolia.etherscan.io/address/${esc(c.address)}"><code>${esc(c.address)}</code></a>, with no private key anywhere:
+      NEAR's MPC network (<a href="${explorer(c.signer)}">${esc(c.signer)}</a>) signs for it only when the DAO asks, by a members' vote.
+      Proof: the statement signed by <a href="${txUrl(c.tx)}">vote #${esc(c.proposal)}</a> recovers to this address (<code>npm run chainsig</code>).`;
+  }
   rows($("periods").tBodies[0], [...periods].reverse().map((p) => `<tr>
       <td>Share ${p.id}</td><td data-label="Date">${date(p.ts)}</td>
       <td class="num" data-label="Shared">${usdc(BigInt(p.amount) - BigInt(p.reserve))}</td>

@@ -142,8 +142,12 @@ async function load() {
   const nb = member ? await view(dep.dao, "get_last_bounty_id") : 0;
   const bounties = nb ? (await view(dep.dao, "get_bounties", { from_index: 0, limit: nb })).filter((b) => b.times > 0) : [];
   const myClaims = member ? await view(dep.dao, "get_bounty_claims", { account_id: me }).catch(() => []) : [];
+  // pledges, the court and standing (contract 0.2.4): null on older code
+  const [pledges, pclaims, cases, standing, receipts] = await Promise.all([all(dep.contract, "get_pledges"), all(dep.contract, "get_pledge_claims"),
+    all(dep.contract, "get_cases"), view(dep.contract, "get_standing", { account_id: me }), member ? all(dep.contract, "get_receipts") : []]
+    .map((x) => Promise.resolve(x).catch(() => null)));
   return { onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
-    board, tasks, records: Object.fromEntries(recs) };
+    board, tasks, records: Object.fromEntries(recs), pledges, pclaims, cases, standing, receipts };
 }
 
 // each button runs one transaction, then the panel re-reads the chain. The stages a member sees:
@@ -210,6 +214,83 @@ function tasksPanel(s) {
   return html;
 }
 
+// pledges and the co-op court (contract/src/commons.rs): members only; the contract re-checks every rule
+const COURT_BOND = 5n * 10n ** 23n; // 0.5 NEAR (COURT_BOND)
+const DAY_MS = 86_400_000;
+const nsMs = (ns) => Number(BigInt(ns) / 1_000_000n);
+function commonsPanel(s) {
+  if (!s.member || !s.pledges || !s.pclaims || !s.cases) return "";
+  const [st, good] = s.standing ?? [{}, true];
+  let html = `<h3 class="jh">Pledges and the co-op court</h3>
+    <p class="small">Your standing: ${st.pledges_honored ?? 0} pledge(s) kept, ${st.pledges_broken ?? 0} broken, ${st.juries_served ?? 0} jury rulings,
+      ${st.juries_missed ?? 0} missed${st.slashed ? `, slashed ${st.slashed} time(s)` : ""}: <strong>${good ? "good" : "not good"}</strong>${good ? "" : " (you are not drawn as a juror)"}.</p>`;
+  const items = [];
+  for (const p of s.pledges) {
+    if (p.issuer !== me && p.called < p.units) items.push(`<li><span><strong>Pledge #${p.id}</strong> ${esc(p.what)}<span class="claim">by ${esc(p.issuer)}, ${p.units - p.called} of ${p.units} left</span></span>
+      <button type="button" class="btn small" data-predeem="${p.id}">Call one in</button></li>`);
+  }
+  for (const c of s.pclaims) {
+    if (c.holder !== me || c.status !== "Open") continue;
+    const p = s.pledges.find((x) => x.id === c.pledge);
+    const late = Date.now() >= nsMs(c.ts) + 14 * DAY_MS;
+    items.push(`<li><span><strong>You called in</strong> ${esc(p?.what ?? `pledge #${c.pledge}`)}<span class="claim">from ${esc(p?.issuer ?? "?")}: was it kept?</span></span>
+      <span class="task-done"><button type="button" class="btn small" data-pkept="${c.id}">Kept</button>${late ? `<button type="button" class="btn ghost small" data-pbroken="${c.id}">Not kept (14 days passed)</button>` : ""}</span></li>`);
+  }
+  for (const c of s.cases) {
+    if (c.status !== "Open") continue;
+    const over = Date.now() >= nsMs(c.opened) + 3 * DAY_MS;
+    const mine = c.jurors.includes(me) && !c.votes.some(([j]) => j === me);
+    const head = `<span><strong>Case #${c.id}</strong> job ${esc(c.job_id)}: refund ${usdc(c.amount)} USDC to ${esc(c.refund_to)}<span class="claim">“${esc(c.reason)}”, brought by ${esc(c.claimant)}; jurors ${c.jurors.map(esc).join(", ")}; ${c.votes.length} ruled</span></span>`;
+    if (over) items.push(`<li>${head}<button type="button" class="btn small" data-cclose="${c.id}">Close (3 days passed)</button></li>`);
+    else if (mine) items.push(`<li>${head}<span class="task-done"><button type="button" class="btn small" data-crule="${c.id}" data-up="1">Uphold: refund</button><button type="button" class="btn ghost small" data-crule="${c.id}" data-up="0">Reject</button></span></li>`);
+  }
+  html += items.length ? `<ul class="props tasks">${items.join("")}</ul>` : `<p class="small">Nothing for you to do here right now.</p>`;
+  html += `<div class="stake-row"><label>I pledge <input id="w-pl-what" type="text" maxlength="280" autocomplete="off" aria-label="What you promise the co-op" placeholder="review one pull request"></label>
+    <label>times <input id="w-pl-units" type="number" min="1" max="20" value="1" aria-label="How many times"></label>
+    <button type="button" class="btn" id="w-pl-post">Pledge</button></div>
+    <p class="small">Another member calls it in and says if you kept it. Kept and broken pledges are your standing, not profit-share points.</p>`;
+  const paid = (s.receipts ?? []).filter((r) => r.status === "Paid");
+  if (good && paid.length) {
+    html += `<details class="court"><summary>Take a buyer's dispute to the co-op court (0.5 NEAR bond)</summary>
+      <div class="stake-row"><label>Job <select id="w-c-job">${paid.map((r) => `<option value="${esc(r.job_id)}">${esc(r.job_id)} (${usdc(r.price)} USDC)</option>`).join("")}</select></label>
+      <label>Refund to <input id="w-c-to" type="text" autocomplete="off" aria-label="The buyer's NEAR account"></label>
+      <label>USDC <input id="w-c-amt" type="text" inputmode="decimal" autocomplete="off" aria-label="USDC to refund"></label></div>
+      <div class="stake-row"><label>Why <input id="w-c-why" type="text" maxlength="280" autocomplete="off" aria-label="Why the buyer should be refunded"></label>
+      <button type="button" class="btn" id="w-c-open">Open the case</button></div>
+      <p class="small">Only a job the buyer disputed on Agent Market and the market then paid to the agent. Three members in good standing are drawn at random;
+      two must uphold. Upheld: your bond comes back and the contract refunds the buyer from the treasury. Not upheld: the bond goes to the DAO.</p></details>`;
+  }
+  return html;
+}
+
+function armCommons() {
+  const one = (attr, label, method, args, tgas = 30) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => {
+    b.onclick = () => act(`${label} #${b.dataset[attr]}`, () => send(dep.contract, method, args(b), { tgas }));
+  });
+  one("predeem", "Call in pledge", "redeem_pledge", (b) => ({ id: Number(b.dataset.predeem) }));
+  one("pkept", "Kept: pledge claim", "settle_pledge", (b) => ({ claim: Number(b.dataset.pkept), honored: true }));
+  one("pbroken", "Not kept: pledge claim", "settle_pledge", (b) => ({ claim: Number(b.dataset.pbroken), honored: false }));
+  // the deciding ruling files and approves the refund in the same transaction
+  one("crule", "Rule on case", "rule_case", (b) => ({ id: Number(b.dataset.crule), uphold: b.dataset.up === "1" }), 300);
+  one("cclose", "Close case", "close_case", (b) => ({ id: Number(b.dataset.cclose) }), 300);
+  const post = $("w-pl-post");
+  if (post) post.onclick = () => {
+    const what = $("w-pl-what").value.trim();
+    const units = Number($("w-pl-units").value);
+    if (!what || !(units >= 1 && units <= 20)) { say(`<span class="err">Pledge: say what you promise, 1 to 20 times.</span>`); return; }
+    act("Pledge", () => send(dep.contract, "pledge", { what, units }, { tgas: 30 }));
+  };
+  const open = $("w-c-open");
+  if (open) open.onclick = () => {
+    const amt = usdcUnits($("w-c-amt").value);
+    const to = $("w-c-to").value.trim();
+    const why = $("w-c-why").value.trim();
+    if (!amt || !to || !why) { say(`<span class="err">Case: the buyer's account, the USDC to refund and why.</span>`); return; }
+    act("Open a court case", () => send(dep.contract, "open_case", { job_id: $("w-c-job").value, refund_to: to, amount: amt.toString(), reason: why },
+      { deposit: COURT_BOND, tgas: 30 }));
+  };
+}
+
 const step = (state, title, body) => `<li class="${state}"><b>${title}</b>${body ? `<div>${body}</div>` : ""}</li>`;
 
 async function render() {
@@ -233,6 +314,7 @@ async function render() {
         A new implicit account exists only once it has received some NEAR.</p>
       <button type="button" class="btn" id="w-switch">Disconnect and connect a ${esc(dep.network)} account</button>`;
     $("w-out").onclick = () => connector.disconnect().catch(() => {});
+  armCommons();
     $("w-switch").onclick = () => connector.disconnect().catch(() => {}).then(() => connector.connect()).catch(() => {});
     return;
   }
@@ -344,6 +426,7 @@ async function render() {
              <button type="button" class="btn ghost" id="w-leave">Ask to leave</button>`}`;
   }
   html += tasksPanel(s);
+  html += commonsPanel(s);
   if (note) html += `<p class="note-line">${note}</p>`;
   box.innerHTML = html;
 

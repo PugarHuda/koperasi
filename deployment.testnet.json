@@ -8,5 +8,23 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "4e28de45f843b798bb3f58973d19045473f5972b4ff1e3eb3bf1735c473eb395",
   "configUri": "config/config.v4.yaml",
-  "codeSha256": "2f2fa54925a6a03cdc9e9587cd3ce38748a87691b6b862976ae6c40fd8645ad7"
+  "codeSha256": "c90399a1a9abba85087c477121b74106ecc7cfd088268ccd352d0a16e9ade08e",
+  "chainSignatures": {
+    "signer": "v1.signer-prod.testnet",
+    "path": "ethereum-1",
+    "address": "0xb3dc0128b4a9804de94796480bef8ba014dfca7d",
+    "message": "Koperasi co-op koperasi-mw4i2iwk.sputnik-v2.testnet holds 0xb3dc0128b4a9804de94796480bef8ba014dfca7d through NEAR Chain Signatures (path ethereum-1); it signs only by a members' vote.",
+    "proposal": 57,
+    "tx": "CGjiV2YDeCQjQNxf7hLV6cF79TW4Mpx3HZ1NeALtphMJ",
+    "signature": {
+      "scheme": "Secp256k1",
+      "big_r": {
+        "affine_point": "03c3080160ad98d19e96276cb9757471c695f7d323b127ef3e925b0f0604fa64cc"
+      },
+      "s": {
+        "scalar": "08abf7590f49830d2b55b7a106ad108323935cf0a56c0a0696d470912c9075d3"
+      },
+      "recovery_id": 0
+    }
+  }
 }

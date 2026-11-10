@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Work record · Koperasi</title>
+  <meta name="description" content="A member's work for the Koperasi co-op, every line traced to a NEAR transaction or DAO vote." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Koperasi</a>
+  </header>
+  <main class="cert">
+    <section class="block dark">
+      <p class="hint" id="cert-net">Reading NEAR…</p>
+      <h1 id="cert-who">Work record</h1>
+      <p class="sub">Every line below is read from the co-op's contract and DAO on NEAR, now, in your browser. Nothing here was typed by the member or by us:
+        tasks are paid DAO proposals, pledges are confirmed by the member who called them in, jury rulings are the contract's own record.
+        Share this link as proof of work (after Hypercerts: who did what, traceable).</p>
+      <form class="stake-row" id="cert-form"><label>Account <input id="cert-input" type="text" autocomplete="off" aria-label="NEAR account"></label>
+        <button type="submit" class="btn">Show</button></form>
+      <table class="grid on-dark" id="cert-sum-t"><caption>Summary</caption><tbody id="cert-sum"></tbody></table>
+      <table class="grid on-dark" id="cert-work">
+        <caption>Paid work <span class="muted">(each line names the task or DAO proposal that paid it)</span></caption>
+        <thead><tr><th scope="col">Source</th><th scope="col">What</th><th scope="col" class="num">Paid</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <table class="grid on-dark" id="cert-pledges">
+        <caption>Pledges to the co-op <span class="muted">(confirmed by whoever called them in)</span></caption>
+        <thead><tr><th scope="col">Pledge</th><th scope="col">Called in by</th><th scope="col">Kept?</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <table class="grid on-dark" id="cert-juries">
+        <caption>Jury duty in the co-op court</caption>
+        <thead><tr><th scope="col">Case</th><th scope="col">Ruling</th><th scope="col">Outcome</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="cta-row"><a class="btn" href="/#commons">Back to the co-op</a></p>
+    </section>
+  </main>
+  <script type="module">
+    import { dep, explorer, view, all, $, esc, nearAmt } from "./near.js";
+    const who = new URLSearchParams(location.search).get("who")?.trim() ?? "";
+    $("cert-input").value = who;
+    $("cert-form").onsubmit = (e) => { e.preventDefault(); location.search = `?who=${encodeURIComponent($("cert-input").value.trim())}`; };
+    const rows = (id, html) => { $(id).tBodies[0].innerHTML = html || `<tr><td colspan="3" class="muted">Nothing yet.</td></tr>`; };
+    $("cert-net").textContent = `Read live from ${dep.network}: ${dep.contract}, DAO ${dep.dao}`;
+    if (!who) {
+      $("cert-who").textContent = "Whose work record?";
+    } else {
+      $("cert-who").innerHTML = `Work record of <a href="${explorer(who)}">${esc(who)}</a>`;
+      try {
+        const [member, recs, tasks, pledges, claims, cases, standing] = await Promise.all([
+          view(dep.contract, "get_member", { account_id: who }), view(dep.contract, "get_contributors"), all(dep.contract, "get_tasks"),
+          all(dep.contract, "get_pledges").catch(() => []), all(dep.contract, "get_pledge_claims").catch(() => []), all(dep.contract, "get_cases").catch(() => []),
+          view(dep.contract, "get_standing", { account_id: who }).catch(() => null)]);
+        const rec = recs.find(([a]) => a === who)?.[1];
+        const [st, good] = standing ?? [null, null];
+        $("cert-sum").innerHTML = [
+          ["Member", member ? `yes, since ${new Date(Number(BigInt(member.joined_at) / 1_000_000n)).toLocaleDateString("en-GB")}` : "no"],
+          ["Paid work", rec ? `${rec.done} finished, ${nearAmt(rec.earned)} NEAR` : "none yet"],
+          ["Standing", st ? `${good ? "good" : "not good"}: ${st.pledges_honored} pledge(s) kept, ${st.pledges_broken} broken, ${st.juries_served} jury ruling(s), ${st.juries_missed} missed${st.slashed ? `, slashed ${st.slashed}×` : ""}` : "not on this contract version"],
+        ].map(([k, v]) => `<tr><th scope="row">${k}</th><td>${v}</td></tr>`).join("");
+        rows("cert-work", (rec?.refs ?? []).map((r) => {
+          const [kind, id] = r.split(":");
+          const t = kind === "task" ? tasks.find((x) => x.id === Number(id)) : null;
+          return `<tr><td>${kind === "task" ? `task #${esc(id)}` : `<a href="${explorer(dep.dao)}">DAO proposal #${esc(id)}</a>`}</td>
+            <td>${t ? esc(t.description) : "a bounty voted by all members"}</td><td class="num">${t ? `${nearAmt(t.amount)} NEAR` : "by the DAO"}</td></tr>`;
+        }).join(""));
+        const mine = new Map(pledges.filter((p) => p.issuer === who).map((p) => [p.id, p]));
+        rows("cert-pledges", claims.filter((c) => mine.has(c.pledge)).map((c) => `<tr><td>#${c.pledge} ${esc(mine.get(c.pledge).what)}</td>
+          <td>${esc(c.holder)}</td><td>${{ Open: "waiting", Honored: "kept", Broken: "not kept" }[c.status]}</td></tr>`).join(""));
+        rows("cert-juries", cases.filter((c) => c.jurors.includes(who)).map((c) => {
+          const v = c.votes.find(([j]) => j === who);
+          return `<tr><td>#${c.id} job ${esc(c.job_id)}</td><td>${v ? (v[1] ? "uphold" : "reject") : "did not rule"}</td><td>${esc(c.status)}</td></tr>`;
+        }).join(""));
+      } catch (e) {
+        $("cert-sum").innerHTML = `<tr><th scope="row">Error</th><td>Could not read NEAR: ${esc(e.message)}</td></tr>`;
+      }
+    }
+  </script>
+</body>
+</html>

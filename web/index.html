@@ -227,6 +227,7 @@
           <p class="sub">Agent Market pays one human account, the steward. The steward must pass every payout on to the co-op, with a bond at stake. Anyone can check the two numbers on the right.</p>
           <div class="verdict" id="verdict"></div>
           <p class="treasury" id="treasury"></p>
+          <p class="treasury" id="audit-term"></p>
           <p class="note" id="audit-note" hidden>This is the demo co-op. In the last step of <code>npm run demo</code> the steward keeps a payout on purpose, so the audit shows what members see when money goes missing.</p>
         </div>
         <div class="bars" id="rekon"></div>
@@ -271,6 +272,30 @@
       <table class="grid" id="bounties">
         <caption>Large tasks: DAO bounties <span class="muted">(voted in and paid out by all members from the treasury; each payout counts on the record above)</span></caption>
         <thead><tr><th scope="col">Task</th><th scope="col" class="num">Pays</th><th scope="col" class="num">Left</th><th scope="col" class="num">Taken</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="commons" class="block">
+      <div class="rail"><span class="num">07</span><span class="tag">Commons</span></div>
+      <div class="split">
+        <div>
+          <h2>What members<br />owe <span class="dim">each other.</span></h2>
+          <p class="sub" id="commons-sub">Members pledge services to the co-op (commitment vouchers, as in Kenya's Sarafu pools); whoever calls one in says whether it was kept.
+            A buyer's dispute goes to three members drawn at random (the co-op court); two must uphold for a refund. Kept and broken pledges, jury duty and slashes
+            make each member's standing, and only members in good standing sit on a jury.</p>
+          <p class="treasury" id="multichain"></p>
+        </div>
+        <ol class="tiers" id="standing"></ol>
+      </div>
+      <table class="grid" id="pledges">
+        <caption>Pledges <span class="muted">(a promise of work, not money; the holder confirms it)</span></caption>
+        <thead><tr><th scope="col">Pledge</th><th scope="col">By</th><th scope="col" class="num">Called in</th><th scope="col">Kept / broken</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <table class="grid" id="cases">
+        <caption>The co-op court <span class="muted">(only jobs a buyer disputed on Agent Market; a refund is a DAO proposal the contract files)</span></caption>
+        <thead><tr><th scope="col">Case</th><th scope="col" class="num">Refund</th><th scope="col">Jurors</th><th scope="col">Outcome</th></tr></thead>
         <tbody></tbody>
       </table>
     </section>

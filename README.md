@@ -41,12 +41,15 @@ quotes its line.
 | The members own the co-op, one vote each | DAO [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet): role `member`, RoleWeight, threshold 1/2 | *every member in the contract holds role `member`*; *one member, one vote* |
 | No role can act alone | `member` votes, `tasks` only files and approves transfers, outsiders only file proposals (with a bond) | *no role can act alone* |
 | The agent runs only by-laws the members voted | v3 by proposal #7 (a member found v2's model was not served), v4 by #55 (the steward's handover); the agent runs only `4e28de45…` | *the agent's by-laws … are the ones the members voted* |
-| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys; upgrades only by vote, now #53 | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
+| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys; upgrades only by vote, now #58 (0.2.4) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
 | The agent can only record receipts | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, `record_receipt` / `update_receipt` | *the agent account has only function-call keys …* |
 | Small payouts on earned trust, from the treasury itself | Task #2 needed another member (#30); #3 and #4 paid on trust, no vote (#31, #34); #5, #6 (#44, #45). Each a DAO `Transfer` the contract filed | *task #n was paid from the treasury by DAO proposal #m, filed by the contract*; *the trust tiers were voted* |
 | Every point on a record names its source | carol 5 tasks, bob 2, the steward 1, each linked to a task or a DAO bounty | *…'s record: n finished, each traced to its source* |
 | Profit is shared only by a members' vote, split by the contract | #36: 10 Circle testnet USDC to 4 members; bob claimed his 4.33 in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd); #51 filed from a [Trezu](trezu/README.md) form | *the members voted every profit share out of the treasury* |
-| The person in the middle is bonded | Appointed by vote #54 under contract 0.2.3, 1 NEAR bond [k6MzrgXV…](https://testnet.nearblocks.io/txns/k6MzrgXVf9E8styeNa5zNoYryY9aLCPvAqoPV1waFKZ); anyone can slash it once a paid job's earnings are 7 days late | *the steward was appointed by a vote and is bonded* |
+| The person in the middle is bonded, and serves a term | Appointed by vote #54 under contract 0.2.3, 1 NEAR bond [k6MzrgXV…](https://testnet.nearblocks.io/txns/k6MzrgXVf9E8styeNa5zNoYryY9aLCPvAqoPV1waFKZ); anyone can slash it once a paid job's earnings are 7 days late. A 90-day term by vote #59 (after Hats Protocol): when it runs out anyone ends it | *the steward was appointed by a vote and is bonded*; *the steward serves a term the members voted* |
+| A buyer's dispute goes to a jury of members, not to the builder | Case #0 ([opened](https://testnet.nearblocks.io/txns/49D9tavwVg2X8YseBDsgXXzjeJgLUVcNjNG5n9q69E2J) by bob for a job the buyer disputed and the market paid): three members in good standing drawn at random; two upheld ([6z5pkYgS…](https://testnet.nearblocks.io/txns/6z5pkYgSWivVrxTjr8mARUe6DSjAof7M4QtRf8MdrEeF), [3k2UPtib…](https://testnet.nearblocks.io/txns/3k2UPtibuzncctR96YGzy8cMc5Lgysfc9wLnyZ5rSw2Z)); the contract filed and approved refund #60, and the buyer got 0.5 USDC from the treasury | *court case #0: the jury upheld it and the contract refunded the buyer* |
+| Members owe each other work, not only money | Pledge #0: alice promised two reviews; bob called one in and said it was kept ([BwFvywKm…](https://testnet.nearblocks.io/txns/BwFvywKmxqX6tyNPWL5jBF1DZp4uctifQ3yMGTmZ9nJh)). Kept and broken pledges, jury duty and slashes are each member's standing; only good standing sits on a jury | *pledges: 1, called in 1 times, kept 1* |
+| The co-op holds an Ethereum address with no private key | `0xb3dc0128b4a9804de94796480bef8ba014dfca7d`, derived by NEAR's MPC network (Chain Signatures) from the DAO; vote #57 had it sign a statement naming itself, which recovers to that address | *the DAO holds an Ethereum address with no private key …* |
 | Anyone can join and leave; a member can vouch with a signature | `kop-guest-984702.testnet` asked from the page and was voted in (#8); `vouched-mwa7jwhw…` asked with alice's **NEP-413 signed vouch**, which every member's browser checks against alice's full-access key before voting ([screenshot](docs/img/signed-vouch.png)), and was voted in (#56, [joined](https://testnet.nearblocks.io/txns/CEPs9FH7U7Ng9wQowsWYoGQgYRvDELFc4BpRnPDdYpCf)); `kop-leaver-mw8pw94w.testnet` left with its deposit in [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV) | (page flows; E2E tests) |
 | Members pay no gas | NEP-366 relayer, calls without a deposit: [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) | (unit tests of `api/relay.mjs`) |
 | The model runs in a TEE, checkable by you | Intel TDX + NVIDIA attestation, re-verified by the agent within the hour before each job (last saved in [`evidence/`](evidence), 10 Nov); the page checks it with your browser's nonce | `node agent/tee.mjs z-ai/glm-5.3-flash` → `VERIFIED` |
@@ -57,7 +60,10 @@ The accounts alice, bob, carol and the steward are the builder's demo members. T
 but they are not independent people. The agent has done **no real paid job yet**: the 4 receipts come from `npm run
 demo` against a local stand-in for Agent Market, which has no testnet. The co-op's NEAR AI credits are in place and the
 agent has bid on 9 real Agent Market jobs; none was awarded yet. The old audit shortfall (7.60 USDC) dates from before
-the steward's appointment under 0.2.3, so it is not slashable; it stays red on purpose (the demo's last step).
+the steward's appointment under 0.2.3, so it is not slashable; it stays red on purpose (the demo's last step). The court's
+job `demo-court-mwag2r51` is a demo receipt too (`node scripts/commons.mjs --court`); bob sent the steward the 0.95 USDC
+it earned after the market's fee, in testnet USDC, and the steward passed it on ([EH9Sz6Dz…](https://testnet.nearblocks.io/txns/EH9Sz6DzGeRbf4T6QZhN9VA3uUk28X3UaQj3CuazqW7U)), so a demo job does
+not make the steward's bond slashable.
 
 ## For judges: 60 seconds, no wallet, no keys
 
@@ -66,6 +72,9 @@ the steward's appointment under 0.2.3, so it is not slashable; it stays red on p
    *Verify … with your own nonce* to check the model's Intel TDX and GPU attestation against a nonce your browser made.
 2. Scroll to **06 Tasks & trust**. It shows the three tiers the members voted, who approved each task, and the DAO proposal
    that paid it. A member's record links each point to its source.
+   Then **07 Commons**: a buyer's dispute decided by three members drawn at random, refunded by DAO proposal #60; each
+   member's standing; the co-op's Ethereum address, which signs only by a vote. Any member's work record is at
+   `/cert.html?who=<account>`.
 3. `npm install && npm run verify` reads every claim above from testnet, without keys or transactions: by-laws, code,
    keys, members, the `tasks` role, the trust rule, every payout and profit share against the vote behind it.
    It ends with `every claim checks out`.
@@ -89,6 +98,22 @@ holds its money:
 
 More in [`docs/DETAILS.md`](docs/DETAILS.md#prior-art-and-what-is-different).
 
+## Ostrom's eight principles, on-chain
+
+Elinor Ostrom's Nobel-winning study of commons that last (fisheries, irrigation, pastures) found eight design principles.
+Each one here is a contract rule or a vote you can read:
+
+| Principle | In Koperasi | Evidence |
+|---|---|---|
+| 1. Clear boundaries | membership is the DAO's `member` role, a join deposit, and a vote; a member can vouch with a signed message | #8, #56 |
+| 2. Rules fit the place | the members vote the agent's by-laws (model, prompt, prices, caps) and the trust rule | by-laws v4 #55 |
+| 3. Those affected make the rules | one member, one vote (RoleWeight, threshold 1/2) on every rule above | `npm run verify` |
+| 4. Monitoring | the audit (paid jobs against what the steward passed on), NEP-297 events on the page, TEE checks in your browser, `npm run verify` daily in CI | the page's *Don't trust us* |
+| 5. Graduated sanctions | a broken pledge or a missed jury costs good standing (no jury seat); a lost court case costs a 0.5 NEAR bond; a steward 7 days late loses the 1 NEAR bond, to anyone's call | `get_standing`, `slash_overdue` |
+| 6. Cheap conflict resolution | the co-op court: three members drawn at random, two must uphold, a refund at most the job's price | case #0, refund #60 |
+| 7. Right to organize | no outsider can change the rules: the contract has no full-access key, the builder's included, and its code changes only by vote | upgrades #53, #58 |
+| 8. Nested enterprises | the contract is a role inside the DAO (`tasks`: file and approve transfers only); the DAO holds an Ethereum address through NEAR's MPC network, used only by vote. Not yet: a federation of co-ops | #57 |
+
 ## Built on NEAR, end to end
 
 | NEAR piece | What it does here |
@@ -100,6 +125,7 @@ More in [`docs/DETAILS.md`](docs/DETAILS.md#prior-art-and-what-is-different).
 | **NEP-297 / NEP-330** | an event for every state change (the page's live feed); source metadata of a reproducible `cargo near` build |
 | **NEP-366** | meta-transactions: members pay no gas for calls without a deposit |
 | **NEP-413** | signed messages: a member signs "I vouch for X joining this DAO" in their wallet (no transaction); X's membership request carries it, and the page checks the signature and that the key is the member's full-access key on-chain |
+| **Chain Signatures** | the DAO's own Ethereum address (`v1.signer-prod.testnet`, path `ethereum-1`), signing only when a vote makes the DAO call `sign` (`npm run chainsig`) |
 | **Function-call access keys** | the agent's only key can call `record_receipt` / `update_receipt`, nothing else |
 | **Staking pools** | savings are NEAR staked in the pool the DAO chose, read on-chain (`sync_savings`); on mainnet the yield buys NEAR AI credits (Staking for Inference) |
 | **NEAR AI Cloud** | private inference in TEEs (Intel TDX + NVIDIA, also Chutes-served models), attestation, signed responses, billing per request |
@@ -110,7 +136,7 @@ More in [`docs/DETAILS.md`](docs/DETAILS.md#prior-art-and-what-is-different).
 
 ```sh
 npm install
-npm test        # lint, typecheck, 30 unit tests, 104 contract tests (unit, fuzz, invariant)
+npm test        # lint, typecheck, 30 unit tests, 125 contract tests (unit, fuzz, invariant)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 
@@ -201,21 +227,29 @@ person is why the steward exists. Both are listed under *Trust assumptions*.
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
-4. **The contract's code.** It runs a global contract the members approved, now proposal #53. `upgrade` obeys only the
+4. **The contract's code.** It runs a global contract the members approved, now proposal #58. `upgrade` obeys only the
    DAO, and the contract account has no full-access key left, so nobody can deploy code without a vote, the builder
    included. The live page shows the key count from the chain. Every upgrade and what it fixed:
    [`docs/DETAILS.md`](docs/DETAILS.md#code-upgrades-each-by-a-members-vote). Each upgrade publishes a global contract
-   (about 33 NEAR for this 330 KB contract).
+   (about 41 NEAR for this 406 KB contract).
 5. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
-   code. It is not listed for hire until the co-op's NEAR AI organization has credits, so no buyer can hire an agent
-   that cannot deliver.
+   code. The co-op's NEAR AI organization has credits, and the agent bids on real jobs; none was awarded yet.
 6. **The contract's DAO role.** Role `tasks` may file *and* approve `transfer` proposals, nothing else. It must file
    them: a small payout to a trusted contributor is paid when the poster accepts, with no member left to file it, which
    is the point of the tier. A role with only `VoteApprove` (members file, the contract adds a vote) would keep every
    payout waiting on a human. What bounds it is the contract's code, which only a vote can change: it files only for an
    accepted task, within the voted budget, the tier limits and each poster's daily limit, to the task's contributor.
    `npm run verify` checks that every Transfer the contract filed matches a paid task.
+7. **The co-op court.** Agent Market names buyers by its own ids, not NEAR accounts, so the contract cannot check that a
+   refund goes to the buyer: the three jurors do, from the market's job page. A case needs a job the buyer disputed on
+   the market (mirrored by the agent) and a member in good standing with a 0.5 NEAR bond; two of three jurors must
+   uphold; a refund is at most the job's price, once per job, at most two cases per job. The jury is drawn from the
+   block's random seed, which a block producer could bias. The members can always refund a buyer by an ordinary vote.
+   Details: [`docs/reports/05-security.md`](docs/reports/05-security.md) round 6.
+8. **Not done: the agent registered as a Shade Agent.** The runtime is not in a TEE (item 2). NEAR's Shade Agent
+   framework would let the contract accept receipts only from a worker whose TDX attestation it verified on-chain;
+   that needs the runtime deployed to a TEE host (Phala Cloud), an account and spend the builder has not set up.
 
 ## Built with
 

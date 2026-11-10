@@ -75,7 +75,8 @@ export const EVENTS = ["join_requested", "join_cancelled", "member_added", "memb
   "steward_bonded", "steward_slashed", "steward_slashed_overdue", "paused", "unpaused", "upgraded", "receipt_recorded", "receipt_updated",
   "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "task_approved",
-  "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited"];
+  "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited",
+  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "steward_term_set", "steward_term_ended"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
 /**
@@ -125,6 +126,15 @@ export function describeEvent({ event: e, data: d }) {
     task_paid: () => `The treasury paid ${short(d.contributor)} ${nearOf(d.amount)} for task #${d.id}`,
     task_unpaid: () => `Task #${d.id} was not paid (${d.status})`,
     record_credited: () => `The record of ${short(d.account_id)} grew (${d.source})`,
+    pledge_made: () => `${short(d.issuer)} pledged to the co-op: ${String(d.what).slice(0, 60)} (${d.units}×)`,
+    pledge_redeemed: () => `${short(d.holder)} called in pledge #${d.id}`,
+    pledge_settled: () => `A pledge by ${short(d.issuer)} was ${d.honored ? "kept" : "not kept"}`,
+    case_opened: () => `Court case #${d.id}: a buyer's dispute of job ${String(d.job_id).slice(0, 20)}; ${Array.isArray(d.jurors) ? d.jurors.length : "?"} jurors drawn`,
+    case_voted: () => `A juror ${d.uphold ? "upheld" : "rejected"} case #${d.id}`,
+    case_closed: () => `Court case #${d.id} was ${d.upheld ? "upheld: the buyer is refunded" : "not upheld"}`,
+    refund_filed: () => `The contract filed DAO proposal #${d.proposal_id} to refund court case #${d.id}`,
+    steward_term_set: () => `The members set the steward's term to ${d.days} days`,
+    steward_term_ended: () => `The steward's term ended; the members appoint the next one`,
   }[e];
   return s ? s() : e.replace(/_/g, " ");
 }
