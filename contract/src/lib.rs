@@ -703,6 +703,9 @@ impl Koperasi {
         let ok = matches!((r.status, status), (Submitted, Paid | Refunded | Disputed) | (Disputed, Paid | Refunded));
         require!(ok, "invalid status change");
         r.status = status;
+        if status == Disputed {
+            env::storage_write(&commons::disputed_key(&job_id), &[1]);
+        }
         if status == Paid {
             env::storage_write(&[PAID_AT_PREFIX, job_id.as_bytes()].concat(), &env::block_timestamp().to_le_bytes());
             let net = r.price.0 - r.price.0 * MARKET_FEE_BPS / BPS;

@@ -1763,7 +1763,7 @@ fn a_kept_pledge_earns_the_issuer_points_and_standing() {
     at(&acc("bob.testnet"), DAY);
     let c = k.redeem_pledge(id);
     k.settle_pledge(c, true);
-    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().points, PLEDGE_POINTS);
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().points, 0, "reputation only, never profit-share points");
     let (s, good) = k.get_standing(acc("alice.testnet"));
     assert_eq!((s.pledges_honored, good), (1, true));
     assert_eq!(k.get_pledges(None, None)[0].called, 1);
@@ -1820,27 +1820,29 @@ fn a_pledge_is_broken_only_after_14_days_and_only_by_its_holder() {
 
 const JURY: [&str; 5] = ["alice.testnet", "bob.testnet", "carol.testnet", "dave.testnet", "erin.testnet"];
 
-/// Five members, a steward, and one paid 10 USDC job.
+/// Six members (frank takes buyers' cases), a steward, and one 10 USDC job the buyer disputed and the market paid.
 fn court() -> Koperasi {
     let mut k = setup();
     with_members(&mut k, &JURY);
+    with_members(&mut k, &["frank.testnet"]);
     as_(&dao(), near(0));
     k.set_steward(Some(steward()));
     receipt(&mut k, "job-1", 10_000_000, H1);
     at(&agent(), DAY);
+    k.update_receipt("job-1".into(), ReceiptStatus::Disputed);
     k.update_receipt("job-1".into(), ReceiptStatus::Paid);
     k
 }
 
 fn open(k: &mut Koperasi, claimant: &str, ns: u64) -> u32 {
     at_paying(&acc(claimant), ns, COURT_BOND);
-    k.open_case("job-1".into(), acc(claimant), U128(4_000_000), "the report missed half the brief".into())
+    k.open_case("job-1".into(), acc("buyer.testnet"), U128(4_000_000), "the report missed half the brief".into())
 }
 
 #[test]
 fn the_jury_upholds_a_dispute_and_the_contract_files_the_refund() {
     let mut k = court();
-    let id = open(&mut k, "buyer.testnet", 2 * DAY);
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
     let c = k.get_cases(None, None)[0].clone();
     let mut j = c.jurors.clone();
     j.sort();
@@ -1866,7 +1868,7 @@ fn the_jury_upholds_a_dispute_and_the_contract_files_the_refund() {
 #[test]
 fn a_dispute_nobody_upholds_is_dismissed_after_3_days_and_silent_jurors_lose_standing() {
     let mut k = court();
-    let id = open(&mut k, "buyer.testnet", 2 * DAY);
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
     let jurors = k.get_cases(None, None)[0].jurors.clone();
     at(&jurors[0], 3 * DAY);
     k.rule_case(id, false);
@@ -1887,7 +1889,7 @@ fn a_juror_out_of_good_standing_is_not_drawn() {
     let mut k = court();
     commons::mark(&acc("alice.testnet"), |s| s.pledges_broken += 1);
     commons::mark(&acc("bob.testnet"), |s| s.slashed += 1);
-    open(&mut k, "buyer.testnet", 2 * DAY);
+    open(&mut k, "frank.testnet", 2 * DAY);
     let mut j: Vec<String> = k.get_cases(None, None)[0].jurors.iter().map(|a| a.to_string()).collect();
     j.sort();
     assert_eq!(j, ["carol.testnet", "dave.testnet", "erin.testnet"]);
@@ -1900,22 +1902,67 @@ fn no_court_without_three_eligible_jurors() {
     for m in ["alice.testnet", "bob.testnet", "carol.testnet"] {
         commons::mark(&acc(m), |s| s.juries_missed += 1);
     }
-    open(&mut k, "dave.testnet", 2 * DAY); // dave is the claimant: only erin is left
+    commons::mark(&acc("dave.testnet"), |s| s.juries_missed += 1);
+    open(&mut k, "frank.testnet", 2 * DAY); // only erin is left
 }
 
 #[test]
-#[should_panic(expected = "already disputed")]
-fn a_job_is_disputed_once() {
+#[should_panic(expected = "a case for this job is open")]
+fn one_open_case_per_job() {
+    let mut k = court();
+    open(&mut k, "frank.testnet", 2 * DAY);
+    open(&mut k, "frank.testnet", 2 * DAY);
+}
+
+#[test]
+fn an_upheld_job_is_closed_to_new_cases_and_a_rejected_one_is_not() {
+    let mut k = court();
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
+    for j in k.get_cases(None, None)[0].jurors.clone().iter().take(2) {
+        at(j, 2 * DAY + 1);
+        k.rule_case(id, false);
+    }
+    assert!(logs_have("\"upheld\":false"));
+    let id = open(&mut k, "frank.testnet", 6 * DAY);
+    for j in k.get_cases(None, None)[1].jurors.clone().iter().take(2) {
+        at(j, 6 * DAY + 1);
+        k.rule_case(id, true);
+    }
+    assert!(fails(|| { open(&mut k, "frank.testnet", 9 * DAY); }), "refunded once");
+}
+
+#[test]
+#[should_panic(expected = "only a member")]
+fn an_outsider_cannot_open_a_case() {
     let mut k = court();
     open(&mut k, "buyer.testnet", 2 * DAY);
-    open(&mut k, "buyer.testnet", 2 * DAY);
+}
+
+#[test]
+#[should_panic(expected = "disputed on the market")]
+fn only_a_job_the_buyer_disputed_goes_to_court() {
+    let mut k = court();
+    receipt(&mut k, "job-2", 10_000_000, H1);
+    at(&agent(), DAY);
+    k.update_receipt("job-2".into(), ReceiptStatus::Paid);
+    at_paying(&acc("frank.testnet"), 2 * DAY, COURT_BOND);
+    k.open_case("job-2".into(), acc("buyer.testnet"), U128(1), "x".into());
+}
+
+#[test]
+fn a_case_nobody_ruled_on_is_dismissed_after_3_days() {
+    let mut k = court();
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
+    at(&acc("anyone.testnet"), 5 * DAY);
+    k.close_case(id);
+    assert_eq!(k.get_cases(None, None)[0].status, CaseStatus::Dismissed, "one uphold, or none, never refunds");
 }
 
 #[test]
 #[should_panic(expected = "at most the job")]
 fn a_refund_is_at_most_the_price() {
     let mut k = court();
-    at_paying(&acc("buyer.testnet"), 2 * DAY, COURT_BOND);
+    at_paying(&acc("frank.testnet"), 2 * DAY, COURT_BOND);
     k.open_case("job-1".into(), acc("buyer.testnet"), U128(10_000_001), "x".into());
 }
 
@@ -1923,25 +1970,16 @@ fn a_refund_is_at_most_the_price() {
 #[should_panic(expected = "court bond")]
 fn a_dispute_needs_the_bond() {
     let mut k = court();
-    at_paying(&acc("buyer.testnet"), 2 * DAY, NearToken::from_millinear(499));
+    at_paying(&acc("frank.testnet"), 2 * DAY, NearToken::from_millinear(499));
     k.open_case("job-1".into(), acc("buyer.testnet"), U128(1), "x".into());
-}
-
-#[test]
-#[should_panic(expected = "only a paid")]
-fn only_a_paid_job_is_disputed() {
-    let mut k = court();
-    receipt(&mut k, "job-2", 10_000_000, H1);
-    at_paying(&acc("buyer.testnet"), 2 * DAY, COURT_BOND);
-    k.open_case("job-2".into(), acc("buyer.testnet"), U128(1), "x".into());
 }
 
 #[test]
 #[should_panic(expected = "only a juror")]
 fn only_jurors_rule() {
     let mut k = court();
-    let id = open(&mut k, "buyer.testnet", 2 * DAY);
-    at(&acc("buyer.testnet"), 2 * DAY);
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
+    at(&acc("frank.testnet"), 2 * DAY);
     k.rule_case(id, true);
 }
 

@@ -2,11 +2,15 @@
 //!
 //! - **Pledges** (commitment vouchers, after Grassroots Economics' Sarafu pools in Kenya): a member promises a service
 //!   ("review one pull request") a few times; another member calls one in; the *holder*, not the issuer, says whether it
-//!   was kept. A kept pledge earns the issuer points; a pledge not kept by its due time can be reported as broken.
-//! - **The co-op court** (after Kleros' agent court): anyone who paid for a job can dispute it with a bond; three members
-//!   are drawn at random as jurors; two matching rulings decide. Upheld: the bond comes back and the contract files and
-//!   approves (as role `tasks`) a USDC refund from the treasury, at most the job's price. Dismissed: the bond goes to
-//!   the DAO. Jurors who rule earn points; jurors who let the deadline pass are marked.
+//!   was kept, or (after 14 days) that it was broken. Pledges are reputation only (standing), never profit-share points:
+//!   two members could otherwise mint points by confirming each other's pledges.
+//! - **The co-op court** (after Kleros' agent court): when a buyer disputed a job on the Agent Market (the agent mirrors
+//!   that status), a member can take the buyer's case to the co-op with a bond, even if the market ruled for the agent.
+//!   Three other members in good standing are drawn at random; two of the three must uphold. Upheld: the bond comes
+//!   back and the contract files and approves (as role `tasks`) a USDC refund from the treasury, at most the job's
+//!   price, once per job. Rejected by two jurors: the bond goes to the DAO. Jurors who rule earn points; jurors who let
+//!   the deadline pass are marked. The market names buyers by its own ids, not NEAR accounts, so the contract cannot
+//!   check that `refund_to` is the buyer: the jurors do, from the market's job page (trust assumptions in the README).
 //! - **Standing** (after Hats Protocol): each account's kept and broken pledges, juries served and missed, and slashes,
 //!   all written by the contract. Anyone not in good standing is not drawn as a juror.
 //! - **The steward's term** (also after Hats): the members vote how many days a steward serves; once it runs out anyone
@@ -25,8 +29,7 @@ const MAX_WHAT: usize = 280;
 const MAX_UNITS: u32 = 20;
 /// The issuer has this long to keep a called-in pledge before the holder may report it broken.
 const PLEDGE_DUE_NS: u64 = 14 * DAY_NS;
-/// Points for a kept pledge and for a juror who rules.
-pub const PLEDGE_POINTS: u64 = 10;
+/// Points for a juror who rules (cases need a market dispute and a bond, so they cannot be minted at will).
 pub const JUROR_POINTS: u64 = 5;
 pub const JURORS: usize = 3;
 pub const COURT_BOND: NearToken = NearToken::from_millinear(500);
@@ -120,8 +123,13 @@ fn claim_key(id: u32) -> Vec<u8> {
 fn case_key(id: u32) -> Vec<u8> {
     format!("case:{id}").into_bytes()
 }
+/// [0] a case is open for this job, [1] a refund was upheld: no more cases. A rejected case frees the job.
 fn job_case_key(job: &str) -> Vec<u8> {
     format!("job_case:{job}").into_bytes()
+}
+/// Written by `update_receipt` when the agent mirrors the market's Disputed status; stays after the market's verdict.
+pub(crate) fn disputed_key(job: &str) -> Vec<u8> {
+    format!("disputed:{job}").into_bytes()
 }
 fn standing_key(a: &AccountId) -> Vec<u8> {
     format!("standing:{a}").into_bytes()
@@ -188,10 +196,6 @@ impl Koperasi {
         save(&claim_key(claim), &c);
         if honored {
             mark(&issuer, |s| s.pledges_honored += 1);
-            // a member who left keeps the record but earns no points
-            if self.members.contains_key(&issuer) {
-                self.add_points(&issuer, PLEDGE_POINTS);
-            }
         } else {
             mark(&issuer, |s| s.pledges_broken += 1);
         }
@@ -219,19 +223,26 @@ impl Koperasi {
 
     // ---------- the co-op court ----------
 
-    /// Anyone, with a 0.5 NEAR bond: dispute a paid job and ask for `amount` USDC (at most its price) back to
-    /// `refund_to`. Three members in good standing are drawn at random (not the claimant, the refund's receiver or
+    /// A member in good standing, with a 0.5 NEAR bond: take a buyer's dispute of a job to the co-op and ask for
+    /// `amount` USDC (at most its price) back to `refund_to`. Only a job the buyer disputed on the market and the market
+    /// did not refund. Three members in good standing are drawn at random (not the claimant, the refund's receiver or
     /// the steward); they rule within 3 days.
     #[payable]
     pub fn open_case(&mut self, job_id: String, refund_to: AccountId, amount: U128, reason: String) -> u32 {
+        let claimant = self.assert_member();
+        require!(standing(&claimant).good(), "only a member in good standing");
         require!(env::attached_deposit() >= COURT_BOND, "attach the 0.5 NEAR court bond");
         require!(!reason.trim().is_empty() && reason.len() <= MAX_WHAT, "reason: 1 to 280 characters");
         let i = *self.receipt_index.get(&job_id).unwrap_or_else(|| env::panic_str("no receipt for this job"));
         let r = self.receipts.get(i).unwrap();
-        require!(matches!(r.status, ReceiptStatus::Paid | ReceiptStatus::Disputed), "only a paid (or disputed) job");
+        require!(env::storage_read(&disputed_key(&job_id)).is_some(), "only a job the buyer disputed on the market");
+        require!(r.status != ReceiptStatus::Refunded, "the market already refunded this job");
         require!(amount.0 > 0 && amount.0 <= r.price.0, "the refund is at most the job's price");
-        require!(env::storage_read(&job_case_key(&job_id)).is_none(), "this job was already disputed");
-        let claimant = env::predecessor_account_id();
+        match env::storage_read(&job_case_key(&job_id)).as_deref() {
+            Some([1]) => env::panic_str("this job was already refunded by the court"),
+            Some(_) => env::panic_str("a case for this job is open"),
+            None => {}
+        }
         let mut pool: Vec<AccountId> = self.members.keys()
             .filter(|m| **m != claimant && **m != refund_to && Some(*m) != self.steward.as_ref() && standing(m).good())
             .cloned()
@@ -245,7 +256,7 @@ impl Koperasi {
             jurors.push(pool.swap_remove(x));
         }
         let id = next(KEY_CASES);
-        env::storage_write(&job_case_key(&job_id), &id.to_le_bytes());
+        env::storage_write(&job_case_key(&job_id), &[0]);
         Event::CaseOpened { id, job_id: job_id.clone(), claimant: claimant.clone(), refund_to: refund_to.clone(), amount, jurors: jurors.clone() }.emit();
         save(&case_key(id), &Case {
             id, job_id, claimant, refund_to, amount, reason, jurors, votes: vec![],
@@ -271,15 +282,12 @@ impl Koperasi {
         }
     }
 
-    /// Anyone, after 3 days: the majority of the rulings cast decides; with no majority the case is dismissed, but the
-    /// bond goes back if no juror ruled at all.
+    /// Anyone, after 3 days: two matching rulings were never cast, so the case is dismissed (only two upholds refund).
     pub fn close_case(&mut self, id: u32) {
         let c = case(id);
         require!(c.status == CaseStatus::Open, "the case is closed");
         require!(env::block_timestamp() >= c.opened.0 + COURT_DAYS_NS, "the jurors have 3 days");
-        let yes = c.votes.iter().filter(|(_, v)| *v).count();
-        let upheld = yes * 2 > c.votes.len();
-        self.close(c, upheld);
+        self.close(c, false);
     }
 
     fn close(&mut self, mut c: Case, upheld: bool) {
@@ -301,6 +309,13 @@ impl Koperasi {
         Event::CaseClosed { id: c.id, upheld, missed: if late { missed } else { vec![] } }.emit();
         save(&case_key(c.id), &c);
         if upheld {
+            env::storage_write(&job_case_key(&c.job_id), &[1]);
+        } else {
+            env::storage_remove(&job_case_key(&c.job_id));
+        }
+        // the bond goes to the DAO only if two jurors rejected the case; a jury that never decided returns it
+        let rejected = c.votes.iter().filter(|(_, v)| !*v).count() * 2 > JURORS;
+        if upheld {
             let _ = Promise::new(c.claimant.clone()).transfer(COURT_BOND);
             let description = format!("Koperasi court case #{}: refund {} USDC (6 decimals: {}) to {} for job {}, upheld by the jury",
                 c.id, c.amount.0 as f64 / 1e6, c.amount.0, c.refund_to, c.job_id);
@@ -309,10 +324,10 @@ impl Koperasi {
                 .with_static_gas(GAS_PROPOSE)
                 .add_proposal(near_sdk::serde_json::json!({ "description": description, "kind": refund_kind(&self.usdc_id, &c) }))
                 .then(Self::ext(env::current_account_id()).with_static_gas(GAS_FILED).on_refund_filed(c.id));
-        } else if c.votes.is_empty() {
-            let _ = Promise::new(c.claimant.clone()).transfer(COURT_BOND);
-        } else {
+        } else if rejected {
             let _ = Promise::new(self.dao_id.clone()).transfer(COURT_BOND);
+        } else {
+            let _ = Promise::new(c.claimant.clone()).transfer(COURT_BOND);
         }
     }
 
