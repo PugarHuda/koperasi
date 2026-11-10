@@ -138,7 +138,7 @@ Each one here is a contract rule or a vote you can read:
 
 ```sh
 npm install
-npm test        # lint, typecheck, 30 unit tests, 125 contract tests (unit, fuzz, invariant)
+npm test        # lint, typecheck, 31 unit tests, 125 contract tests (unit, fuzz, invariant)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 
