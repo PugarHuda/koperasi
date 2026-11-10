@@ -8,8 +8,9 @@
 //!   that status) and the market ruled for the agent (Paid, final), a member can take the buyer's case to the co-op
 //!   with a bond. Three other members in good standing are drawn at random; two of the three must uphold. Upheld: the
 //!   bond comes back and the contract files and approves (as role `tasks`) a USDC refund from the treasury, at most the
-//!   job's price. One case per job, whatever its outcome (no shopping for another jury). Not upheld: the bond goes to
-//!   the DAO, unless no juror ruled at all. Jurors earn points only when the jury reached a verdict; jurors who let the
+//!   job's price. One open case per job and one refund per job; each member takes a given job to court once, so a
+//!   bogus case (wrong receiver, token amount) cannot block the real one, and nobody shops for juries without losing a
+//!   bond each time. Not upheld: the bond goes to the DAO, unless no juror ruled at all. Jurors earn points only when the jury reached a verdict; jurors who let the
 //!   deadline pass are marked. The market names buyers by its own ids, not NEAR accounts, so the contract cannot
 //!   check that `refund_to` is the buyer: the jurors do, from the market's job page (trust assumptions in the README).
 //! - **Standing** (after Hats Protocol): each account's kept and broken pledges, juries served and missed, and slashes,
@@ -124,9 +125,13 @@ fn claim_key(id: u32) -> Vec<u8> {
 fn case_key(id: u32) -> Vec<u8> {
     format!("case:{id}").into_bytes()
 }
-/// Set once a case is opened for this job: one case per job.
+/// [0] a case for this job is open, [1] the court refunded it. Removed when a case is not upheld.
 fn job_case_key(job: &str) -> Vec<u8> {
     format!("job_case:{job}").into_bytes()
+}
+/// This member already took this job to court.
+fn case_by_key(job: &str, claimant: &AccountId) -> Vec<u8> {
+    format!("case_by:{job}:{claimant}").into_bytes()
 }
 /// Written by `update_receipt` when the agent mirrors the market's Disputed status; stays after the market's verdict.
 pub(crate) fn disputed_key(job: &str) -> Vec<u8> {
@@ -239,7 +244,12 @@ impl Koperasi {
         require!(env::storage_read(&disputed_key(&job_id)).is_some(), "only a job the buyer disputed on the market");
         require!(r.status == ReceiptStatus::Paid, "only once the market ruled for the agent (paid)");
         require!(amount.0 > 0 && amount.0 <= r.price.0, "the refund is at most the job's price");
-        require!(env::storage_read(&job_case_key(&job_id)).is_none(), "this job already had its case");
+        match env::storage_read(&job_case_key(&job_id)).as_deref() {
+            Some([1]) => env::panic_str("the court already refunded this job"),
+            Some(_) => env::panic_str("a case for this job is open"),
+            None => {}
+        }
+        require!(env::storage_read(&case_by_key(&job_id, &claimant)).is_none(), "you already took this job to court");
         let mut pool: Vec<AccountId> = self.members.keys()
             .filter(|m| **m != claimant && **m != refund_to && Some(*m) != self.steward.as_ref() && standing(m).good())
             .cloned()
@@ -254,6 +264,7 @@ impl Koperasi {
         }
         let id = next(KEY_CASES);
         env::storage_write(&job_case_key(&job_id), &[0]);
+        env::storage_write(&case_by_key(&job_id, &claimant), &[1]);
         Event::CaseOpened { id, job_id: job_id.clone(), claimant: claimant.clone(), refund_to: refund_to.clone(), amount, jurors: jurors.clone() }.emit();
         save(&case_key(id), &Case {
             id, job_id, claimant, refund_to, amount, reason, jurors, votes: vec![],
@@ -306,6 +317,11 @@ impl Koperasi {
         }
         Event::CaseClosed { id: c.id, upheld, missed: if late { missed } else { vec![] } }.emit();
         save(&case_key(c.id), &c);
+        if upheld {
+            env::storage_write(&job_case_key(&c.job_id), &[1]);
+        } else {
+            env::storage_remove(&job_case_key(&c.job_id));
+        }
         if upheld {
             let _ = Promise::new(c.claimant.clone()).transfer(COURT_BOND);
             let description = format!("Koperasi court case #{}: refund {} USDC (6 decimals: {}) to {} for job {}, upheld by the jury",

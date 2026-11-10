@@ -1908,8 +1908,8 @@ fn no_court_without_three_eligible_jurors() {
 }
 
 #[test]
-#[should_panic(expected = "already had its case")]
-fn one_case_per_job() {
+#[should_panic(expected = "a case for this job is open")]
+fn one_open_case_per_job() {
     let mut k = court();
     open(&mut k, "frank.testnet", 2 * DAY);
     open(&mut k, "frank.testnet", 2 * DAY);
@@ -1926,7 +1926,15 @@ fn a_rejected_case_closes_the_job_and_a_lone_ruling_earns_no_points() {
     }
     assert!(logs_have("\"upheld\":false"));
     assert_eq!(k.get_member(jurors[0].clone()).unwrap().points, JUROR_POINTS, "a verdict earns points");
-    assert!(fails(|| { open(&mut k, "frank.testnet", 6 * DAY); }), "no second jury for the same job");
+    assert!(fails(|| { open(&mut k, "frank.testnet", 6 * DAY); }), "frank does not get a second jury");
+    // a bogus case does not block the real one: another member can still bring it, once
+    let id = open(&mut k, "erin.testnet", 6 * DAY);
+    for j in k.get_cases(None, None)[1].jurors.clone().iter().take(2) {
+        at(j, 6 * DAY + 1);
+        k.rule_case(id, true);
+    }
+    assert_eq!(k.get_cases(None, None)[1].status, CaseStatus::Upheld);
+    assert!(fails(|| { open(&mut k, "dave.testnet", 9 * DAY); }), "refunded once");
 }
 
 #[test]
