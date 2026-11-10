@@ -72,8 +72,8 @@ export const payPath = (amount, rule, sources) => (BigInt(amount) <= BigInt(rule
 /** Every NEP-297 event the contract emits (contract/src/events.rs), by its snake_case wire name. */
 export const EVENTS = ["join_requested", "join_cancelled", "member_added", "member_left", "config_set", "points_awarded",
   "savings_set", "savings_pending", "staking_pool_set", "share_rule_set", "usdc_set", "ledger_started", "agent_set", "steward_set",
-  "steward_bonded", "steward_slashed", "paused", "unpaused", "upgraded", "receipt_recorded", "receipt_updated",
-  "earnings_deposited", "share_distributed", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
+  "steward_bonded", "steward_slashed", "steward_slashed_overdue", "paused", "unpaused", "upgraded", "receipt_recorded", "receipt_updated",
+  "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "task_approved",
   "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -109,6 +109,9 @@ export function describeEvent({ event: e, data: d }) {
     savings_pending: () => `${short(d.account_id)} staked ${nearOf(d.savings)}; it counts as savings after 7 days`,
     share_distributed: () => `The members shared ${usdcOf(d.amount)} among ${d.members} members`,
     share_claimed: () => `${short(d.account_id)} claimed ${usdcOf(d.amount)}`,
+    share_refused: () => `A profit share of ${usdcOf(d.amount)} went back: it would have left the treasury under its ${usdcOf(d.floor)} floor`,
+    reserve_floor_set: () => `The members set the treasury's floor to ${usdcOf(d.amount)}`,
+    steward_slashed_overdue: () => `The audit stayed red past the grace period: the steward's ${nearOf(d.amount)} bond went to the DAO`,
     paused: () => `The agent was paused by ${short(d.by)}`,
     unpaused: () => "The members restarted the agent",
     upgraded: () => "The members upgraded the contract's code",

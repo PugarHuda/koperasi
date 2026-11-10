@@ -57,6 +57,9 @@ pub enum Event {
     /// The steward's whole bond went to the DAO.
     #[event_version("1.0.0")]
     StewardSlashed { amount: NearToken },
+    /// The audit has been red since `since` (ns) for more than the steward's grace period, so anyone slashed the bond.
+    #[event_version("1.0.0")]
+    StewardSlashedOverdue { amount: NearToken, owed: U128, since: U64 },
     /// The agent stopped (kill switch).
     #[event_version("1.0.0")]
     Paused { by: AccountId },
@@ -82,6 +85,12 @@ pub enum Event {
     /// The DAO shared profit: `paid` credited to members, `reserve` back to the DAO.
     #[event_version("1.0.0")]
     ShareDistributed { period: u32, amount: U128, paid: U128, reserve: U128, members: u32 },
+    /// The least USDC the DAO must keep outside a profit share.
+    #[event_version("1.0.0")]
+    ReserveFloorSet { amount: U128 },
+    /// A profit share went back to the DAO: it would have left the treasury below the floor (or its balance was unreadable).
+    #[event_version("1.0.0")]
+    ShareRefused { amount: U128, dao_balance: Option<U128>, floor: U128 },
     /// A transfer to the DAO failed; `flush_to_dao` retries it.
     #[event_version("1.0.0")]
     ForwardFailed { amount: U128 },

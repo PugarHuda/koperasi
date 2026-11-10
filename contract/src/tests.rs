@@ -379,7 +379,7 @@ fn share_splits_by_savings_and_points_and_nothing_is_lost() {
     let p = &k.get_periods()[0];
     assert_eq!(p.reserve.0, 20_000_000);
     assert_eq!(a + b + c + p.reserve.0, 100_000_000);
-    assert_eq!(k.get_member(acc("carol.testnet")).unwrap().points, 0, "points resets each period");
+    assert_eq!(k.get_member(acc("carol.testnet")).unwrap().points, 15, "points halve each period");
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, near(300).as_yoctonear(), "savings stays");
 }
 
@@ -1572,4 +1572,119 @@ fn a_larger_stake_restarts_the_wait_and_a_smaller_one_keeps_it() {
     as_(&dao(), near(0));
     k.set_savings(vec![(acc("alice.testnet"), U128(5))]);
     assert_eq!(k.get_pending_savings(acc("alice.testnet")), None);
+}
+
+// ---------- points decay, reserve floor, overdue steward ----------
+
+#[test]
+fn points_halve_at_each_share_so_the_next_share_still_pays_contribution() {
+    let mut k = setup(); // 20% reserve, 40% savings, 40% points
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    as_(&dao(), near(0));
+    k.award_points(acc("alice.testnet"), 9, "x".into());
+    share(&mut k, 100);
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().points, 4, "9 → 4 (floored)");
+    share(&mut k, 100); // no new work since: the points pool still pays alice, it does not fall to the reserve
+    assert_eq!(k.get_claimable(acc("alice.testnet")).0, 40 + 40);
+    assert_eq!(k.get_periods()[1].reserve.0, 20 + 40, "nobody saved: only the reserve and the savings pool stay");
+    for _ in 0..3 {
+        share(&mut k, 100);
+    }
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().points, 0, "old work fades out");
+}
+
+fn me_(ns: u64) {
+    at(&me(), ns);
+}
+
+#[test]
+fn a_share_under_the_reserve_floor_goes_back_whole() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    as_(&dao(), near(0));
+    k.award_points(acc("alice.testnet"), 1, "x".into());
+    k.set_reserve_floor(U128(50_000_000));
+    assert_eq!(k.get_reserve_floor().0, 50_000_000);
+    as_(&usdc(), near(0));
+    assert!(matches!(k.ft_on_transfer(dao(), U128(10_000_000), "share".into()), PromiseOrValue::Promise(_)), "reads the DAO first");
+    me_(0);
+    assert_eq!(k.on_dao_balance(U128(10_000_000), Ok(U128(49_999_999))).0, 10_000_000, "below the floor: all of it back");
+    assert_eq!(k.on_dao_balance(U128(10_000_000), Err(PromiseError::Failed)).0, 10_000_000, "unreadable: back, not split");
+    assert!(k.get_periods().is_empty() && k.get_claimable(acc("alice.testnet")).0 == 0);
+    assert_eq!(k.on_dao_balance(U128(10_000_000), Ok(U128(50_000_000))).0, 0, "at the floor: split");
+    assert_eq!(k.get_periods().len(), 1);
+    as_(&dao(), near(0));
+    k.set_reserve_floor(U128(0));
+    as_(&usdc(), near(0));
+    assert!(matches!(k.ft_on_transfer(dao(), U128(10), "share".into()), PromiseOrValue::Value(U128(0))), "no floor: split at once");
+}
+
+#[test]
+#[should_panic(expected = "only the DAO")]
+fn only_the_dao_sets_the_reserve_floor() {
+    let mut k = setup();
+    as_(&acc("alice.testnet"), near(0));
+    k.set_reserve_floor(U128(1));
+}
+
+/// A steward with a 5 NEAR bond and one paid 10 USDC job on day 1.
+fn owing_steward() -> Koperasi {
+    let mut k = setup();
+    as_(&dao(), near(0));
+    k.set_steward(Some(steward()));
+    as_(&steward(), near(5));
+    k.bond_steward();
+    receipt(&mut k, "job-1", 10_000_000, H1);
+    at(&agent(), DAY);
+    k.update_receipt("job-1".into(), ReceiptStatus::Paid);
+    k
+}
+
+#[test]
+fn anyone_slashes_a_steward_whose_audit_stayed_red_past_the_grace_period() {
+    let mut k = owing_steward();
+    assert_eq!(k.get_overdue_since(), Some(U64(DAY)), "the clock starts when the job is paid");
+    at(&acc("anyone.testnet"), 8 * DAY + 1);
+    assert_eq!(k.slash_overdue(), near(5));
+    assert!(k.get_info().steward_bond.is_zero());
+}
+
+#[test]
+#[should_panic(expected = "still within the grace period")]
+fn no_slash_inside_the_grace_period() {
+    let mut k = owing_steward();
+    at(&acc("anyone.testnet"), 8 * DAY);
+    k.slash_overdue();
+}
+
+#[test]
+#[should_panic(expected = "the audit is not red")]
+fn a_deposit_that_clears_the_debt_stops_the_clock() {
+    let mut k = owing_steward();
+    at(&usdc(), 2 * DAY);
+    let _ = k.ft_on_transfer(steward(), U128(9_500_000), "earnings".into()); // 10 USDC net of the 5% fee
+    assert_eq!(k.get_overdue_since(), None);
+    at(&acc("anyone.testnet"), 30 * DAY);
+    k.slash_overdue();
+}
+
+#[test]
+#[should_panic(expected = "the audit is not red")]
+fn a_new_steward_does_not_answer_for_the_old_one() {
+    let mut k = owing_steward();
+    at(&dao(), 2 * DAY);
+    k.set_steward(Some(acc("new-steward.testnet")));
+    at(&acc("anyone.testnet"), 30 * DAY);
+    k.slash_overdue();
+}
+
+#[test]
+fn a_red_audit_from_before_the_upgrade_starts_its_clock_at_the_first_call() {
+    let mut k = owing_steward();
+    env::storage_remove(b"owed_since"); // as on a co-op upgraded to this code
+    at(&acc("anyone.testnet"), 40 * DAY);
+    assert_eq!(k.slash_overdue(), NearToken::from_yoctonear(0), "starts the clock, slashes nothing");
+    assert_eq!(k.get_overdue_since(), Some(U64(40 * DAY)));
+    at(&acc("anyone.testnet"), 47 * DAY + 1);
+    assert_eq!(k.slash_overdue(), near(5));
 }

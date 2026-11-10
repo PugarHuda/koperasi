@@ -26,11 +26,14 @@ const SAVINGS_UNIT: u128 = 1_000_000_000_000_000_000_000; // 10^21 yocto
 const GAS_FT_TRANSFER: Gas = Gas::from_tgas(10);
 const GAS_CALLBACK: Gas = Gas::from_tgas(10);
 const GAS_VIEW: Gas = Gas::from_tgas(10);
+/// The callback that splits a share under a reserve floor: one pass over the members plus the transfer to the DAO.
+const GAS_SHARE: Gas = Gas::from_tgas(60);
 
 #[ext_contract(ext_ft)]
 #[allow(dead_code)]
 trait FungibleToken {
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
+    fn ft_balance_of(&self, account_id: AccountId) -> U128;
 }
 
 #[ext_contract(ext_dao)]
@@ -55,6 +58,14 @@ const MAX_PROOF_LEN: usize = 1024;
 const KEY_OWED_SHARES: &[u8] = b"owed_shares";
 /// Σ USDC sent by ft_transfer whose callback has not come back yet (claims and transfers to the DAO).
 const KEY_IN_FLIGHT: &[u8] = b"in_flight";
+/// The least USDC the DAO must keep outside a profit share (set by vote; 0 = no floor). Its own key: no migration.
+const KEY_RESERVE_FLOOR: &[u8] = b"reserve_floor";
+/// When the audit turned red for the current steward (ns), and what was already owed when they were appointed.
+const KEY_OWED_SINCE: &[u8] = b"owed_since";
+const KEY_OWED_BASE: &[u8] = b"owed_base";
+/// How long the audit may stay red before anyone can slash the steward's bond: time to collect from Agent Market and
+/// pass it on. A deposit that clears the debt stops the clock.
+const STEWARD_GRACE_NS: u64 = 7 * 24 * 3600 * 1_000_000_000;
 
 fn read_u128(key: &[u8]) -> Option<u128> {
     env::storage_read(key).map(|b| u128::from_le_bytes(b.try_into().unwrap_or_else(|_| env::panic_str("bad counter"))))
@@ -532,6 +543,9 @@ impl Koperasi {
         }
         Event::StewardSet { steward: steward.clone(), bond_returned: returned }.emit();
         self.steward = steward;
+        // the new steward answers only for what goes unpaid from now on
+        write_u128(KEY_OWED_BASE, self.get_audit().owed.0);
+        env::storage_remove(KEY_OWED_SINCE);
     }
 
     /// The steward kept money: its whole bond goes to the DAO.
@@ -543,6 +557,43 @@ impl Koperasi {
         Event::StewardSlashed { amount: bond }.emit();
         let _ = Promise::new(self.dao_id.clone()).transfer(bond);
         bond
+    }
+
+    /// Anyone: once the audit has been red for this steward longer than `STEWARD_GRACE_NS`, the bond goes to the DAO,
+    /// no vote needed. Returns what was slashed. On a red audit whose clock was not running yet (a co-op upgraded to
+    /// this code), the first call starts it and slashes nothing.
+    pub fn slash_overdue(&mut self) -> NearToken {
+        let owed = self.track_audit();
+        let Some(since) = self.get_overdue_since() else { env::panic_str("the audit is not red for this steward") };
+        if since.0 == env::block_timestamp() {
+            return NearToken::from_yoctonear(0);
+        }
+        require!(env::block_timestamp() - since.0 > STEWARD_GRACE_NS, "the steward is still within the grace period");
+        let bond = std::mem::replace(&mut self.steward_bond, NearToken::from_yoctonear(0));
+        require!(!bond.is_zero(), "no bond");
+        Event::StewardSlashedOverdue { amount: bond, owed: U128(owed), since }.emit();
+        let _ = Promise::new(self.dao_id.clone()).transfer(bond);
+        bond
+    }
+
+    /// Start or stop the overdue clock: it runs while the audit owes more than when this steward was appointed.
+    fn track_audit(&mut self) -> u128 {
+        let owed = self.get_audit().owed.0;
+        let base = read_u128(KEY_OWED_BASE).unwrap_or(0).min(owed);
+        write_u128(KEY_OWED_BASE, base);
+        if owed > base {
+            if env::storage_read(KEY_OWED_SINCE).is_none() {
+                env::storage_write(KEY_OWED_SINCE, &env::block_timestamp().to_le_bytes());
+            }
+        } else {
+            env::storage_remove(KEY_OWED_SINCE);
+        }
+        owed
+    }
+
+    /// When the audit turned red for the current steward (ns), if it is red.
+    pub fn get_overdue_since(&self) -> Option<U64> {
+        env::storage_read(KEY_OWED_SINCE).map(|b| U64(u64::from_le_bytes(b.try_into().unwrap_or_else(|_| env::panic_str("bad clock")))))
     }
 
     /// The steward locks NEAR as a bond the DAO can slash if deposits fall short of the receipts.
@@ -625,6 +676,7 @@ impl Koperasi {
         require!(ok, "invalid status change");
         r.status = status;
         Event::ReceiptUpdated { job_id, status }.emit();
+        self.track_audit();
     }
 
     // ---------- money in: USDC ft_transfer_call ----------
@@ -639,18 +691,56 @@ impl Koperasi {
             "earnings" if Some(&sender_id) == self.steward.as_ref() => {
                 self.deposited += amount.0;
                 Event::EarningsDeposited { amount }.emit();
+                self.track_audit();
                 self.forward_to_dao(amount.0);
                 PromiseOrValue::Value(U128(0))
             }
             "share" if sender_id == self.dao_id => {
-                let reserve = self.distribute(amount.0);
-                if reserve > 0 {
-                    self.forward_to_dao(reserve);
+                if read_u128(KEY_RESERVE_FLOOR).unwrap_or(0) == 0 {
+                    return PromiseOrValue::Value(U128(self.share_now(amount.0)));
                 }
-                PromiseOrValue::Value(U128(0))
+                // read what the DAO keeps outside this share before splitting it
+                ext_ft::ext(self.usdc_id.clone())
+                    .with_static_gas(GAS_VIEW)
+                    .ft_balance_of(self.dao_id.clone())
+                    .then(Self::ext(env::current_account_id()).with_static_gas(GAS_SHARE).on_dao_balance(amount))
+                    .into()
             }
             _ => PromiseOrValue::Value(amount),
         }
+    }
+
+    fn share_now(&mut self, amount: u128) -> u128 {
+        let reserve = self.distribute(amount);
+        if reserve > 0 {
+            self.forward_to_dao(reserve);
+        }
+        0
+    }
+
+    /// Callback of a profit share under a reserve floor: split it, or send it all back (returned as unused).
+    #[private]
+    pub fn on_dao_balance(&mut self, amount: U128, #[callback_result] balance: Result<U128, PromiseError>) -> U128 {
+        let floor = read_u128(KEY_RESERVE_FLOOR).unwrap_or(0);
+        match balance {
+            Ok(b) if b.0 >= floor => U128(self.share_now(amount.0)),
+            b => {
+                Event::ShareRefused { amount, dao_balance: b.ok(), floor: U128(floor) }.emit();
+                amount
+            }
+        }
+    }
+
+    /// DAO only: the least USDC the treasury must keep outside a profit share (0: no floor). A share that would leave
+    /// less goes back to the DAO whole.
+    pub fn set_reserve_floor(&mut self, amount: U128) {
+        self.assert_dao();
+        write_u128(KEY_RESERVE_FLOOR, amount.0);
+        Event::ReserveFloorSet { amount }.emit();
+    }
+
+    pub fn get_reserve_floor(&self) -> U128 {
+        U128(read_u128(KEY_RESERVE_FLOOR).unwrap_or(0))
     }
 
     /// Credit every member's share and return what stays in the DAO (reserve + rounding + unused pools).
@@ -669,7 +759,9 @@ impl Koperasi {
             // checked_div: an empty pool (nobody saved, or no points) pays nothing from it
             share += (simp_pool * (m.savings.0 / SAVINGS_UNIT)).checked_div(total_simp).unwrap_or(0);
             share += (points_pool * m.points as u128).checked_div(total_points).unwrap_or(0);
-            m.points = 0;
+            // points halve at each share instead of resetting: recent work counts most, and a share right after the
+            // last one still has a points pool to pay (a reset sent that 40% to the reserve)
+            m.points /= 2;
             if share > 0 {
                 let c = self.claimable.get(a).copied().unwrap_or(0);
                 self.claimable.insert(a.clone(), c + share);

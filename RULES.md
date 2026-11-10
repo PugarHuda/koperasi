@@ -11,7 +11,8 @@
    per job and per day. The DAO or the steward can pause it at once; only the DAO can restart it.
 5. **The steward** holds the Agent Market account, posts a bond, and passes every payout on with
    `ft_transfer_call(msg "earnings")`. The audit shows what is still missing. The members can slash the bond and
-   appoint someone else.
+   appoint someone else; and if the audit stays red for this steward more than 7 days, anyone can slash it
+   (`slash_overdue`), no vote needed. A new steward does not answer for what the old one left unpaid.
 6. **Profit share.** When the members vote to share the treasury, 20% stays as the reserve, 40% is shared by savings
-   (NEAR staked for inference) and 40% by contribution points earned since the last share. Rounding stays in the
-   reserve. Each member claims their own share. Points reset after each share; savings do not.
+   (NEAR staked for inference) and 40% by contribution points. Rounding stays in the
+   reserve. Each member claims their own share. Points halve at each share, so recent work counts most; savings do not. A share that would leave the treasury under the floor the members voted goes back whole.

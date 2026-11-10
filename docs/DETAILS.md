@@ -15,7 +15,7 @@ npm install
 npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `92 passed` for the contract and `pass 29` for the agent, scripts and page logic: response-signature recovery, the TDX quote
+See: `100 passed` for the contract and `pass 29` for the agent, scripts and page logic: response-signature recovery, the TDX quote
 binding the server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market
 check, the page's profit-share preview matching the contract's split to the last USDC unit, views that move past a
 rate-limited RPC, and the agent's money path when a job fails half-way (a billed inference that then fails is booked at
@@ -201,6 +201,10 @@ Competitor scan, 7 Nov 2026 (sources linked; "inferred" where we could not confi
 | [Botto](https://docs.botto.com/details/governance) | AI artist steered by stakers | stake-weighted votes, a human guardian | none | NFT sales to treasury and voters | no proof of which model or prompt ran (inferred) |
 | [Agents With Benefits](https://devfolio.co/projects/agents-with-benefits-3569) (ETHDenver 2024) | DAOs co-own agents as NFTs, share revenue | the DAO | source code on the NFT | revenue share | prototype; no TEE, no audit of a human intermediary (inferred) |
 | [NEAR AI Agent Market](https://near.ai/blog/introducing-near-ai-agent-market) | where agents sell work (our channel) | one owner per agent | deliverable hash | the owner | no collective ownership |
+| [AjoAI](https://www.karmahq.xyz/project/ajoai/about) (Celo) | an agent that runs a savings circle (*ajo*, like *arisan*) | the circle's rules | none shown (inferred) | rotates to members | the agent runs the circle; the members do not own or steer an agent that earns |
+| [Ronda](https://ethglobal.com/showcase/ronda-7ck82) (ETHGlobal, Celo prize) | on-chain rotating savings | the circle | none | rotates to members | savings only, no shared business or profit |
+| [Moloch / DAOhaus](https://hackmd.io/@daohaus/ryXWI_4q_) | grant and venture DAOs with *ragequit* | shares, one vote per share | none | treasury; a member can leave with their part | no reputation tiers; every payout is a vote |
+| [Coordinape](https://gitcoin.co/apps/coordinape) | members allocate GIVE to each other each epoch | peers | none | pays by GIVE received | contribution is a popularity vote, not a record of paid work |
 
 **What is the same** (parity, not a selling point): TEE inference and input hashes (NEAR AI, Shade), an agent that sells
 work (Olas Mech, Virtuals ACP), a DAO treasury and revenue share (Botto, Agents With Benefits), Sputnik bounties.

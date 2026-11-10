@@ -65,7 +65,7 @@ The members vote you in.
 
 ```sh
 npm install
-npm test        # lint, typecheck, 29 unit tests, 92 contract tests (unit, fuzz, invariant)
+npm test        # lint, typecheck, 29 unit tests, 100 contract tests (unit, fuzz, invariant)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 
@@ -96,7 +96,7 @@ competitor scan. There are Trezu forms for the co-op's proposals in [`trezu/`](t
 | By-laws | the agent config; its sha256 is the only one the contract accepts receipts for (`set_config`) |
 | Task record (earned trust) | finished tasks per named account, each naming its task or DAO proposal (`get_record`); trust counts the *different* posters on it, and the DAO for voted bounties (`get_trust_sources`); decides which tier pays (`contract/src/tasks.rs`) |
 | Task payout | a Transfer proposal from the DAO treasury, filed and approved by the contract in its DAO role `tasks` (`transfer:AddProposal`, `transfer:VoteApprove`, nothing else); `get_payout_proposal(task)` names it |
-| Contribution points | awarded by vote for by-law or tool work (`award_points`); reset after each profit share |
+| Contribution points | awarded by vote for by-law or tool work (`award_points`) or earned by tasks; halve at each profit share, so recent work counts most |
 | Audit | `get_audit`: paid jobs net of the 5% market fee vs. what the steward passed on |
 | Profit share | `ft_transfer_call(msg "share")` from the DAO: reserve back to the DAO, the rest credited per member (`claim_share`) |
 | Changing the contract | a NEAR global contract (immutable, addressed by its sha256) the members switch to by vote (`upgrade`); wasm is too large for a proposal's arguments (~48 Mgas a byte), a 32-byte hash is not |
