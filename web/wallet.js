@@ -314,7 +314,6 @@ async function render() {
         A new implicit account exists only once it has received some NEAR.</p>
       <button type="button" class="btn" id="w-switch">Disconnect and connect a ${esc(dep.network)} account</button>`;
     $("w-out").onclick = () => connector.disconnect().catch(() => {});
-  armCommons();
     $("w-switch").onclick = () => connector.disconnect().catch(() => {}).then(() => connector.connect()).catch(() => {});
     return;
   }
@@ -431,6 +430,7 @@ async function render() {
   box.innerHTML = html;
 
   $("w-out").onclick = () => connector.disconnect().catch(() => {});
+  armCommons();
   const copy = $("w-invite-copy");
   if (copy) copy.onclick = () => navigator.clipboard.writeText($("w-invite").value).then(() => { copy.textContent = "Copied"; }, () => $("w-invite").select());
   const vouch = $("w-vouch");

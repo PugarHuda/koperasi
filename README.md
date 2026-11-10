@@ -30,6 +30,8 @@ Built at NEAR HACKATHON (Nov 2026). Main track: **Social Money**. Also Autonomou
 | The live page: who controls the agent, read from the DAO | Tasks paid from the treasury, by earned trust or by vote |
 |---|---|
 | [![Who controls this AI agent](docs/img/page-top.png)](https://koperasi-kohl.vercel.app) | [![Tasks and trust](docs/img/page-trust.png)](https://koperasi-kohl.vercel.app/#trust) |
+| **What members owe each other: pledges, the co-op court, standing** | **A member's work record, read from the chain** |
+| [![Commons](docs/img/page-commons.png)](https://koperasi-kohl.vercel.app/#commons) | [`/cert.html?who=kop-alice-mw4i3w8f.testnet`](https://koperasi-kohl.vercel.app/cert.html?who=kop-alice-mw4i3w8f.testnet): pledges kept, jury duty, paid work, each traced to its transaction |
 
 ## Every claim, its evidence, and the check that reads it
 

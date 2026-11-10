@@ -60,3 +60,19 @@ test("the keeper reads only members whose waiting stake was not read for 6 hours
   const read = async (/** @type {string} */ m, /** @type {any} */ a) => (m === "get_members" ? Object.keys(pending).map((id) => [id, {}]) : pending[a.account_id]);
   assert.deepEqual(await stale(now, read), ["a.testnet", "c.testnet"], "c has nothing waiting but may have unstaked");
 });
+
+test("the keeper closes cases past 3 days, ends a term that ran out, and slashes a steward 7 days late", async () => {
+  const { duties } = await import("../../api/keeper.mjs");
+  const D = 86_400n * 10n ** 9n;
+  const now = 100n * D;
+  const state = (/** @type {any} */ o) => async (/** @type {string} */ m) => ({
+    get_cases: [{ id: 0, status: "Open", opened: String(now - 3n * D) }, { id: 1, status: "Open", opened: String(now - 3n * D + 1n) },
+      { id: 2, status: "Upheld", opened: "0" }],
+    get_steward_term: [90, o.ends], get_overdue: o.overdue, get_info: { steward_bond: o.bond } })[m];
+  const due = await duties(now, state({ ends: String(now), overdue: "950000", bond: "1000000000000000000000000" }));
+  assert.deepEqual(due.map((d) => [d.method, d.args]), [["close_case", { id: 0 }], ["end_steward_term", {}], ["slash_overdue", {}]],
+    "exactly 3 days closes case 0; case 1 is a nanosecond short; a decided case is left alone");
+  const quiet = await duties(now, state({ ends: String(now + 1n), overdue: "950000", bond: "0" }));
+  assert.deepEqual(quiet.map((d) => d.method), ["close_case"], "a term not yet over, and no bond left to slash");
+  assert.deepEqual((await duties(now, state({ ends: null, overdue: "0", bond: "1" }))).map((d) => d.method), ["close_case"]);
+});
