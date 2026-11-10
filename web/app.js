@@ -217,6 +217,8 @@ try {
           <div><dt>Inference cap per job</dt><dd>$${pick(/max_inference_per_job_usd:\s*([\d.]+)/)}</dd></div>
           <div><dt>Inference cap per day</dt><dd>$${pick(/max_inference_per_day_usd:\s*([\d.]+)/)}</dd></div>
           <div class="wide"><dt>Takes jobs tagged</dt><dd>${pick(/tags_any:\s*\[([^\]]*)\]/)}</dd></div>
+          ${/members_at_least:\s*\d+/.test(text) ? `<div class="wide"><dt>The steward hands over at</dt><dd>${pick(/members_at_least:\s*(\d+)/)} members
+            (now ${info.members}) or ${pick(/paid_jobs_at_least:\s*(\d+)/)} paid jobs (now ${receipts.filter((r) => r.status === "Paid").length}), both read from the chain</dd></div>` : ""}
         </dl>
         <details><summary>Read the whole file</summary><pre>${esc(text)}</pre></details>`;
     } catch (e) {
