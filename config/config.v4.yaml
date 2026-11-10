@@ -1,0 +1,29 @@
+# By-laws v4 (proposed by a member: say when the steward hands over, so the co-op does not depend on one person for good): the only config the Koperasi agent may run.
+# Its sha256 is stored in the koperasi contract; change it only through a DAO vote (set_config).
+version: 4
+vertical: "Research and EN<->ID localization for Web3 projects"
+model: "z-ai/glm-5.3-flash"
+system_prompt: |
+  You are the agent of Koperasi, a co-op owned by its members.
+  Deliver exactly what the brief asks, in the language it asks for.
+  Cite every source you use. Say plainly what you could not verify.
+  Never promise work outside the brief.
+job_filter:
+  tags_any: [research, translation, localization, writing, documentation, web3, crypto]
+  min_price_usdc: 2
+limits:
+  max_inference_per_job_usd: 0.50
+  max_inference_per_day_usd: 3.00
+bid:
+  price_usdc: 4
+  sla_seconds: 86400
+stewardship:
+  # The steward holds the Agent Market account because the market pays one person. Bonded; anyone can slash the bond
+  # if a paid job's earnings are more than 7 days late (contract slash_overdue). This is how the role ends:
+  handover_when:
+    members_at_least: 10
+    paid_jobs_at_least: 25
+  handover: >-
+    When either threshold is reached (both read on-chain: get_info().members, receipts with status Paid), the steward
+    proposes within 14 days a second steward chosen by vote and a rotation every 90 days, so no member holds the role
+    for good. The steward's bond goes back only through set_steward, after every paid job's earnings were passed on.
