@@ -1,6 +1,8 @@
 // Gasless calls (NEP-366): a member's wallet signs a delegate action, this relayer wraps it in a transaction and pays
-// the gas. Deposits are still paid by the member (they run as the member's own actions). Only calls to the co-op's
-// contract and DAO, only function calls, only by a member (or someone joining), and a few per account an hour.
+// the gas. Only calls with no deposit: under NEP-366 the relayer pays the inner actions' deposits (nearcore
+// fees.rs total_deposit: "here Relayer pays the deposit"), so a relayed `join` with a large deposit would drain it.
+// Calls that carry a deposit go from the member's wallet. Only calls to the co-op's contract and DAO, only function
+// calls, only by a member (or someone joining), and a few per account an hour.
 // Env: RELAYER_ID, RELAYER_KEY (ed25519:… of a testnet account that only holds gas money).
 import { deserialize } from "borsh";
 import { Account, JsonRpcProvider, PublicKey, SCHEMA, actions, baseEncode, encodeDelegateAction } from "near-api-js";
@@ -46,6 +48,7 @@ export async function refuse(sd, { members, chain = onChain } = {}) {
     const f = a.functionCall;
     if (!f) return "only function calls are relayed";
     if (d.receiverId === dep.dao && !DAO.has(f.methodName)) return `${f.methodName} on the DAO is not relayed`;
+    if (BigInt(f.deposit) !== 0n) return "calls with a deposit are not relayed (the relayer would pay it): send it from your wallet";
     gas += BigInt(f.gas);
   }
   if (gas > MAX_GAS) return "more than 300 Tgas";

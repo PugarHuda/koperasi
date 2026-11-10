@@ -33,14 +33,15 @@ function say(html) {
 const notSent = (msg) => Object.assign(new Error(msg), { notSent: true });
 
 // gasless (NEP-366): wallets that sign delegate actions send co-op calls through the co-op's relayer (api/relay.mjs),
-// which pays the gas; the deposit still comes from the member. Off when the relayer is off (e.g. on localhost).
+// which pays the gas. Only calls with no deposit: under NEP-366 the relayer would pay a deposit, so the relayer refuses
+// those and they go from the member's wallet. Off when the relayer is off (e.g. on localhost).
 const relay = fetch("/api/relay").then((r) => r.ok && r.json()).then((j) => !!j?.on, () => false);
 let gasless = false;
 
 async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } = {}) {
   const wallet = await connector.wallet();
   const action = { type: "FunctionCall", params: { methodName, args, gas: (BigInt(tgas) * 10n ** 12n).toString(), deposit: deposit.toString() } };
-  gasless = [dep.contract, dep.dao].includes(receiverId) && !!wallet.manifest?.features?.signDelegateActions && await relay;
+  gasless = BigInt(deposit) === 0n && [dep.contract, dep.dao].includes(receiverId) && !!wallet.manifest?.features?.signDelegateActions && await relay;
   // the chain's own numbers first: a call the account cannot pay for is never signed
   const lack = affordable(await query({ request_type: "view_account", account_id: me }), deposit, gasless ? 0 : tgas);
   if (lack) throw notSent(lack);

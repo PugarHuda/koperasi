@@ -9,11 +9,11 @@ import dep from "../../deployment.testnet.json" with { type: "json" };
 
 const key = KeyPair.fromRandom("ed25519");
 const signer = new KeyPairSigner(key);
-/** @param {string} receiverId @param {string} method @param {{ senderId?: string, tgas?: number }} [o] */
-async function signed(receiverId, method, { senderId = "alice.testnet", tgas = 30 } = {}) {
+/** @param {string} receiverId @param {string} method @param {{ senderId?: string, tgas?: number, deposit?: bigint }} [o] */
+async function signed(receiverId, method, { senderId = "alice.testnet", tgas = 30, deposit = 0n } = {}) {
   const d = buildDelegateAction({
     senderId, receiverId, nonce: 1n, maxBlockHeight: 1000n, publicKey: key.getPublicKey(),
-    actions: [actions.functionCall(method, {}, BigInt(tgas) * 10n ** 12n, 0n)],
+    actions: [actions.functionCall(method, {}, BigInt(tgas) * 10n ** 12n, deposit)],
   });
   const { signedDelegate } = await signer.signDelegateAction(d);
   return /** @type {any} */ (deserialize(SCHEMA.SignedDelegate, encodeSignedDelegate(signedDelegate))); // what the relayer decodes
@@ -30,6 +30,9 @@ test("the relayer pays only for co-op calls by members, or someone joining", asy
   assert.match(await refuse(await signed("usdc.testnet", "ft_transfer"), members), /only calls to/);
   assert.match(await refuse(await signed(dep.dao, "remove_blob"), members), /not relayed/);
   assert.match(await refuse(await signed(dep.contract, "claim_share", { tgas: 301 }), members), /300 Tgas/);
+  // NEP-366: the relayer pays inner deposits, so a stranger's `join` with the relayer's balance as deposit would drain it
+  assert.match(await refuse(await signed(dep.contract, "join", { senderId: "new.testnet", deposit: 9n * 10n ** 24n }), members), /deposit are not relayed/);
+  assert.match(await refuse(await signed(dep.dao, "add_proposal", { deposit: 1n }), members), /deposit are not relayed/, "even 1 yocto");
 });
 
 test("a key that is not the sender's, a used nonce or an expired delegate costs the relayer nothing", async () => {
