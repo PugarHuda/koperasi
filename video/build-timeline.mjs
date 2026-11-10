@@ -27,11 +27,11 @@ const scenes = narration.map((n) => {
   const s = { id: n.id, kind: n.kind, chapter: CHAPTERS[n.id], words, audio: `audio/${n.id}.mp3`, durMs: Math.max(audioMs, words.at(-1).end) + 900 };
   if (fs.existsSync(pub(`clips/${n.id}.json`))) {
     const meta = JSON.parse(fs.readFileSync(pub(`clips/${n.id}.json`), "utf8"));
-    const clipMs = probe(pub(`clips/${n.id}.webm`));
+    const clipMs = probe(pub(`clips/${n.id}.mp4`));
     const last = Math.max(0, ...meta.marks.map((m) => m.t + (m.dur ?? 0)));
     // past the clip's end the last frame holds (Remotion <Freeze>), so the narration is never cut
     s.durMs = Math.max(s.durMs, last + 500);
-    Object.assign(s, { clip: `clips/${n.id}.webm`, start: meta.start, clipMs: clipMs - meta.start - 150, marks: meta.marks });
+    Object.assign(s, { clip: `clips/${n.id}.mp4`, start: meta.start, clipMs: clipMs - meta.start - 150, marks: meta.marks });
   }
   if (n.id === "s13") s.lines = fs.readFileSync(pub("clips/s13.txt"), "utf8").split(/\r?\n/).filter((l) => l.trim());
   return s;
