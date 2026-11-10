@@ -70,6 +70,10 @@ const vp = role?.vote_policy?.["*"] ?? policy.default_vote_policy;
 check(vp.weight_kind === "RoleWeight" && JSON.stringify(vp.threshold) === "[1,2]", "one member, one vote: RoleWeight, threshold 1/2",
   `${vp.weight_kind}, threshold ${JSON.stringify(vp.threshold)}`);
 
+const wide = policy.roles.filter((x) => x.permissions.some((perm) => perm === "*:*" || (x.kind === "Everyone" && !perm.endsWith(":AddProposal"))));
+check(wide.length === 0 && BigInt(policy.proposal_bond) > 0n, "no role can act alone: nobody holds *:*, outsiders may only file proposals (with a bond)",
+  `${policy.roles.map((x) => `${x.name}: ${x.permissions.join(",")}`).join("; ")}; proposal bond ${near(policy.proposal_bond)} NEAR`);
+
 // 5. earned trust: the contract pays only through its own DAO role, and every point of a record traces to a payout
 const tasksRole = policy.roles.find((x) => x.name === "tasks");
 check(JSON.stringify(tasksRole?.kind) === JSON.stringify({ Group: [d.contract] })
