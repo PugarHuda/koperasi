@@ -772,12 +772,14 @@ fn a_newcomer_needs_one_other_member_then_earns_trust_and_is_paid_from_the_treas
     assert_eq!((r.done, r.earned.0, r.refs.clone()), (1, 50 * MILLI, vec!["task:0".to_string()]));
     assert_eq!(k.get_trust_sources(acc("carol.testnet")), 1);
 
-    // now trusted: a small task is paid when alice accepts, with no vote
-    let (id, at_once) = deliver(&mut k, 80 * MILLI);
+    // alice alone cannot vouch for carol and then pay her herself with no vote
+    assert!(!deliver(&mut k, 10 * MILLI).1, "carol's only source is alice, the poster");
+    // trusted by alice: a small task from bob is paid when bob accepts, with no vote
+    let (id, at_once) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
     assert!(at_once);
-    assert_eq!(k.get_tasks(None, None)[1].approved_by, None);
+    assert_eq!(k.get_tasks(None, None)[2].approved_by, None);
     dao_says(&mut k, id, "Approved");
-    assert_eq!(k.get_record(acc("carol.testnet")).unwrap().refs, vec!["task:0", "task:1"]);
+    assert_eq!(k.get_record(acc("carol.testnet")).unwrap().refs, vec!["task:0", "task:2"]);
     assert_eq!(k.get_board().budget.0, 870 * MILLI);
     assert_eq!(k.get_contributors().len(), 1);
 }
@@ -801,14 +803,16 @@ fn two_friends_cannot_make_each_other_trusted_trust_needs_different_posters() {
     k.on_approve_policy(id, acc("alice.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
     dao_says(&mut k, id, "Approved");
     assert_eq!(k.get_trust_sources(acc("carol.testnet")), 2);
-    assert!(deliver(&mut k, 50 * MILLI).1, "trusted by alice and bob");
+    // alice's own payout needs two sources besides alice: bob is one
+    assert!(!deliver(&mut k, 50 * MILLI).1, "a poster never vouches for their own no-vote payout");
 }
 
 #[test]
 fn a_poster_pays_with_no_vote_only_up_to_the_daily_limit() {
     let mut k = board();
-    let (id, _) = deliver(&mut k, 50 * MILLI);
-    approve(&mut k, id);
+    let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 50 * MILLI); // bob vouches for carol
+    as_(&me(), near(0));
+    k.on_approve_policy(id, acc("alice.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
     dao_says(&mut k, id, "Approved");
     assert!(deliver(&mut k, 100 * MILLI).1);
     assert!(deliver(&mut k, 100 * MILLI).1, "200 of 200 today");
@@ -1548,7 +1552,7 @@ fn a_stake_that_was_not_read_for_more_than_a_day_waits_again() {
 }
 
 #[test]
-fn a_larger_stake_restarts_the_wait_and_a_smaller_one_keeps_it() {
+fn what_counts_is_the_least_stake_every_reading_of_the_wait_showed() {
     let mut k = setup();
     with_members(&mut k, &["alice.testnet"]);
     let staked = |k: &mut Koperasi, n: u128, ns: u64| {
@@ -1558,14 +1562,14 @@ fn a_larger_stake_restarts_the_wait_and_a_smaller_one_keeps_it() {
     for d in 0..6 {
         staked(&mut k, 1, d * DAY);
     }
-    staked(&mut k, 500, 6 * DAY); // a top-up a day before the first would count: waits 7 days from now
+    staked(&mut k, 500, 6 * DAY); // a top-up a day before the first counts does not ride along with it
     staked(&mut k, 500, 7 * DAY);
-    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 0);
-    for d in 8..=12 {
-        staked(&mut k, 300, d * DAY); // less than what waits: 300 was there since day 6
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 10u128.pow(24), "only the 1 NEAR every reading showed");
+    for d in 8..=14 {
+        staked(&mut k, 300, d * DAY); // the top-up waits its own 7 days; 300 is what stayed of it
     }
-    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 0);
-    staked(&mut k, 300, 13 * DAY);
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 10u128.pow(24));
+    staked(&mut k, 300, 15 * DAY);
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 300 * 10u128.pow(24));
     // a members' vote counts at once
     staked(&mut k, 900, 14 * DAY);
@@ -1641,16 +1645,18 @@ fn owing_steward() -> Koperasi {
 }
 
 #[test]
-fn anyone_slashes_a_steward_whose_audit_stayed_red_past_the_grace_period() {
+fn anyone_slashes_a_steward_who_kept_a_paid_job_past_the_grace_period() {
     let mut k = owing_steward();
-    assert_eq!(k.get_overdue_since(), Some(U64(DAY)), "the clock starts when the job is paid");
+    at(&acc("anyone.testnet"), 8 * DAY);
+    assert_eq!(k.get_overdue().0, 0, "exactly 7 days: still within the grace period");
     at(&acc("anyone.testnet"), 8 * DAY + 1);
+    assert_eq!(k.get_overdue().0, 9_500_000, "10 USDC net of the 5% fee");
     assert_eq!(k.slash_overdue(), near(5));
     assert!(k.get_info().steward_bond.is_zero());
 }
 
 #[test]
-#[should_panic(expected = "still within the grace period")]
+#[should_panic(expected = "nothing is overdue")]
 fn no_slash_inside_the_grace_period() {
     let mut k = owing_steward();
     at(&acc("anyone.testnet"), 8 * DAY);
@@ -1658,33 +1664,66 @@ fn no_slash_inside_the_grace_period() {
 }
 
 #[test]
-#[should_panic(expected = "the audit is not red")]
-fn a_deposit_that_clears_the_debt_stops_the_clock() {
+#[should_panic(expected = "nothing is overdue")]
+fn a_deposit_that_covers_the_job_prevents_the_slash() {
     let mut k = owing_steward();
     at(&usdc(), 2 * DAY);
-    let _ = k.ft_on_transfer(steward(), U128(9_500_000), "earnings".into()); // 10 USDC net of the 5% fee
-    assert_eq!(k.get_overdue_since(), None);
+    let _ = k.ft_on_transfer(steward(), U128(9_500_000), "earnings".into());
     at(&acc("anyone.testnet"), 30 * DAY);
     k.slash_overdue();
 }
 
 #[test]
-#[should_panic(expected = "the audit is not red")]
-fn a_new_steward_does_not_answer_for_the_old_one() {
+fn a_steward_who_passes_each_job_on_in_time_is_not_slashed_while_newer_jobs_keep_the_audit_red() {
+    let mut k = owing_steward(); // job-1 paid on day 1
+    at(&usdc(), 6 * DAY);
+    let _ = k.ft_on_transfer(steward(), U128(9_500_000), "earnings".into()); // job-1 passed on within its 7 days
+    receipt(&mut k, "job-2", 10_000_000, H1);
+    at(&agent(), 7 * DAY);
+    k.update_receipt("job-2".into(), ReceiptStatus::Paid);
+    at(&acc("anyone.testnet"), 8 * DAY + 1);
+    assert!(k.get_audit().owed.0 > 0, "the audit is red (job-2)");
+    assert_eq!(k.get_overdue().0, 0, "but job-2 is still within its grace period");
+    at(&acc("anyone.testnet"), 14 * DAY + 1);
+    assert_eq!(k.get_overdue().0, 9_500_000);
+}
+
+#[test]
+fn replacing_a_steward_who_still_owes_sends_their_bond_to_the_dao_and_the_new_one_starts_clean() {
     let mut k = owing_steward();
     at(&dao(), 2 * DAY);
     k.set_steward(Some(acc("new-steward.testnet")));
+    assert!(near_sdk::test_utils::get_logs().iter().any(|l| l.contains("\"steward_slashed\"")), "not refunded to a defaulter");
     at(&acc("anyone.testnet"), 30 * DAY);
-    k.slash_overdue();
+    assert_eq!(k.get_overdue().0, 0, "the new steward does not answer for the old one's job");
 }
 
 #[test]
-fn a_red_audit_from_before_the_upgrade_starts_its_clock_at_the_first_call() {
+fn a_steward_who_owes_nothing_gets_the_bond_back_when_replaced() {
     let mut k = owing_steward();
-    env::storage_remove(b"owed_since"); // as on a co-op upgraded to this code
-    at(&acc("anyone.testnet"), 40 * DAY);
-    assert_eq!(k.slash_overdue(), NearToken::from_yoctonear(0), "starts the clock, slashes nothing");
-    assert_eq!(k.get_overdue_since(), Some(U64(40 * DAY)));
-    at(&acc("anyone.testnet"), 47 * DAY + 1);
+    at(&usdc(), 2 * DAY);
+    let _ = k.ft_on_transfer(steward(), U128(9_500_000), "earnings".into());
+    at(&dao(), 3 * DAY);
+    k.set_steward(Some(acc("new-steward.testnet")));
+    assert!(near_sdk::test_utils::get_logs().iter().any(|l| l.contains("\"bond_returned\":\"5000000000000000000000000\"")));
+}
+
+#[test]
+fn a_receipt_paid_before_this_code_counts_from_when_it_was_recorded() {
+    let mut k = owing_steward();
+    env::storage_remove(b"paid_at:job-1"); // as on a co-op upgraded to this code: recorded at 0, no paid_at
+    env::storage_remove(b"steward_from");
+    at(&acc("anyone.testnet"), 7 * DAY + 1);
     assert_eq!(k.slash_overdue(), near(5));
+}
+
+#[test]
+fn staking_rewards_do_not_restart_the_wait() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    for d in 0..=7u64 {
+        at(&me(), d * DAY);
+        k.on_staked(acc("alice.testnet"), Ok(U128(10u128.pow(24) + d as u128 * 1_000))); // a little more each epoch
+    }
+    assert_eq!(k.get_member(acc("alice.testnet")).unwrap().savings.0, 10u128.pow(24), "the first reading's stake counts");
 }

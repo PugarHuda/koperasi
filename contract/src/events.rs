@@ -57,9 +57,9 @@ pub enum Event {
     /// The steward's whole bond went to the DAO.
     #[event_version("1.0.0")]
     StewardSlashed { amount: NearToken },
-    /// The audit has been red since `since` (ns) for more than the steward's grace period, so anyone slashed the bond.
+    /// Earnings of jobs paid more than the grace period ago were not passed on (`overdue` USDC), so anyone slashed the bond.
     #[event_version("1.0.0")]
-    StewardSlashedOverdue { amount: NearToken, owed: U128, since: U64 },
+    StewardSlashedOverdue { amount: NearToken, overdue: U128 },
     /// The agent stopped (kill switch).
     #[event_version("1.0.0")]
     Paused { by: AccountId },

@@ -15,7 +15,7 @@ npm install
 npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `100 passed` for the contract and `pass 29` for the agent, scripts and page logic: response-signature recovery, the TDX quote
+See: `103 passed` for the contract and `pass 29` for the agent, scripts and page logic: response-signature recovery, the TDX quote
 binding the server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market
 check, the page's profit-share preview matching the contract's split to the last USDC unit, views that move past a
 rate-limited RPC, and the agent's money path when a job fails half-way (a billed inference that then fails is booked at
@@ -186,7 +186,7 @@ The result is committed to [`evidence/`](../evidence) and shown on the live page
 
 **Positioning.** For small communities that want to own the AI agent working for them, but on today's agent platforms
 get token speculation instead of control and profit, Koperasi is a member-owned AI co-op on NEAR where one member, one
-vote pins the agent's prompt, model and prices by hash, the model's TEE is checked before every job (and by any visitor,
+vote pins the agent's prompt, model and prices by hash, the model's TEE is re-verified within the hour before each job (and by any visitor,
 in their own browser), and members claim profit by rule. Token-launched agents such as Virtuals or ai16z leave control
 with insiders or large holders, and pay holders only through the token price.
 

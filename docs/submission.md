@@ -28,7 +28,7 @@ file is the script.
    - NEAR AI Cloud (TEE, billing);
    - Agent Market;
    - global contracts.
-7. **Validation:** 100 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 29 unit tests, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), upgrades by vote up to #50.
+7. **Validation:** 103 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 29 unit tests, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), upgrades by vote up to #50.
 8. **Next:** mainnet with Circle USDC, NEAR AI credits for the organization, independent members, a tighter CSP, a USDC task budget.
 
 ## Submission form text

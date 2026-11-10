@@ -159,8 +159,14 @@ fn payout_kind(t: &Task) -> Value {
 /// posting tasks to each other give one source each, so trust needs work for more than one member.
 // ponytail: reads every task on the record; keep a poster set per record if records grow long
 fn sources(r: &Record) -> u32 {
+    sources_besides(r, None)
+}
+
+/// Sources other than `poster`: a poster cannot be the one who vouches for paying their own task with no vote.
+fn sources_besides(r: &Record, poster: Option<&AccountId>) -> u32 {
     let mut s: Vec<String> = r.refs.iter()
         .map(|x| x.strip_prefix("task:").map_or("dao".into(), |id| task(id.parse().unwrap()).poster.to_string()))
+        .filter(|p| poster.is_none_or(|q| p != q.as_str()))
         .collect();
     s.sort();
     s.dedup();
@@ -262,7 +268,8 @@ impl Koperasi {
         require!(self.members.contains_key(&t.poster), "the poster is no longer a member");
         let rule: TrustRule = load(KEY_TRUST).unwrap_or_else(|| env::panic_str("no trust rule"));
         let who = t.contributor.clone().unwrap();
-        let trusted = load::<Record>(&record_key(&who)).map_or(0, |r| sources(&r)) >= rule.trusted_after;
+        // trust from members other than this poster: one member alone cannot vouch for and pay the same contributor
+        let trusted = load::<Record>(&record_key(&who)).map_or(0, |r| sources_besides(&r, Some(&t.poster))) >= rule.trusted_after;
         let today = format!("auto:{}:{}", t.poster, env::block_timestamp() / DAY_NS);
         let spent = read_u128(today.as_bytes()).unwrap_or(0) + t.amount.0;
         if t.amount.0 <= rule.auto_max.0 && trusted && spent <= rule.poster_daily_auto.0 {

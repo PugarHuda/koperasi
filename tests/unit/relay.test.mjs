@@ -58,5 +58,5 @@ test("the keeper reads only members whose waiting stake was not read for 6 hours
   const now = 100n * H;
   const pending = { "a.testnet": [1, 0, String(now - 7n * H)], "b.testnet": [1, 0, String(now - 5n * H)], "c.testnet": null };
   const read = async (/** @type {string} */ m, /** @type {any} */ a) => (m === "get_members" ? Object.keys(pending).map((id) => [id, {}]) : pending[a.account_id]);
-  assert.deepEqual(await stale(now, read), ["a.testnet"]);
+  assert.deepEqual(await stale(now, read), ["a.testnet", "c.testnet"], "c has nothing waiting but may have unstaked");
 });

@@ -11,16 +11,19 @@ Indonesian villages have solved this for a century with the *koperasi* (co-opera
 business, every member has one vote, and profit is shared by savings and by contribution. Koperasi puts those rules on NEAR:
 
 - **The money never leaves the Sputnik treasury without a proposal.** The contract holds a DAO role, `tasks`, that may
-  only file and approve `Transfer` proposals. There is no second wallet and no new multisig.
-- **Trust is earned, and it decides who has to vote.** A contributor that *different* members already paid is paid when
-  the poster accepts, up to a small limit a day. Mid-size tasks need one other member, and large ones go to every member as a DAO bounty.
+  only file and approve `Transfer` proposals, and only under the rules below (small payouts it files and approves
+  with no member's vote). There is no second wallet and no new multisig. Task payouts are in NEAR, profit shares in USDC.
+- **Trust is earned, and it decides who has to vote.** A contributor that another member already paid (never the poster
+  alone: a member cannot vouch for someone and then pay them with no vote) is paid when the poster accepts, up to a
+  small limit a day. Mid-size tasks need one other member, and large ones go to every member as a DAO bounty.
   Every point on a record links to the task or proposal it came from.
 - **Profit is shared by rule.** The members vote a split (reserve, savings, contribution). The contract divides
   each payout to the last USDC unit, and each member claims their own share.
 - **The business is an AI agent the members steer.** Its prompt, model, prices and spend caps are by-laws hashed
-  on-chain, and they change only by vote. The model's TEE is checked before every job, and any visitor can check it with their own nonce.
+  on-chain, and they change only by vote. The model's TEE is re-verified within the hour before each job, and any visitor can check it with their own nonce.
 - **The person in the middle is bonded and audited.** The steward who collects the agent's earnings must pass them on.
-  The audit is public, and the members can slash the steward's bond.
+  The audit is public. The members can slash the steward's bond by vote, and anyone can slash it once a paid job's
+  earnings are more than 7 days late (`slash_overdue`).
 
 Built at NEAR HACKATHON (Nov 2026). Main track: **Social Money**. Also Autonomous Business and Agent Economy.
 
@@ -39,7 +42,7 @@ Built at NEAR HACKATHON (Nov 2026). Main track: **Social Money**. Also Autonomou
 | Join and leave | `kop-guest-984702.testnet` asked from the page and was voted in (#8). `kop-leaver-mw8pw94w.testnet` left and got its deposit back in [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV) |
 | By-laws vote | A member found that v2's model was not served and proposed v3. The members approved it as proposal #7, and the agent runs only `6c237221…` |
 | Agent account | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, only `record_receipt` / `update_receipt` on the contract |
-| Gasless for members | NEP-366 relayer (`api/relay.mjs`, members and joiners only, contract and DAO only): [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) |
+| Gasless for members | NEP-366 relayer (`api/relay.mjs`, members and joiners only, contract and DAO only, calls without a deposit: under NEP-366 the relayer would pay it): [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) |
 | Live page | **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR) |
 
 The accounts alice, bob, carol and the steward are the builder's demo members. They show that the mechanism works,
@@ -65,7 +68,7 @@ The members vote you in.
 
 ```sh
 npm install
-npm test        # lint, typecheck, 29 unit tests, 100 contract tests (unit, fuzz, invariant)
+npm test        # lint, typecheck, 29 unit tests, 103 contract tests (unit, fuzz, invariant)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 
@@ -110,7 +113,7 @@ Rules in plain words: [`RULES.md`](RULES.md).
 |---|---|---|
 | **Social Money** | collective ownership, shared budgets, programmable rewards, reputation-based access, on Sputnik DAO and Trezu, without rebuilding the multisig | The DAO owns and steers the agent; membership is the DAO role; the profit share is a programmable reward by savings and contribution; contribution points trace to the proposal that awarded them; members are paid for tasks with **earned trust**, from the Sputnik treasury itself: the contract holds a DAO role that can only file and approve transfer proposals, so small payouts to contributors trusted by other members are paid when the poster accepts (within a daily limit per poster), mid-size ones need one other member, large ones are normal Sputnik bounties voted by all; every point of a record names the task or proposal it came from, and a member's finished task adds contribution points to their profit share (section 06 of the page); Trezu forms for these proposals in `trezu/`; even the contract's code changes only by vote; all money sits in the Sputnik treasury (demo steps 1, 2, 6) |
 | **Autonomous Business** | treasury, sales, procurement, revenue sharing; humans only set the constraints; no plaintext full-access key; public ledger; a short testnet loop | The agent sells work on Agent Market and buys its inference; the by-laws hold price, caps and kill switch (`pause`); the agent account has only a function-call key; receipts + audit are the public ledger (demo steps 3, 5, 7) |
-| **Agent Economy** | agents that earn, spend, pay for compute; a receipt per task | Bid → deliver → paid; inference cost per job from NEAR AI Cloud billing; one on-chain receipt per job (demo step 3) |
+| **Agent Economy** | agents that earn, spend, pay for compute; a receipt per task | Bid → deliver → paid; the runtime books each job's inference cost from NEAR AI Cloud billing (no real job yet: the demo receipts carry 0); one on-chain receipt per job (demo step 3) |
 
 ## Sustainability and the path to mainnet
 

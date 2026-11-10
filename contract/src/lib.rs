@@ -60,11 +60,14 @@ const KEY_OWED_SHARES: &[u8] = b"owed_shares";
 const KEY_IN_FLIGHT: &[u8] = b"in_flight";
 /// The least USDC the DAO must keep outside a profit share (set by vote; 0 = no floor). Its own key: no migration.
 const KEY_RESERVE_FLOOR: &[u8] = b"reserve_floor";
-/// When the audit turned red for the current steward (ns), and what was already owed when they were appointed.
-const KEY_OWED_SINCE: &[u8] = b"owed_since";
-const KEY_OWED_BASE: &[u8] = b"owed_base";
-/// How long the audit may stay red before anyone can slash the steward's bond: time to collect from Agent Market and
-/// pass it on. A deposit that clears the debt stops the clock.
+/// When the current steward was appointed (ns) and the deposits counted until then: they answer only for jobs paid
+/// since, against what they deposited since.
+const KEY_STEWARD_FROM: &[u8] = b"steward_from";
+const KEY_STEWARD_DEPOSITED: &[u8] = b"steward_deposited";
+/// When a receipt became Paid (ns), keyed by job id; receipts from before this code fall back to when they were recorded.
+const PAID_AT_PREFIX: &[u8] = b"paid_at:";
+/// How long the steward has to pass a paid job's earnings on before anyone can slash the bond: time to collect from
+/// Agent Market. Deposits pay the oldest jobs first, so each job has its own grace period.
 const STEWARD_GRACE_NS: u64 = 7 * 24 * 3600 * 1_000_000_000;
 
 fn read_u128(key: &[u8]) -> Option<u128> {
@@ -465,19 +468,20 @@ impl Koperasi {
             }
             return;
         }
-        // an increase waits; a larger one restarts the wait, a smaller one keeps it (that much was there since then),
-        // and so does a reading more than a day after the last (what happened in between was not seen)
-        let since = match read_pending(&account_id) {
-            Some((p, since, seen)) if staked <= p && now - seen <= SAVINGS_GAP_NS => since,
-            _ => now,
+        // an increase waits, and what counts is the least stake every reading of the wait showed: more staked later
+        // (or staking rewards) does not restart it, it waits its own turn after this one counts; a reading more than
+        // a day after the last restarts it (what happened in between was not seen)
+        let (amount, since) = match read_pending(&account_id) {
+            Some((p, since, seen)) if now - seen <= SAVINGS_GAP_NS => (staked.min(p), since),
+            _ => (staked, now),
         };
         if now - since >= SAVINGS_DELAY_NS {
             env::storage_remove(&pending_key(&account_id));
-            m.savings = U128(staked);
+            m.savings = U128(amount);
             Event::SavingsSet { account_id, savings: m.savings }.emit();
         } else {
-            env::storage_write(&pending_key(&account_id), &near_sdk::borsh::to_vec(&(staked, since, now)).unwrap());
-            Event::SavingsPending { account_id, savings: U128(staked), counts_from: U64(since + SAVINGS_DELAY_NS) }.emit();
+            env::storage_write(&pending_key(&account_id), &near_sdk::borsh::to_vec(&(amount, since, now)).unwrap());
+            Event::SavingsPending { account_id, savings: U128(amount), counts_from: U64(since + SAVINGS_DELAY_NS) }.emit();
         }
     }
 
@@ -531,21 +535,26 @@ impl Koperasi {
         self.agent_id = agent_id;
     }
 
-    /// Appoint a new steward (the Agent Market account holder). Any bond of the previous steward goes back.
+    /// Appoint a new steward (the Agent Market account holder). The previous steward's bond goes back if they passed
+    /// on every paid job's earnings; if they still owe any, it goes to the DAO (settle before handing over).
     pub fn set_steward(&mut self, steward: Option<AccountId>) {
         self.assert_dao();
         let mut returned = NearToken::from_yoctonear(0);
         if let Some(old) = self.steward.take() {
-            if !self.steward_bond.is_zero() {
-                returned = std::mem::replace(&mut self.steward_bond, NearToken::from_yoctonear(0));
+            let bond = std::mem::replace(&mut self.steward_bond, NearToken::from_yoctonear(0));
+            if !bond.is_zero() && self.steward_unpaid(u64::MAX) > 0 {
+                Event::StewardSlashed { amount: bond }.emit();
+                let _ = Promise::new(self.dao_id.clone()).transfer(bond);
+            } else if !bond.is_zero() {
+                returned = bond;
                 let _ = Promise::new(old).transfer(returned);
             }
         }
         Event::StewardSet { steward: steward.clone(), bond_returned: returned }.emit();
         self.steward = steward;
-        // the new steward answers only for what goes unpaid from now on
-        write_u128(KEY_OWED_BASE, self.get_audit().owed.0);
-        env::storage_remove(KEY_OWED_SINCE);
+        // the new steward answers only for jobs paid from now on
+        env::storage_write(KEY_STEWARD_FROM, &env::block_timestamp().to_le_bytes());
+        write_u128(KEY_STEWARD_DEPOSITED, self.deposited);
     }
 
     /// The steward kept money: its whole bond goes to the DAO.
@@ -559,41 +568,39 @@ impl Koperasi {
         bond
     }
 
-    /// Anyone: once the audit has been red for this steward longer than `STEWARD_GRACE_NS`, the bond goes to the DAO,
-    /// no vote needed. Returns what was slashed. On a red audit whose clock was not running yet (a co-op upgraded to
-    /// this code), the first call starts it and slashes nothing.
+    /// Anyone: if earnings of jobs paid more than `STEWARD_GRACE_NS` ago are still not passed on by this steward, the
+    /// bond goes to the DAO, no vote needed. The audit trusts the receipts of the agent the DAO appointed; a steward who
+    /// runs that agent can hide a payout by never reporting it (trust assumptions in the README).
     pub fn slash_overdue(&mut self) -> NearToken {
-        let owed = self.track_audit();
-        let Some(since) = self.get_overdue_since() else { env::panic_str("the audit is not red for this steward") };
-        if since.0 == env::block_timestamp() {
-            return NearToken::from_yoctonear(0);
-        }
-        require!(env::block_timestamp() - since.0 > STEWARD_GRACE_NS, "the steward is still within the grace period");
+        let overdue = self.get_overdue().0;
+        require!(overdue > 0, "nothing is overdue: every job paid more than 7 days ago was passed on");
         let bond = std::mem::replace(&mut self.steward_bond, NearToken::from_yoctonear(0));
         require!(!bond.is_zero(), "no bond");
-        Event::StewardSlashedOverdue { amount: bond, owed: U128(owed), since }.emit();
+        Event::StewardSlashedOverdue { amount: bond, overdue: U128(overdue) }.emit();
         let _ = Promise::new(self.dao_id.clone()).transfer(bond);
         bond
     }
 
-    /// Start or stop the overdue clock: it runs while the audit owes more than when this steward was appointed.
-    fn track_audit(&mut self) -> u128 {
-        let owed = self.get_audit().owed.0;
-        let base = read_u128(KEY_OWED_BASE).unwrap_or(0).min(owed);
-        write_u128(KEY_OWED_BASE, base);
-        if owed > base {
-            if env::storage_read(KEY_OWED_SINCE).is_none() {
-                env::storage_write(KEY_OWED_SINCE, &env::block_timestamp().to_le_bytes());
-            }
-        } else {
-            env::storage_remove(KEY_OWED_SINCE);
-        }
-        owed
+    /// USDC of this steward's jobs, paid more than 7 days ago, that their deposits do not cover (oldest first).
+    pub fn get_overdue(&self) -> U128 {
+        U128(self.steward_unpaid(env::block_timestamp().saturating_sub(STEWARD_GRACE_NS)))
     }
 
-    /// When the audit turned red for the current steward (ns), if it is red.
-    pub fn get_overdue_since(&self) -> Option<U64> {
-        env::storage_read(KEY_OWED_SINCE).map(|b| U64(u64::from_le_bytes(b.try_into().unwrap_or_else(|_| env::panic_str("bad clock")))))
+    /// Earnings (net of the market fee) of jobs paid since this steward's appointment and before `until`, minus what
+    /// they deposited since. ponytail: reads every receipt; only the permissionless slash and a steward change call it.
+    fn steward_unpaid(&self, until: u64) -> u128 {
+        let from = env::storage_read(KEY_STEWARD_FROM).map_or(0, |b| u64::from_le_bytes(b.try_into().unwrap_or([0; 8])));
+        let gross: u128 = self.receipts.iter()
+            .filter(|r| r.status == ReceiptStatus::Paid)
+            .filter(|r| {
+                let at = env::storage_read(&[PAID_AT_PREFIX, r.job_id.as_bytes()].concat())
+                    .map_or(r.ts.0, |b| u64::from_le_bytes(b.try_into().unwrap_or([0; 8])));
+                at >= from && at < until
+            })
+            .map(|r| r.price.0)
+            .sum();
+        let due = gross - gross * MARKET_FEE_BPS / BPS;
+        due.saturating_sub(self.deposited - read_u128(KEY_STEWARD_DEPOSITED).unwrap_or(0))
     }
 
     /// The steward locks NEAR as a bond the DAO can slash if deposits fall short of the receipts.
@@ -675,8 +682,10 @@ impl Koperasi {
         let ok = matches!((r.status, status), (Submitted, Paid | Refunded | Disputed) | (Disputed, Paid | Refunded));
         require!(ok, "invalid status change");
         r.status = status;
+        if status == Paid {
+            env::storage_write(&[PAID_AT_PREFIX, job_id.as_bytes()].concat(), &env::block_timestamp().to_le_bytes());
+        }
         Event::ReceiptUpdated { job_id, status }.emit();
-        self.track_audit();
     }
 
     // ---------- money in: USDC ft_transfer_call ----------
@@ -691,7 +700,6 @@ impl Koperasi {
             "earnings" if Some(&sender_id) == self.steward.as_ref() => {
                 self.deposited += amount.0;
                 Event::EarningsDeposited { amount }.emit();
-                self.track_audit();
                 self.forward_to_dao(amount.0);
                 PromiseOrValue::Value(U128(0))
             }
