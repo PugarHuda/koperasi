@@ -1756,7 +1756,7 @@ dependencies = [
 
 [[package]]
 name = "koperasi"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "near-api",
  "near-sandbox",

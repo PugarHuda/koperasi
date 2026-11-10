@@ -68,7 +68,7 @@ The members vote you in.
 
 ```sh
 npm install
-npm test        # lint, typecheck, 29 unit tests, 103 contract tests (unit, fuzz, invariant)
+npm test        # lint, typecheck, 29 unit tests, 104 contract tests (unit, fuzz, invariant)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 

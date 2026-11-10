@@ -1709,12 +1709,21 @@ fn a_steward_who_owes_nothing_gets_the_bond_back_when_replaced() {
 }
 
 #[test]
-fn a_receipt_paid_before_this_code_counts_from_when_it_was_recorded() {
+#[should_panic(expected = "nothing is overdue")]
+fn no_slash_for_a_steward_appointed_before_this_code() {
     let mut k = owing_steward();
-    env::storage_remove(b"paid_at:job-1"); // as on a co-op upgraded to this code: recorded at 0, no paid_at
-    env::storage_remove(b"steward_from");
-    at(&acc("anyone.testnet"), 7 * DAY + 1);
-    assert_eq!(k.slash_overdue(), near(5));
+    env::storage_remove(b"steward_from"); // as on a co-op upgraded to this code: the old debt had no 7-day rule
+    at(&acc("anyone.testnet"), 30 * DAY);
+    k.slash_overdue();
+}
+
+#[test]
+fn a_steward_appointed_before_this_code_gets_the_bond_back_as_before() {
+    let mut k = owing_steward();
+    env::storage_remove(b"steward_paid");
+    at(&dao(), 2 * DAY);
+    k.set_steward(Some(acc("new-steward.testnet")));
+    assert!(near_sdk::test_utils::get_logs().iter().any(|l| l.contains("\"bond_returned\":\"5000000000000000000000000\"")));
 }
 
 #[test]

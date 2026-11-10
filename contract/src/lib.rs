@@ -64,6 +64,9 @@ const KEY_RESERVE_FLOOR: &[u8] = b"reserve_floor";
 /// since, against what they deposited since.
 const KEY_STEWARD_FROM: &[u8] = b"steward_from";
 const KEY_STEWARD_DEPOSITED: &[u8] = b"steward_deposited";
+/// Σ earnings (net of the market fee) of jobs paid since the current steward's appointment: kept as a running total so
+/// replacing a steward never reads every receipt.
+const KEY_STEWARD_PAID: &[u8] = b"steward_paid";
 /// When a receipt became Paid (ns), keyed by job id; receipts from before this code fall back to when they were recorded.
 const PAID_AT_PREFIX: &[u8] = b"paid_at:";
 /// How long the steward has to pass a paid job's earnings on before anyone can slash the bond: time to collect from
@@ -542,7 +545,9 @@ impl Koperasi {
         let mut returned = NearToken::from_yoctonear(0);
         if let Some(old) = self.steward.take() {
             let bond = std::mem::replace(&mut self.steward_bond, NearToken::from_yoctonear(0));
-            if !bond.is_zero() && self.steward_unpaid(u64::MAX) > 0 {
+            // a steward appointed before this code had no such rule: their bond goes back as it used to
+            let owes = read_u128(KEY_STEWARD_PAID).is_some_and(|paid| paid > self.deposited - read_u128(KEY_STEWARD_DEPOSITED).unwrap_or(0));
+            if !bond.is_zero() && owes {
                 Event::StewardSlashed { amount: bond }.emit();
                 let _ = Promise::new(self.dao_id.clone()).transfer(bond);
             } else if !bond.is_zero() {
@@ -555,6 +560,7 @@ impl Koperasi {
         // the new steward answers only for jobs paid from now on
         env::storage_write(KEY_STEWARD_FROM, &env::block_timestamp().to_le_bytes());
         write_u128(KEY_STEWARD_DEPOSITED, self.deposited);
+        write_u128(KEY_STEWARD_PAID, 0);
     }
 
     /// The steward kept money: its whole bond goes to the DAO.
@@ -569,8 +575,9 @@ impl Koperasi {
     }
 
     /// Anyone: if earnings of jobs paid more than `STEWARD_GRACE_NS` ago are still not passed on by this steward, the
-    /// bond goes to the DAO, no vote needed. The audit trusts the receipts of the agent the DAO appointed; a steward who
-    /// runs that agent can hide a payout by never reporting it (trust assumptions in the README).
+    /// bond goes to the DAO, no vote needed. Only for a steward the DAO appointed under this code, and only for jobs paid
+    /// since then: what was owed before had no such rule. The audit trusts the receipts of the agent the DAO appointed;
+    /// a steward who runs that agent can hide a payout by never reporting it (trust assumptions in the README).
     pub fn slash_overdue(&mut self) -> NearToken {
         let overdue = self.get_overdue().0;
         require!(overdue > 0, "nothing is overdue: every job paid more than 7 days ago was passed on");
@@ -589,7 +596,9 @@ impl Koperasi {
     /// Earnings (net of the market fee) of jobs paid since this steward's appointment and before `until`, minus what
     /// they deposited since. ponytail: reads every receipt; only the permissionless slash and a steward change call it.
     fn steward_unpaid(&self, until: u64) -> u128 {
-        let from = env::storage_read(KEY_STEWARD_FROM).map_or(0, |b| u64::from_le_bytes(b.try_into().unwrap_or([0; 8])));
+        let Some(from) = env::storage_read(KEY_STEWARD_FROM).map(|b| u64::from_le_bytes(b.try_into().unwrap_or([u8::MAX; 8]))) else {
+            return 0; // no steward appointed under this code yet: fail closed
+        };
         let gross: u128 = self.receipts.iter()
             .filter(|r| r.status == ReceiptStatus::Paid)
             .filter(|r| {
@@ -684,6 +693,8 @@ impl Koperasi {
         r.status = status;
         if status == Paid {
             env::storage_write(&[PAID_AT_PREFIX, job_id.as_bytes()].concat(), &env::block_timestamp().to_le_bytes());
+            let net = r.price.0 - r.price.0 * MARKET_FEE_BPS / BPS;
+            bump(KEY_STEWARD_PAID, net, false); // only once a steward was appointed under this code
         }
         Event::ReceiptUpdated { job_id, status }.emit();
     }
