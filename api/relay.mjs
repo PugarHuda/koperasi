@@ -28,7 +28,8 @@ async function onChain(senderId, publicKey) {
     rpc("query", { request_type: "view_access_key", finality: "final", account_id: senderId, public_key: publicKey }),
     rpc("block", { finality: "final" }),
   ]);
-  return { nonce: k.result ? BigInt(k.result.nonce) : null, height: BigInt(b.result.header.height) };
+  // an unknown key comes back as a result with an error field and no nonce
+  return { nonce: k.result?.nonce !== undefined ? BigInt(k.result.nonce) : null, height: BigInt(b.result.header.height) };
 }
 // ponytail: per-instance memory, like the rate limit; a replay that reaches the chain fails on the key's nonce anyway
 const relayed = new Set();
