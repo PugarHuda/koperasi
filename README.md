@@ -61,13 +61,21 @@ quotes its line.
 Live page: **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR).
 
 The accounts alice, bob, carol and the steward are the builder's demo members. They show that the mechanism works,
-but they are not independent people. The agent has done **no real paid job yet**: the 4 receipts come from `npm run
+but they are not independent people. The agent has done **no real paid job yet**: the first 4 receipts come from `npm run
 demo` against a local stand-in for Agent Market, which has no testnet. The co-op's NEAR AI credits are in place and the
 agent has bid on 9 real Agent Market jobs; none was awarded yet. The old audit shortfall (7.60 USDC) dates from before
 the steward's appointment under 0.2.3, so it is not slashable; it stays red on purpose (the demo's last step). The court's
 job `demo-court-mwag2r51` is a demo receipt too (`node scripts/commons.mjs --court`); bob sent the steward the 0.95 USDC
 it earned after the market's fee, in testnet USDC, and the steward passed it on ([EH9Sz6Dz…](https://testnet.nearblocks.io/txns/EH9Sz6DzGeRbf4T6QZhN9VA3uUk28X3UaQj3CuazqW7U)), so a demo job does
 not make the steward's bond slashable.
+
+`node scripts/scenarios.mjs` then put the showcase in every state the page shows, with real transactions: tasks #9–#15
+open, taken, handed back and delivered by someone else, cancelled, waiting for a member (contributor not trusted yet),
+approved above the no-vote limit (paid by proposal #66), and held in the veto window; pledges partly called in, never
+called in, and kept; court cases #1 and #2 not upheld (one unanimous, one split 1–2), so those claimants' bonds went to
+the treasury; five more `demo-` receipts (submitted, disputed, refunded, and the two court jobs, whose 0.19 USDC the
+steward passed on: [RdRftXtM…](https://testnet.nearblocks.io/txns/RdRftXtM2DguVVKyRMEUcmo5ACQyEmdxWf6AZxkEd3W)); a 2 USDC profit share (#67) three members claimed;
+proposal #68 to drop the veto window, rejected by the members; and #69, still open for votes.
 
 ## For judges: 60 seconds, no wallet, no keys
 

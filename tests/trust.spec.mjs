@@ -11,13 +11,19 @@ const rule = { auto_max: N(0.1), one_vote_max: N(0.5), trusted_after: 1, poster_
 const task = (id, status, extra = {}) => ({ id, poster: ALICE, description: `task ${id}`, amount: N(0.05), contributor: CAROL,
   deliverable: null, approved_by: null, status, created: "0", paid_at: null, ...extra });
 
-test("the board shows the members' three tiers, every task and where each point came from", async ({ page }) => {
+test("the board shows the members' tiers and veto window, every task and where each point came from", async ({ page }) => {
   await page.goto("/#trust");
   const tiers = page.locator("#tiers li");
-  await expect(tiers).toHaveCount(3);
+  // the showcase's members voted a 10-minute veto window (#62), shown as the second tier
+  await expect(tiers).toHaveCount(4);
   await expect(tiers.nth(0)).toContainText(/Paid on acceptance.*up to [\d.]+ NEAR.*different member.*[\d.]+ NEAR a day/s);
-  await expect(tiers.nth(1)).toContainText("Never the poster or the contributor");
-  await expect(tiers.nth(2)).toContainText("Sputnik DAO bounty");
+  await expect(tiers.nth(1)).toContainText(/Veto window.*10 minutes/s);
+  await expect(tiers.nth(2)).toContainText("Never the poster or the contributor");
+  await expect(tiers.nth(3)).toContainText("Sputnik DAO bounty");
+  // scripts/scenarios.mjs: tasks in other states (cancelled #12, waiting for a member #13, approved above the no-vote limit #14)
+  await expect(page.locator("#task-12")).toContainText("Cancelled");
+  await expect(page.locator("#task-13")).toContainText("Waiting for one member");
+  await expect(page.locator("#task-14")).toContainText("approved by kop-steward-mw4i2iwk.testnet");
   await expect(page.locator("#trust-rule")).toContainText(/Transfer proposal the contract files and approves with its own DAO role tasks.*[\d.]+ NEAR more.*contribution points/s);
   // since the move into the DAO, a paid task links the Transfer proposal that paid it
   await expect(page.locator("#tasks tbody")).toContainText(/DAO proposal #\d+/);
@@ -26,7 +32,7 @@ test("the board shows the members' three tiers, every task and where each point 
   await expect(page.locator("#task-1")).toContainText("on earned trust, no vote");
   const carol = page.locator("#records tbody tr", { hasText: CAROL });
   await expect(carol).toContainText(/yes, up to/);
-  await expect(carol.locator("a", { hasText: "task #1" })).toHaveAttribute("href", "#task-1");
+  await expect(carol.getByRole("link", { name: "task #1", exact: true })).toHaveAttribute("href", "#task-1");
   await expect(carol).toContainText(/DAO proposal #\d+/);
 });
 

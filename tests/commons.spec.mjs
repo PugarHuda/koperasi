@@ -15,11 +15,13 @@ const kase = (extra = {}) => ({ id: 0, job_id: "job-1", claimant: BOB, refund_to
 
 test("the commons section shows the court case, its jurors and the refund, each member's standing, and the Ethereum address", async ({ page }) => {
   await page.goto("/#commons");
-  const c = page.locator("#cases tbody tr").first();
-  await expect(c).toContainText("#0");
+  const c = page.locator("#cases tbody tr", { hasText: "demo-court-mwag2r51" });
   await expect(c).toContainText("upheld: refunded");
   await expect(c.locator("a", { hasText: "DAO proposal #60" })).toBeVisible();
-  await expect(page.locator("#pledges tbody")).toContainText(/1 of 2\s*1 \/ 0/);
+  // scripts/scenarios.mjs: two cases the jurors did not uphold, a pledge nobody called in yet
+  await expect(page.locator("#cases tbody tr", { hasText: "not upheld" })).toHaveCount(2);
+  await expect(page.locator("#pledges tbody tr", { hasText: "onboarding call" })).toContainText("0 of 2");
+  await expect(page.locator("#pledges tbody tr", { hasText: "Review one pull request" })).toContainText(/2 of 2\s*2 \/ 0/);
   await expect(page.locator("#standing li", { hasText: ALICE })).toContainText("good standing");
   await expect(page.locator("#multichain")).toContainText("0xb3dc0128b4a9804de94796480bef8ba014dfca7d");
   await expect(page.locator("#audit-term")).toContainText(/serves 90 days/);
@@ -27,7 +29,7 @@ test("the commons section shows the court case, its jurors and the refund, each 
 
 test("the work record reads a member's pledges and jury duty from the chain, and refuses what is not an account id", async ({ page }) => {
   await page.goto(`/cert.html?who=${ALICE}`);
-  await expect(page.locator("#cert-sum")).toContainText(/good: 1 pledge\(s\) kept/);
+  await expect(page.locator("#cert-sum")).toContainText(/good: \d+ pledge\(s\) kept, 0 broken/);
   await expect(page.locator("#cert-pledges tbody")).toContainText(`${BOB}`);
   await expect(page.locator("#cert-juries tbody")).toContainText("job demo-court-");
   await page.goto(`/cert.html?who=${encodeURIComponent('"><img src=x onerror=alert(1)>')}`);
