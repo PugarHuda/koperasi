@@ -210,6 +210,39 @@ export function taskCheck(action, t, me, { members = [], budget = "0", due = nul
 /** A proposer's plain string on one short line, so it cannot pose as another line of what a proposal does. */
 export const oneLine = (s) => String(s).replace(/\s+/g, " ").slice(0, 64);
 
+/**
+ * What a vote-only call to the co-op's own contract does, in one sentence (null for anything else; the raw args are
+ * still shown under it). Amounts in yoctoNEAR are written in NEAR; values come from the args, cut to one line.
+ * @param {string} method @param {any} a
+ */
+export function plainCall(method, a) {
+  const near = (y) => `${Number(BigInt(y) / 10n ** 21n) / 1000} NEAR`;
+  const v = (x) => oneLine(x);
+  try {
+    switch (method) {
+      case "set_task_budget": return `The contract may pay ${near(a.amount)} for tasks from the treasury (replaces the current budget).`;
+      case "set_veto_window": return Number(a.minutes) === 0 ? "Payouts on trust are paid at once: no veto window." : `Payouts on trust wait ${v(a.minutes)} minutes, during which any other member can veto them.`;
+      case "set_trust": return `Trust rule: up to ${near(a.rule.auto_max)} paid with no vote to a contributor trusted by ${v(a.rule.trusted_after)}+ members; one member approves up to ${near(a.rule.one_vote_max)}; each poster pays at most ${near(a.rule.poster_daily_auto)} a day this way; ${v(a.rule.points)} points a task.`;
+      case "set_config": return `New by-laws v${v(a.version)} for the agent (hash ${v(a.hash).slice(0, 12)}…, ${v(a.uri)}), ${v(a.points)} points to ${a.contributor ? v(a.contributor) : "nobody"}.`;
+      case "upgrade": return `Replace the contract's code with the published code ${v(a.code_hash).slice(0, 12)}…: check it was built from the source.`;
+      case "set_steward": return a.steward ? `Appoint ${v(a.steward)} as steward (they then post a bond).` : "Remove the steward.";
+      case "set_steward_term": return `The steward serves ${v(a.days)} days from appointment.`;
+      case "slash_steward": return "Slash the steward's bond into the treasury.";
+      case "pause": return "Stop the agent from taking jobs.";
+      case "unpause": return "Let the agent take jobs again.";
+      case "award_points": return `Give ${v(a.account_id)} ${v(a.points)} contribution points: “${v(a.reason)}”.`;
+      case "set_share_rule": return `Profit shares: ${a.rule.reserve_bps / 100}% reserve, ${a.rule.savings_bps / 100}% by savings, ${a.rule.points_bps / 100}% by points.`;
+      case "set_usdc": return `Move the co-op to the USDC contract ${v(a.usdc_id)}.`;
+      case "set_agent": return `Hand the agent's role to ${v(a.agent_id)}.`;
+      case "set_staking_pool": return a.pool ? `Members' savings are staked with ${v(a.pool)}.` : "No staking pool.";
+      case "set_reserve_floor": return `Keep at least ${Number(a.amount) / 1e6} USDC in the treasury before any share.`;
+      default: return null;
+    }
+  } catch {
+    return null; // malformed args: the raw args below say what they are
+  }
+}
+
 // ---------- invitations: a member shares ?invite=<their account>; the newcomer's proposal names them ----------
 
 const ACCOUNT = /^(?=.{2,64}$)[a-z0-9]+([-_][a-z0-9]+)*(\.[a-z0-9]+([-_][a-z0-9]+)*)*$/;

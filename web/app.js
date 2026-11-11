@@ -38,6 +38,48 @@ const trustBoard = Promise.all([view(dep.contract, "get_board"), all(dep.contrac
     (t.status === "Paid" || t.status === "Paying" ? view(dep.contract, "get_payout_proposal", { id: t.id }) : null)))]);
 trustBoard.catch(() => {}); // handled where it is rendered
 
+// the track's brief, each line read from the chain; the counts above it are the co-op's activity so far.
+// Public RPCs rate-limit in bursts: on a failure it tries again (3 times, 5 s apart) instead of staying empty.
+const brief = (tries = 3) => Promise.all([
+  view(dep.dao, "get_last_proposal_id"), view(dep.dao, "get_policy"), view(dep.contract, "get_info"), trustBoard,
+  all(dep.contract, "get_cases"), all(dep.contract, "get_pledges"), all(dep.contract, "get_pledge_claims"),
+  view(dep.usdc, "ft_balance_of", { account_id: dep.dao }),
+]).then(([proposals, policy, info, [board, tasks], cases, pledges, claims, treasury]) => {
+  const role = (n) => policy.roles.find((r) => r.name === n);
+  const members = role("member")?.kind?.Group ?? [];
+  const paid = tasks.filter((t) => t.status === "Paid");
+  const onTrust = paid.filter((t) => !t.approved_by).length;
+  const kept = claims.filter((c) => c.status === "Honored").length;
+  const [num, den] = policy.default_vote_policy.threshold;
+  const needed = Math.min(members.length, Math.floor((members.length * num) / den) + 1);
+  const rule = board.rule;
+  $("counts").innerHTML = [
+    ["Members", members.length, "one vote each"],
+    ["DAO proposals", proposals, "every decision on record"],
+    ["Tasks", tasks.length, `${paid.length} paid, ${onTrust} on earned trust`],
+    ["Profit shares", info.periods, "voted, split by rule"],
+    ["Court cases", cases.length, `${cases.filter((c) => c.status === "Upheld").length} upheld`],
+    ["Pledges", pledges.length, `${kept} kept, ${claims.filter((c) => c.status === "Broken").length} broken`],
+  ].map(([k, v, s]) => `<div><dt>${k}</dt><dd>${v} <small>${s}</small></dd></div>`).join("");
+  const line = (id, ok, html) => { $(id).classList.add(ok ? "pass" : "fail"); $(id).querySelector(".ck-out").innerHTML = html; };
+  line("br-own", members.length > 1 && policy.default_vote_policy.weight_kind === "RoleWeight",
+    `${members.length} members hold the DAO's role <code>member</code>, one vote each: a decision needs ${needed} of ${members.length}. <a href="#members">Members</a>`);
+  line("br-budget", true,
+    `The DAO treasury holds ${usdc(treasury)} USDC; only a vote spends it. The members let the contract pay ${nearAmt(board.budget)} NEAR more for tasks. <a href="#trust">Tasks</a>`);
+  line("br-rewards", info.periods > 0,
+    `${info.periods} profit shares, each voted and split by the contract (${info.share_rule.savings_bps / 100}% by savings, ${info.share_rule.points_bps / 100}% by contribution points); ${paid.length} tasks paid. <a href="#shares">Profit shares</a>`);
+  line("br-rep", !!rule,
+    rule ? `Up to ${nearAmt(rule.auto_max)} NEAR is paid with no vote only to a contributor trusted by ${rule.trusted_after}+ other member${rule.trusted_after === 1 ? "" : "s"}${board.veto_minutes ? `, after a ${board.veto_minutes}-minute veto window` : ""}; jurors are drawn only from members in good standing. <a href="#trust">Earned trust</a>`
+      : "The members have not voted a trust rule yet.");
+  const tasksRole = role("tasks");
+  line("br-sputnik", !!tasksRole && tasksRole.permissions.every((p) => p.startsWith("transfer:")),
+    `Every payout is a Sputnik Transfer proposal. The contract files them in its own role <code>tasks</code>, which can only ${tasksRole ? tasksRole.permissions.map((p) => `<code>${esc(p)}</code>`).join(" and ") : "(missing)"}. Proposal templates for <a href="https://github.com/PugarHuda/koperasi/tree/main/trezu">Trezu</a>. <a href="#trust">Tasks</a>`);
+}).catch((e) => {
+  for (const id of ["br-own", "br-budget", "br-rewards", "br-rep", "br-sputnik"]) $(id).querySelector(".ck-out").textContent = `Could not read the chain right now (${e.message})${tries > 1 ? "; trying again in 5 s." : "."}`;
+  if (tries > 1) setTimeout(() => brief(tries - 1), 5000);
+});
+brief();
+
 try {
   const [info, members, versions, receipts, rekon, periods] = await Promise.all([
     view(dep.contract, "get_info"),

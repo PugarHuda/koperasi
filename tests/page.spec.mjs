@@ -122,6 +122,14 @@ test("keyboard users see where focus is", async ({ page, isMobile }) => {
   expect(outline).not.toBe("none");
 });
 
+test("each line of the track's brief is proven from the chain, under the co-op's activity", async ({ page }) => {
+  await page.goto("/#brief");
+  await expect(page.locator("#brief-list li.pass")).toHaveCount(5);
+  await expect(page.locator("#br-own")).toContainText(/\d+ members hold the DAO's role member.*a decision needs \d+ of \d+/s);
+  await expect(page.locator("#br-sputnik")).toContainText("transfer:AddProposal");
+  await expect(page.locator("#counts")).toContainText(/DAO proposals\s*\d{2,}/);
+});
+
 test("the page shows how to rebuild the contract's code, from its NEP-330 metadata", async ({ page }) => {
   await page.goto("/#bylaws");
   const card = page.locator("#src-card");

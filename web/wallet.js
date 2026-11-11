@@ -2,7 +2,7 @@
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
 import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
-import { affordable, checkVouch, inviteOf, inviteParam, joinText, vouchParam, vouchSuffix, vouchText, nearUnits, oneLine, payPath, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
+import { affordable, checkVouch, inviteOf, inviteParam, joinText, vouchParam, vouchSuffix, vouchText, nearUnits, oneLine, payPath, plainCall, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
 const preview = (amount, s) => {
@@ -98,7 +98,9 @@ const describe = (p, s) => {
   if (k === "Transfer") return `Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${p.kind.Transfer.receiver_id}`;
   if (k === "FunctionCall") {
     const f = p.kind.FunctionCall;
-    return f.actions.map((a) => `Call ${f.receiver_id} ${oneLine(a.method_name)}${yocto(a.deposit)}\n${argsOf(a.args) ?? "(binary args: inspect in the DAO)"}`).join("\n\n");
+    // for the co-op's own contract, a sentence first; the raw call stays under it, so the sentence can be checked
+    const said = (a) => (f.receiver_id === dep.contract && argsOf(a.args) !== null ? plainCall(a.method_name, JSON.parse(atob(a.args))) : null);
+    return f.actions.map((a) => `${said(a) ? `${said(a)}\n` : ""}Call ${f.receiver_id} ${oneLine(a.method_name)}${yocto(a.deposit)}\n${argsOf(a.args) ?? "(binary args: inspect in the DAO)"}`).join("\n\n");
   }
   return `${k} (open the DAO to inspect)`;
 };

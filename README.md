@@ -79,10 +79,13 @@ proposal #68 to drop the veto window, rejected by the members; and #69, still op
 
 ## For judges: 60 seconds, no wallet, no keys
 
-1. Open **https://koperasi-kohl.vercel.app**. Under the headline, *Don't trust us* runs four checks in your browser:
+The full read-only checklist, with what you should see at each step, is [`JUDGE.md`](JUDGE.md).
+
+1. Open **https://koperasi-kohl.vercel.app**. Under the headline, *The Social Money brief, proven live* reads each line
+   of the track's brief and the co-op's activity from the chain. Then *Don't trust us* runs four checks in your browser:
    the by-laws hash matches the vote, the contract has 0 full-access keys and runs voted code, and the audit is shown. Click
    *Verify … with your own nonce* to check the model's Intel TDX and GPU attestation against a nonce your browser made.
-2. Scroll to **06 Tasks & trust**. It shows the three tiers the members voted, who approved each task, and the DAO proposal
+2. Scroll to **06 Tasks & trust**. It shows the tiers and the veto window the members voted, tasks in every state, who approved each task, and the DAO proposal
    that paid it. A member's record links each point to its source.
    Then **07 Commons**: a buyer's dispute decided by three members drawn at random, refunded by DAO proposal #60; each
    member's standing; the co-op's Ethereum address, which signs only by a vote. Any member's work record is at
@@ -148,7 +151,7 @@ Each one here is a contract rule or a vote you can read:
 
 ```sh
 npm install
-npm test        # lint, typecheck, 31 unit tests, 130 contract tests (unit, fuzz, invariant)
+npm test        # lint, typecheck, 32 unit tests, 130 contract tests (unit, fuzz, invariant)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 

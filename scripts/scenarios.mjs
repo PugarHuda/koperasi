@@ -34,7 +34,7 @@ const post = async (who, amount, description) => {
 };
 
 // gas money for the members who act most
-if (run("gas")) for (const [who, n] of [[C, 2n], [V, 2n], [G, 1n], [S, 1n]]) {
+if (run("gas")) for (const [who, n] of /** @type {[string, bigint][]} */ ([[C, 2n], [V, 2n], [G, 1n], [S, 1n]])) {
   await account(P).transfer({ receiverId: who, amount: n * NEAR });
   console.log(`publisher sent ${n} NEAR to ${short(who)}`);
 }
@@ -109,10 +109,10 @@ if (run("court")) {
   const refunded = job("refunded"); await record(refunded, "200000"); await status(refunded, "Disputed"); await status(refunded, "Refunded");
 
   const cases = [];
-  for (const [claimant, rulings, reason] of [
+  for (const [claimant, rulings, reason] of /** @type {[string, boolean[], string][]} */ ([
     [A, [false, false], "The buyer says the summary missed a section, but the brief never asked for it. Refund in full."],
     [B, [true, false, false], "The buyer disputed the translation's tone. The market paid the agent; refund half."],
-  ]) {
+  ])) {
     const id = job("court"); await record(id, "100000"); await status(id, "Disputed"); await status(id, "Paid");
     const amount = claimant === A ? "100000" : "50000";
     await tx(claimant, K, "open_case", { job_id: id, refund_to: P, amount, reason }, { deposit: NEAR / 2n, tgas: 30 });

@@ -1,0 +1,48 @@
+# Checking Koperasi: a list for judges
+
+Every check is read-only: no wallet, no keys, no transactions. Each one names where to look and what you should see.
+The showcase co-op is on NEAR testnet: contract `koperasi-mw4i2iwk.testnet`, DAO `koperasi-mw4i2iwk.sputnik-v2.testnet`.
+
+## In one command (about a minute)
+
+```sh
+npm install && npm run verify
+```
+
+It reads every claim below from testnet and ends with **`every claim checks out`** (exit code 1 otherwise). CI runs it
+on every push and every day (`.github/workflows/tests.yml`).
+
+## On the live page: https://koperasi-kohl.vercel.app
+
+| # | Check | Where | You should see |
+|---|---|---|---|
+| 1 | The Social Money brief, line by line | *The Social Money brief, proven live*, under the headline | five green lines read from the chain, and the co-op's activity (members, proposals, tasks, shares, cases, pledges) |
+| 2 | The agent runs only the by-laws the members voted | *Don't trust us* → *It runs only what members voted* | green: the by-laws file your browser hashed equals the hash in the contract |
+| 3 | Nobody can change the contract alone | *No one changes the rules alone* | green: 0 full-access keys; the code is the version a DAO proposal approved |
+| 4 | The model runs in a genuine TEE | *The AI runs sealed in a TEE* → *Verify … with your own nonce* | Intel TDX and NVIDIA GPU attestation bound to a nonce your browser just made |
+| 5 | One member, one vote | *Members* | every member holds the DAO role `member`; a decision needs a majority |
+| 6 | Earned trust, with a veto window | *Tasks* | the tiers the members voted, a 10-minute veto window (proposal #62), tasks in every state, and the DAO proposal that paid each one |
+| 7 | Every point has a source | *Tasks* → contributors | each point on a record links the task or DAO proposal it came from |
+| 8 | Profit shared by rule | *Profit shares* | every share was a members' vote; the contract split it by savings and points |
+| 9 | The co-op court | *Commons* | case #0 upheld and refunded by DAO proposal #60; cases #1 and #2 not upheld (one split 1–2) |
+| 10 | Work members owe each other | *Commons* → pledges | pledges kept, partly called in, and never called in |
+| 11 | A work record nobody can type in | `/cert.html?who=kop-alice-mw4i3w8f.testnet` | kept pledges and jury duty, each line read from the chain |
+| 12 | The co-op holds an Ethereum address with no private key | *Commons* → Chain Signatures | `0xb3dc…ca7d`; it signed one statement, by vote (proposal #57) |
+| 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
+
+## From the source
+
+| # | Check | Command | You should see |
+|---|---|---|---|
+| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `de764ad1c80d4cea48ecf80ccad56719e8aa75315ff94bb7e3e84593fa93d822`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
+| 15 | The tests | `npm test` | lint, typecheck, unit tests and 130 contract tests (unit, fuzz, invariant) pass |
+| 16 | Against the real Sputnik DAO code, not a mock | `cd contract && cargo test --test sputnik_sandbox` (Linux/macOS) | a task paid out of the treasury of a local DAO running the showcase DAO's own wasm |
+
+## What is not real yet (said plainly)
+
+- The members are the builder's demo accounts (plus one who joined with a signed vouch). They show the mechanism works;
+  they are not independent people.
+- The agent has done **no real paid job**: Agent Market has no testnet, so every receipt is from the demo market or a
+  `demo-` receipt. `npm run verify` prints "0 with a TEE inference proof".
+- The audit is red on purpose (7.60 USDC, from before the current steward, so not slashable).
+- Testnet only. The path to mainnet is in the README, under *Sustainability and the path to mainnet*.

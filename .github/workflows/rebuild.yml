@@ -1,0 +1,43 @@
+# Rebuilds the contract the showcase co-op runs from the source its NEP-330 metadata names, and checks the wasm is the
+# same, byte for byte (sha256), as the code the members voted (deployment.testnet.json `codeSha256`, which
+# `npm run verify` checks against the chain). No keys. Weekly, on demand, and when the contract's source changes.
+name: rebuild
+on:
+  schedule: [{ cron: "23 5 * * 1" }]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [contract/**]
+permissions:
+  contents: read
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Read the commit and the expected sha256 from the chain and the deployment file
+        id: src
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import { view } from "./scripts/lib.mjs";
+            const dep = JSON.parse(fs.readFileSync("deployment.testnet.json", "utf8"));
+            const m = await view(dep.contract, "contract_source_metadata");
+            const rev = m.build_info.source_code_snapshot.match(/rev=([0-9a-f]{40})$/)[1];
+            console.log(`contract ${dep.contract} names ${rev}; voted code ${dep.codeSha256}`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `rev=${rev}\nsha=${dep.codeSha256}\n`);
+          '
+      - run: git checkout --detach ${{ steps.src.outputs.rev }}
+      - name: Install cargo-near
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+      - name: Reproducible build (in the image the contract names)
+        run: cd contract && cargo near build reproducible-wasm
+      - name: Same bytes as the code the members voted
+        run: |
+          got=$(sha256sum contract/target/near/koperasi.wasm | cut -d' ' -f1)
+          echo "rebuilt $got"; echo "voted   ${{ steps.src.outputs.sha }}"
+          test "$got" = "${{ steps.src.outputs.sha }}"

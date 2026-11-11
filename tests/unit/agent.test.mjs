@@ -108,6 +108,16 @@ test("USDC amounts typed by a member are parsed exactly, or refused", async () =
   for (const bad of ["", "0", "0.0", "-1", "1.1234567", "1e3", "abc", "1,5", "1.", ".5", "9999999999999"]) assert.equal(usdcUnits(bad), null, bad);
 });
 
+test("a vote-only call to the contract is said in one plain sentence, or not at all", async () => {
+  const { plainCall } = await import("../../web/share.js");
+  assert.equal(plainCall("set_task_budget", { amount: "1500000000000000000000000" }), "The contract may pay 1.5 NEAR for tasks from the treasury (replaces the current budget).");
+  assert.match(plainCall("set_veto_window", { minutes: 0 }), /paid at once/);
+  assert.match(plainCall("set_veto_window", { minutes: 10 }), /wait 10 minutes/);
+  assert.match(plainCall("award_points", { account_id: "a.testnet", points: 5, reason: "line\nbreak" }), /“line break”/);
+  assert.equal(plainCall("set_task_budget", {}), null); // malformed: the raw args speak
+  assert.equal(plainCall("ft_transfer", {}), null);
+});
+
 test("an invitation counts only from a member who voted for the newcomer", async () => {
   const { inviteParam, joinText, inviteOf } = await import("../../web/share.js");
   assert.equal(inviteParam("?invite=alice.testnet"), "alice.testnet");

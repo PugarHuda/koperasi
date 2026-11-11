@@ -132,6 +132,8 @@ h2 .dim { color: var(--grey); }
 .status dd small { display: block; margin-top: .35rem; font: 400 .78rem var(--body); text-transform: none; color: #8b93b5; }
 .status dd.ok::before, .status dd.warn::before { content: ""; display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; margin-right: .5rem; vertical-align: .2em; background: var(--green); }
 .status dd.warn::before { background: var(--red); }
+.counts { grid-template-columns: repeat(6, 1fr); margin: 1.6rem 0; }
+.counts div:last-child { border-right: 0; }
 
 /* the co-op loop: five steps, each links to its section */
 .loop { background: var(--black); color: #fff; padding: 6rem clamp(1.2rem, 4vw, 3rem) 6.5rem calc(clamp(1.2rem, 4vw, 3rem) + 6.5rem); }
@@ -377,6 +379,7 @@ h2 .dim { color: var(--grey); }
   .block { padding: 5rem 1.2rem 4rem 4.2rem; }
   .rail { left: 1rem; top: 5.3rem; }
   .status { grid-template-columns: 1fr 1fr; }
+  .counts { grid-template-columns: repeat(3, 1fr); }
   .loop { padding: 4.5rem 1.2rem; }
   .loop ol { grid-template-columns: 1fr; }
   .loop li a::after { display: none; }
@@ -386,6 +389,7 @@ h2 .dim { color: var(--grey); }
   .grid { font-size: .82rem; }
 }
 @media (max-width: 560px) {
+  .counts { grid-template-columns: 1fr 1fr; }
   .me-card { grid-template-columns: 1fr; }
   .who-bar { flex-direction: column; align-items: flex-start; }
   .top-actions .quiet { display: none; }

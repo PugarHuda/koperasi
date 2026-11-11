@@ -28,7 +28,7 @@ file is the script.
    - NEAR AI Cloud (TEE, billing);
    - Agent Market;
    - global contracts.
-7. **Validation:** 130 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 31 unit tests, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), the bonded steward #54, by-laws v4 #55, a member who joined with an NEP-413 signed vouch #56, the DAO's Ethereum address signing by vote through Chain Signatures #57, upgrades by vote up to #65 (0.2.5), the steward's 90-day term #59, a co-op court case upheld by a random jury and refunded from the treasury #60, a member's pledge kept, a 10-minute veto window on no-vote payouts #62 (task #7 released after it, #64; task #8 vetoed by a member and approved by another, #63).
+7. **Validation:** 130 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 32 unit tests, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), the bonded steward #54, by-laws v4 #55, a member who joined with an NEP-413 signed vouch #56, the DAO's Ethereum address signing by vote through Chain Signatures #57, upgrades by vote up to #65 (0.2.5), the steward's 90-day term #59, a co-op court case upheld by a random jury and refunded from the treasury #60, a member's pledge kept, a 10-minute veto window on no-vote payouts #62 (task #7 released after it, #64; task #8 vetoed by a member and approved by another, #63); tasks #9–#15 in every state, court cases #1–#2 not upheld, profit share #67 claimed, #68 rejected by the members. Checklist for judges: JUDGE.md.
 8. **Next:** mainnet with Circle USDC, NEAR AI credits for the organization, independent members, a tighter CSP, a USDC task budget.
 
 ## Submission form text
@@ -57,21 +57,41 @@ file is the script.
 **Agent Economy.** Bid → deliver → paid. Each job's inference cost comes from NEAR AI Cloud billing, with one receipt
 per job, plus a TEE proof that any visitor can verify in their own browser.
 
-## X post (draft)
+## X post (draft, a thread of 3; attach the video to the first)
 
-> Who controls an AI agent that earns money? In Koperasi, its members: one member, one vote, like an Indonesian
-> co-op. The agent's prompt, model and prices are by-laws pinned by hash in a @SputnikDAO vote; check its TEE with your
-> own nonce in your browser. Small tasks are paid on earned trust, big ones voted by all. Live on @NEARProtocol testnet:
-> https://koperasi-kohl.vercel.app #NEARHackathon
+**1/3**
+
+> This AI agent has 5 owners, and it cannot pay anyone they did not agree to.
+> 
+> Koperasi: an AI agent owned by a co-op, one member one vote, every rule on @NEARProtocol. Built for #NEARHackathon (Social Money).
+> 
+> 🎥 [video]
+> https://koperasi-kohl.vercel.app
+
+**2/3**
+
+> How it works:
+> • the agent's prompt, model and prices are by-laws pinned by hash in a Sputnik DAO vote
+> • small tasks are paid on earned trust, after a 10-min veto window
+> • big ones go to every member
+> • disputes go to 3 members drawn at random
+
+**3/3**
+
+> Don't trust us: the page checks it in your browser. 0 full-access keys on the contract, code rebuilt byte for byte from source, the model's TEE attested against your own nonce.
+> 
+> Or run `npm run verify`: it reads every claim from the chain.
+> 
+> github.com/PugarHuda/koperasi
 
 ## Final checklist
 
 - [x] Repo with README: one-liner and positioning at the top, live demo link, per-track evidence, contract addresses, setup and tests
 - [x] Live page: https://koperasi-kohl.vercel.app
-- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `cbe66c30…`, rev `065de9a`, proposal #48)
+- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `de764ad1…`, rev `b84f950`, proposal #65; CI rebuilds it weekly)
 - [x] CI: lint, typecheck, unit, contract, Playwright, npm audit, `npm run verify` (daily)
 - [x] Security rounds 1–3 ([05-security](reports/05-security.md)); S12 fixed on-chain (#48); gasless relayer live in production
-- [ ] **Demo video** (builder records it with the script above)
+- [x] **Demo video**: `video/out/koperasi.mp4` (4:27, rendered from `video/`); attach it to the X post
 - [x] **Pitch deck**: 9 slides built from the outline above (shared by the builder as a link)
 - [ ] **Repo public**: scheduled task on 13 Nov 09:00 WIB (check `.open-repo.log`)
 - [ ] **Submission form** before 14 Nov 23:59 UTC (06:59 WIB on 15 Nov)
