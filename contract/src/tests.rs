@@ -2042,3 +2042,90 @@ fn a_slashed_steward_is_out_of_good_standing() {
     let (s, good) = k.get_standing(steward());
     assert_eq!((s.slashed, good), (1, false));
 }
+
+// ---------- the veto window on payouts paid on trust ----------
+
+/// carol is trusted by alice (task #0 approved by bob); the members vote a 30-minute veto window.
+fn trusted_with_veto() -> Koperasi {
+    let mut k = board();
+    let (id, _) = deliver(&mut k, 50 * MILLI);
+    approve(&mut k, id);
+    dao_says(&mut k, id, "Approved");
+    as_(&dao(), near(0));
+    k.set_veto_window(30);
+    k
+}
+const MIN: u64 = 60_000_000_000;
+
+#[test]
+fn a_payout_on_trust_waits_out_the_veto_window_then_anyone_releases_it() {
+    let mut k = trusted_with_veto();
+    assert_eq!(k.get_board().veto_minutes, 30);
+    let (id, on_trust) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
+    assert!(on_trust);
+    assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Held);
+    assert_eq!(k.get_board().budget.0, 950 * MILLI, "nothing leaves the budget while held");
+    assert_eq!(k.get_task_due(id), Some(U64(30 * MIN)));
+    at(&acc("stranger.testnet"), 30 * MIN);
+    k.release_task(id);
+    assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Paying);
+    assert_eq!(k.get_board().budget.0, 870 * MILLI);
+    assert_eq!(k.get_task_due(id), None);
+    dao_says(&mut k, id, "Approved");
+    assert_eq!(k.get_tasks(None, None)[id as usize].approved_by, None, "paid on trust, no vote");
+}
+
+#[test]
+#[should_panic(expected = "the veto window is still open")]
+fn a_held_payout_cannot_be_released_early() {
+    let mut k = trusted_with_veto();
+    let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
+    at(&acc("carol.testnet"), 30 * MIN - 1);
+    k.release_task(id);
+}
+
+#[test]
+fn a_members_veto_sends_the_payout_to_one_other_members_vote() {
+    let mut k = trusted_with_veto();
+    let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
+    as_(&acc("alice.testnet"), near(0));
+    k.veto_task(id);
+    assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::NeedsApproval);
+    assert_eq!(k.get_task_due(id), None);
+    // the window passing no longer pays it
+    at(&acc("carol.testnet"), DAY);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.release_task(id))).is_err());
+    as_(&me(), near(0));
+    k.on_approve_policy(id, acc("alice.testnet"), Ok(policy(&["alice.testnet", "bob.testnet"])));
+    dao_says(&mut k, id, "Approved");
+    assert_eq!(k.get_tasks(None, None)[id as usize].approved_by, Some(acc("alice.testnet")));
+}
+
+#[test]
+fn only_a_member_other_than_the_contributor_vetoes() {
+    let mut k = trusted_with_veto();
+    with_members(&mut k, &["carol.testnet"]);
+    let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
+    for who in ["stranger.testnet", "carol.testnet"] {
+        as_(&acc(who), near(0));
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.veto_task(id))).is_err(), "{who}");
+    }
+    assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Held);
+}
+
+#[test]
+fn the_dao_can_cancel_a_held_payout_and_only_the_dao_sets_the_window() {
+    let mut k = trusted_with_veto();
+    let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
+    as_(&dao(), near(0));
+    k.cancel_task(id);
+    assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Cancelled);
+    assert_eq!(k.get_board().budget.0, 950 * MILLI);
+    as_(&acc("alice.testnet"), near(0));
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.set_veto_window(0))).is_err());
+    as_(&dao(), near(0));
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| k.set_veto_window(MAX_VETO_MINUTES + 1))).is_err());
+    k.set_veto_window(0);
+    let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
+    assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Paying, "no window: paid at once, as before");
+}

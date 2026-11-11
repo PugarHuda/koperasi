@@ -237,6 +237,11 @@ test("task actions are checked against the task's state on-chain, by the contrac
   assert.match(taskCheck("approve", t("NeedsApproval"), "dave", ctx), /Only a member/);
   assert.match(taskCheck("approve", t("NeedsApproval", { amount: "101" }), "bob", ctx), /budget is too low/);
   assert.match(taskCheck("approve", undefined, "bob", ctx), /does not exist/);
+  assert.equal(taskCheck("veto", t("Held"), "bob", ctx), null);
+  assert.match(taskCheck("veto", t("Held"), "carol", { members: ["carol"] }), /contributor cannot veto/);
+  assert.match(taskCheck("veto", t("Held"), "dave", ctx), /Only members/);
+  assert.match(taskCheck("release", t("Held"), "dave", { ...ctx, due: 2000, now: 1000 }), /still open/);
+  assert.equal(taskCheck("release", t("Held"), "dave", { ...ctx, due: 1000, now: 1000 }), null);
 });
 
 // ---------- security PoCs (docs/reports/05-security.md): each attack below worked before its fix ----------

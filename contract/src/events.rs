@@ -123,6 +123,15 @@ pub enum Event {
     /// The poster accepted; `on_trust` = paid with no vote, else it waits for one other member.
     #[event_version("1.0.0")]
     TaskAccepted { id: u32, on_trust: bool },
+    /// The members' veto window for payouts on trust (0: none).
+    #[event_version("1.0.0")]
+    VetoWindowSet { minutes: u32 },
+    /// A payout on trust waits for a member's veto until `until` (ns).
+    #[event_version("1.0.0")]
+    TaskHeld { id: u32, until: U64 },
+    /// A member vetoed a held payout; it now needs one other member's approval.
+    #[event_version("1.0.0")]
+    TaskVetoed { id: u32, by: AccountId },
     /// One other member approved the payout.
     #[event_version("1.0.0")]
     TaskApproved { id: u32, approver: AccountId },

@@ -121,6 +121,9 @@ async function load() {
     view(dep.contract, "get_contributors"),
   ]);
   const proposals = await view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 50), limit: 50 });
+  // held payouts on trust: when each may be released (ms), so the panel offers the veto or the release
+  const dues = Object.fromEntries(await Promise.all(tasks.filter((t) => t.status === "Held")
+    .map(async (t) => [t.id, Number(BigInt((await view(dep.contract, "get_task_due", { id: t.id })) ?? 0) / 1_000_000n)])));
   const group = policy.roles.find((r) => r.name === "member")?.kind?.Group ?? [];
   const [num, den] = policy.default_vote_policy?.threshold ?? [1, 2];
   const needed = Math.floor((group.length * num) / den) + 1;
@@ -147,7 +150,7 @@ async function load() {
     all(dep.contract, "get_cases"), view(dep.contract, "get_standing", { account_id: me }), member ? all(dep.contract, "get_receipts") : []]
     .map((x) => Promise.resolve(x).catch(() => null)));
   return { onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
-    board, tasks, records: Object.fromEntries(recs), pledges, pclaims, cases, standing, receipts };
+    board, tasks, dues, records: Object.fromEntries(recs), pledges, pclaims, cases, standing, receipts };
 }
 
 // each button runs one transaction, then the panel re-reads the chain. The stages a member sees:
@@ -198,6 +201,13 @@ function tasksPanel(s) {
     if (t.status === "Submitted" && t.poster === me) {
       const how = payPath(t.amount, r, sources(t.contributor)) === "trust" ? "pays at once if you are within your daily limit" : "then one other member approves";
       return [li(t, `<button type="button" class="btn small" data-taccept="${t.id}">Accept the work (${how})</button>`)];
+    }
+    if (t.status === "Held") {
+      const due = s.dues?.[t.id];
+      const open = due && Date.now() < due;
+      return [li(t, `${open ? `<span class="small">held until ${new Date(due).toLocaleTimeString()}</span>` : ""}${
+        s.member && t.contributor !== me ? `<button type="button" class="btn ghost small" data-tveto="${t.id}">Veto: needs one member</button>` : ""}${
+        open ? "" : `<button type="button" class="btn small" data-trelease="${t.id}">Release the payout</button>`}`)];
     }
     if (t.status === "NeedsApproval" && s.member && t.poster !== me && t.contributor !== me) {
       return [li(t, `<button type="button" class="btn small" data-tapprove="${t.id}">Approve paying ${esc(t.contributor)}</button>`)];
@@ -538,7 +548,8 @@ async function render() {
     const [[t], member, board, policy] = await Promise.all([view(dep.contract, "get_tasks", { from: id, limit: 1 }),
       view(dep.contract, "get_member", { account_id: me }), view(dep.contract, "get_board"), view(dep.dao, "get_policy")]);
     const members = action === "approve" ? (policy.roles.find((x) => x.name === "member")?.kind?.Group ?? []) : member ? [me] : [];
-    return taskCheck(action, t, me, { members, budget: board.budget });
+    const due = action === "release" ? await view(dep.contract, "get_task_due", { id }).then((d) => (d ? Number(BigInt(d) / 1_000_000n) : null)) : null;
+    return taskCheck(action, t, me, { members, budget: board.budget, due });
   };
   const task = (attr, label, method, extra = () => ({}), tgas = 30, action = null) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => {
     b.onclick = () => {
@@ -551,6 +562,8 @@ async function render() {
   task("tgiveup", "Give up", "give_up_task");
   task("taccept", "Accept", "accept_task", undefined, 200, "accept");
   task("tapprove", "Approve", "approve_task", undefined, 300, "approve");
+  task("tveto", "Veto", "veto_task", undefined, 30, "veto");
+  task("trelease", "Release", "release_task", undefined, 200, "release");
   task("tsubmit", "Deliver", "submit_task", (id) => {
     const work = $(`w-tw-${id}`).value.trim();
     if (!work) { say(`<span class="err">Task #${id}: link to the work you delivered first.</span>`); return null; }

@@ -38,6 +38,14 @@ export async function duties(now, read = view) {
     }
     if (page.length < 100) break;
   }
+  for (let from = 0; ; from += 100) {
+    const page = /** @type {any[]} */ (await read("get_tasks", { from, limit: 100 }));
+    for (const t of page.filter((x) => x.status === "Held")) {
+      const due = /** @type {string|null} */ (await read("get_task_due", { id: t.id }));
+      if (due !== null && now >= BigInt(due)) out.push({ method: "release_task", args: { id: t.id }, why: `task #${t.id}: nobody vetoed it in the window` });
+    }
+    if (page.length < 100) break;
+  }
   const [, ends] = /** @type {any} */ (await read("get_steward_term", {}));
   if (ends !== null && now >= BigInt(ends)) out.push({ method: "end_steward_term", args: {}, why: "the steward's term ran out" });
   const overdue = BigInt(/** @type {any} */ (await read("get_overdue", {})));
@@ -59,7 +67,9 @@ export async function GET(request) {
   }
   const done = [];
   for (const d of await duties(BigInt(Date.now()) * 1_000_000n)) {
-    done.push(await keeper.callFunctionRaw({ contractId: dep.contract, methodName: d.method, args: d.args, gas: 50n * 10n ** 12n })
+    done.push(await keeper.callFunctionRaw({ contractId: dep.contract, methodName: d.method, args: d.args,
+      // a release files and approves the payout proposal: the same chain as accept_task
+      gas: (d.method === "release_task" ? 200n : 50n) * 10n ** 12n })
       .then((o) => ({ ...d, hash: o.transaction.hash }), (e) => ({ ...d, error: e.message })));
   }
   return Response.json({ read, done });

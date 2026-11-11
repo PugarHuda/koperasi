@@ -337,11 +337,12 @@ cargo near build reproducible-wasm
       : "The members have not voted a trust rule yet, so no task can be posted.";
     $("tiers").innerHTML = rule ? [
       ["Paid on acceptance", `up to ${nearAmt(rule.auto_max)} NEAR, for a contributor trusted by ${rule.trusted_after}+ different member${rule.trusted_after === 1 ? "" : "s"} (or a voted bounty). Each poster pays at most ${nearAmt(rule.poster_daily_auto)} NEAR a day this way. No vote.`],
+      ...(b.veto_minutes ? [["Veto window", `a payout on trust waits ${b.veto_minutes} minutes first. Any member but the contributor can veto it, and then one other member must approve. After that, anyone releases it.`]] : []),
       ["One member approves", `up to ${nearAmt(rule.one_vote_max)} NEAR, or anyone without that record yet. Never the poster or the contributor.`],
       ["All members vote", `above ${nearAmt(rule.one_vote_max)} NEAR: a Sputnik DAO bounty, paid from the treasury, counted on the record.`],
     ].map(([h, p]) => `<li><b>${h}</b><span>${p}</span></li>`).join("") : "";
     const STATUS = { Open: "Open", Claimed: "Taken", Submitted: "Delivered, waiting for the poster", NeedsApproval: "Waiting for one member",
-      Paying: "Paying", Paid: "Paid", Cancelled: "Cancelled" };
+      Held: "Accepted on trust, held for a member's veto", Paying: "Paying", Paid: "Paid", Cancelled: "Cancelled" };
     const work = (d) => (/^https:\/\/\S+$/.test(d) ? `<a href="${esc(d)}" rel="noopener">${esc(d)}</a>` : esc(d));
     rows($("tasks").tBodies[0], tasks.map((t, i) => [t, i]).reverse().map(([t, i]) => `<tr id="task-${t.id}">
       <td><strong>#${t.id}</strong> ${esc(t.description)}<span class="claim">posted by ${esc(t.poster)}${t.deliverable ? `; delivered: ${work(t.deliverable)}` : ""}</span></td>

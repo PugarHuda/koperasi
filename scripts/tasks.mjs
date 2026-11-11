@@ -7,6 +7,8 @@
 //   node scripts/tasks.mjs claim|submit <id> <account> ["<link to the work>"]  anyone takes it, then delivers
 //   node scripts/tasks.mjs accept <id> <poster>                                paid at once if small and trusted
 //   node scripts/tasks.mjs approve <id> <member>                               one other member approves the rest
+//   node scripts/tasks.mjs veto-window <minutes>                               members vote how long a payout on trust waits
+//   node scripts/tasks.mjs veto|release <id> <account>                         a member vetoes it; anyone releases it after
 //   node scripts/tasks.mjs credit <proposal id> <account>                      count an approved DAO bounty payout
 //   node scripts/tasks.mjs settle <id> <account>                               re-read a payout the members voted by hand
 //   node scripts/tasks.mjs list
@@ -54,6 +56,13 @@ if (cmd === "rule") {
   await send(a[1], "accept_task", { id: Number(a[0]) }, 0n, 200);
 } else if (cmd === "approve") {
   await send(a[1], "approve_task", { id: Number(a[0]) }, 0n, 300);
+} else if (cmd === "veto-window") {
+  await byVote(`Tasks: a payout on trust waits ${a[0]} minutes, and any member can veto it to one other member's vote`,
+    "set_veto_window", { minutes: Number(a[0]) });
+} else if (cmd === "veto") {
+  await send(a[1], "veto_task", { id: Number(a[0]) });
+} else if (cmd === "release") {
+  await send(a[1], "release_task", { id: Number(a[0]) }, 0n, 200);
 } else if (cmd === "settle") {
   await send(a[1], "settle_task", { id: Number(a[0]) });
 } else if (cmd === "credit") {
@@ -62,7 +71,7 @@ if (cmd === "rule") {
   const b = await view(dep.contract, "get_board");
   const r = b.rule;
   console.log(r ? `rule: no vote ≤ ${near(r.auto_max)} NEAR once trusted by ${r.trusted_after} sources, ${near(r.poster_daily_auto)} NEAR a day per poster; one member ≤ ${near(r.one_vote_max)} NEAR; ${r.points} points`
-    : "no trust rule yet", `| the contract may pay ${near(b.budget)} NEAR more`);
+    : "no trust rule yet", `| the contract may pay ${near(b.budget)} NEAR more | veto window ${b.veto_minutes ?? 0} min`);
   for (const t of await view(dep.contract, "get_tasks", { limit: 200 })) {
     const pid = await view(dep.contract, "get_payout_proposal", { id: t.id });
     console.log(`#${t.id} ${t.status} ${near(t.amount)} NEAR "${t.description}" by ${t.poster}` +

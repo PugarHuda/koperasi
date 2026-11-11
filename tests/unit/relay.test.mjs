@@ -61,18 +61,20 @@ test("the keeper reads only members whose waiting stake was not read for 6 hours
   assert.deepEqual(await stale(now, read), ["a.testnet", "c.testnet"], "c has nothing waiting but may have unstaked");
 });
 
-test("the keeper closes cases past 3 days, ends a term that ran out, and slashes a steward 7 days late", async () => {
+test("the keeper closes cases past 3 days, releases payouts past their veto window, ends a term that ran out, and slashes a steward 7 days late", async () => {
   const { duties } = await import("../../api/keeper.mjs");
   const D = 86_400n * 10n ** 9n;
   const now = 100n * D;
-  const state = (/** @type {any} */ o) => async (/** @type {string} */ m) => ({
+  const state = (/** @type {any} */ o) => async (/** @type {string} */ m, /** @type {any} */ a) => ({
     get_cases: [{ id: 0, status: "Open", opened: String(now - 3n * D) }, { id: 1, status: "Open", opened: String(now - 3n * D + 1n) },
       { id: 2, status: "Upheld", opened: "0" }],
+    get_tasks: [{ id: 7, status: "Held" }, { id: 8, status: "Held" }, { id: 9, status: "Paid" }],
+    get_task_due: { 7: String(now), 8: String(now + 1n) }[a?.id],
     get_steward_term: [90, o.ends], get_overdue: o.overdue, get_info: { steward_bond: o.bond } })[m];
   const due = await duties(now, state({ ends: String(now), overdue: "950000", bond: "1000000000000000000000000" }));
-  assert.deepEqual(due.map((d) => [d.method, d.args]), [["close_case", { id: 0 }], ["end_steward_term", {}], ["slash_overdue", {}]],
-    "exactly 3 days closes case 0; case 1 is a nanosecond short; a decided case is left alone");
+  assert.deepEqual(due.map((d) => [d.method, d.args]), [["close_case", { id: 0 }], ["release_task", { id: 7 }], ["end_steward_term", {}], ["slash_overdue", {}]],
+    "exactly 3 days closes case 0; case 1 is a nanosecond short; a decided case is left alone; task 8's window is still open");
   const quiet = await duties(now, state({ ends: String(now + 1n), overdue: "950000", bond: "0" }));
-  assert.deepEqual(quiet.map((d) => d.method), ["close_case"], "a term not yet over, and no bond left to slash");
-  assert.deepEqual((await duties(now, state({ ends: null, overdue: "0", bond: "1" }))).map((d) => d.method), ["close_case"]);
+  assert.deepEqual(quiet.map((d) => d.method), ["close_case", "release_task"], "a term not yet over, and no bond left to slash");
+  assert.deepEqual((await duties(now, state({ ends: null, overdue: "0", bond: "1" }))).map((d) => d.method), ["close_case", "release_task"]);
 });

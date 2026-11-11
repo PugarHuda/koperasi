@@ -16,3 +16,10 @@
 6. **Profit share.** When the members vote to share the treasury, 20% stays as the reserve, 40% is shared by savings
    (NEAR staked for inference) and 40% by contribution points. Rounding stays in the
    reserve. Each member claims their own share. Points halve at each share, so recent work counts most; savings do not. A share that would leave the treasury under the floor the members voted goes back whole.
+7. **Tasks and earned trust.** A member posts a task and anyone takes it. When the poster accepts the work:
+   a small task for someone other members already paid is paid with no vote, within the poster's daily limit; a
+   mid-size task, or anyone without that record, needs one other member's approval; a large task is a DAO bounty
+   voted by all. Every payout is a `Transfer` proposal from the treasury.
+8. **The veto window.** A payout with no vote first waits the window the members voted (10 minutes on testnet).
+   During it any member except the contributor can veto it, and then it needs one other member's approval like a
+   mid-size task. After the window, anyone can release it.

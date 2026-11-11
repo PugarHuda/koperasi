@@ -74,7 +74,7 @@ export const EVENTS = ["join_requested", "join_cancelled", "member_added", "memb
   "savings_set", "savings_pending", "staking_pool_set", "share_rule_set", "usdc_set", "ledger_started", "agent_set", "steward_set",
   "steward_bonded", "steward_slashed", "steward_slashed_overdue", "paused", "unpaused", "upgraded", "receipt_recorded", "receipt_updated",
   "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
-  "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "task_approved",
+  "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "veto_window_set", "task_held", "task_vetoed", "task_approved",
   "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited",
   "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "steward_term_set", "steward_term_ended"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -121,6 +121,9 @@ export function describeEvent({ event: e, data: d }) {
     task_claimed: () => `${short(d.contributor)} took task #${d.id}`,
     task_submitted: () => `Task #${d.id} was delivered`,
     task_accepted: () => `Task #${d.id} was accepted${d.on_trust ? ", paid on earned trust" : ", waiting for one other member"}`,
+    veto_window_set: () => `The members voted a ${d.minutes}-minute veto window on payouts on trust`,
+    task_held: () => `Task #${d.id} accepted on trust: held for a member's veto`,
+    task_vetoed: () => `${short(d.by)} vetoed task #${d.id}: it needs one member's approval`,
     task_approved: () => `${short(d.approver)} approved paying task #${d.id}`,
     payout_filed: () => `The contract filed DAO proposal #${d.proposal_id} to pay task #${d.id}`,
     task_paid: () => `The treasury paid ${short(d.contributor)} ${nearOf(d.amount)} for task #${d.id}`,
@@ -180,13 +183,13 @@ export function affordable(acct, deposit, tgas) {
 /**
  * The contract's own checks (accept_task etc. in contract/src/tasks.rs), run on the chain's current state before the
  * wallet opens, so a transaction that would fail is never signed. Null when it should pass, else the reason.
- * @param {"claim"|"submit"|"accept"|"approve"} action
+ * @param {"claim"|"submit"|"accept"|"approve"|"veto"|"release"} action
  * @param {{ status: string, poster: string, contributor?: string|null, amount: string }|undefined} t
- * @param {string} me @param {{ members?: string[], budget?: string }} [ctx]
+ * @param {string} me @param {{ members?: string[], budget?: string, due?: number|null, now?: number }} [ctx] due/now in ms
  */
-export function taskCheck(action, t, me, { members = [], budget = "0" } = {}) {
+export function taskCheck(action, t, me, { members = [], budget = "0", due = null, now = Date.now() } = {}) {
   if (!t) return "This task does not exist.";
-  const need = { claim: "Open", submit: "Claimed", accept: "Submitted", approve: "NeedsApproval" }[action];
+  const need = { claim: "Open", submit: "Claimed", accept: "Submitted", approve: "NeedsApproval", veto: "Held", release: "Held" }[action];
   if (t.status !== need) return `This task is ${t.status} now, not ${need}: someone acted first.`;
   if (action === "claim" && t.poster === me) return "You posted this task, so you cannot take it.";
   if (action === "submit" && t.contributor !== me) return "This task is not yours.";
@@ -195,6 +198,10 @@ export function taskCheck(action, t, me, { members = [], budget = "0" } = {}) {
   if (action === "approve" && (t.poster === me || t.contributor === me)) return "The poster and the contributor cannot approve.";
   if (action === "approve" && !members.includes(me)) return "Only a member of the DAO approves.";
   if (action === "approve" && BigInt(t.amount) > BigInt(budget)) return "The task budget is too low: the members must raise it first.";
+  if (action === "veto" && t.contributor === me) return "The contributor cannot veto their own payout.";
+  if (action === "veto" && !members.includes(me)) return "Only members veto.";
+  if (action === "release" && due !== null && now < due) return "The veto window is still open.";
+  if (action === "release" && BigInt(t.amount) > BigInt(budget)) return "The task budget is too low: the members must raise it first.";
   return null;
 }
 

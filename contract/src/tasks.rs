@@ -3,6 +3,8 @@
 //!   - up to `auto_max`, to a contributor trusted by `trusted_after` *different* sources (task posters, or the DAO
 //!     for a voted bounty), within the poster's `poster_daily_auto`: paid with no vote;
 //!   - up to `one_vote_max` (or when the above does not hold): paid once one other member approves;
+//!   - with a veto window voted (`set_veto_window`), a payout on trust first waits that long: any member but the
+//!     contributor can veto it (`veto_task`), which sends it to the one-vote tier; after the window anyone releases it;
 //!   - larger: not posted here at all; it is a normal DAO proposal (a Sputnik bounty) and `credit_dao_bounty`
 //!     adds it to the contributor's record once the members approved it.
 //!
@@ -23,6 +25,10 @@ const KEY_TRUST: &[u8] = b"trust_v2";
 const KEY_BUDGET: &[u8] = b"task_budget";
 const KEY_TASK_COUNT: &[u8] = b"task_count";
 const KEY_CONTRIBUTORS: &[u8] = b"contributors";
+/// ns a payout on trust waits for a veto; 0 (never voted) pays at once, as before 0.2.5.
+const KEY_VETO: &[u8] = b"veto_window";
+/// The longest veto window the members can vote: a payout on trust must not wait longer than this.
+pub const MAX_VETO_MINUTES: u32 = 7 * 24 * 60;
 /// Kept by the contract for the task's storage; also what makes spamming the board cost something.
 pub const TASK_FEE: NearToken = NearToken::from_millinear(10);
 const MAX_TEXT: usize = 500;
@@ -74,6 +80,8 @@ pub enum TaskStatus {
     Paying,
     Paid,
     Cancelled,
+    /// accepted on trust, waiting out the members' veto window (added last: stored tasks keep their variant index)
+    Held,
 }
 
 #[near(serializers = [borsh, json])]
@@ -110,6 +118,8 @@ pub struct Board {
     /// yoctoNEAR the members let this contract pay from the treasury, not yet paid out
     pub budget: U128,
     pub tasks: u32,
+    /// minutes a payout on trust waits for a member's veto (0: none)
+    pub veto_minutes: u32,
 }
 
 pub(crate) fn load<T: BorshDeserialize>(key: &[u8]) -> Option<T> {
@@ -132,6 +142,13 @@ fn task(id: u32) -> Task {
 }
 fn text(s: &str, what: &str) {
     require!(!s.trim().is_empty() && s.len() <= MAX_TEXT, format!("{what}: 1 to {MAX_TEXT} characters"));
+}
+/// When a held payout may be released (ns).
+fn due_key(id: u32) -> Vec<u8> {
+    format!("due:{id}").into_bytes()
+}
+fn veto_ns() -> u64 {
+    read_u128(KEY_VETO).unwrap_or(0) as u64
 }
 fn payout_key(id: u32) -> Vec<u8> {
     format!("payout:{id}").into_bytes()
@@ -191,6 +208,14 @@ impl Koperasi {
         self.assert_dao();
         write_u128(KEY_BUDGET, amount.0);
         Event::TaskBudgetSet { amount }.emit();
+    }
+
+    /// DAO only: how long a payout on trust waits for a member's veto, in minutes (0 turns the window off).
+    pub fn set_veto_window(&mut self, minutes: u32) {
+        self.assert_dao();
+        require!(minutes <= MAX_VETO_MINUTES, "at most 7 days");
+        write_u128(KEY_VETO, minutes as u128 * 60_000_000_000);
+        Event::VetoWindowSet { minutes }.emit();
     }
 
     // ---------- the task's life ----------
@@ -259,7 +284,8 @@ impl Koperasi {
     }
 
     /// The poster accepts the work: paid with no vote if small, the contributor is trusted and the poster is within
-    /// their daily limit; else it waits for one other member's approval. Returns true when the payout started.
+    /// their daily limit; else it waits for one other member's approval. With a veto window voted, a payout on trust
+    /// is held that long first. Returns true when it goes on trust (paying now, or held).
     pub fn accept_task(&mut self, id: u32) -> bool {
         let mut t = task(id);
         require!(t.status == TaskStatus::Submitted, "nothing submitted");
@@ -276,7 +302,16 @@ impl Koperasi {
             // ponytail: a payout that later fails still counts toward the poster's day; errs on the safe side
             write_u128(today.as_bytes(), spent);
             Event::TaskAccepted { id, on_trust: true }.emit();
-            self.pay(&mut t, None);
+            let window = veto_ns();
+            if window == 0 {
+                self.pay(&mut t, None);
+            } else {
+                let until = env::block_timestamp() + window;
+                write_u128(&due_key(id), until as u128);
+                t.status = TaskStatus::Held;
+                save(&task_key(id), &t);
+                Event::TaskHeld { id, until: U64(until) }.emit();
+            }
             true
         } else {
             Event::TaskAccepted { id, on_trust: false }.emit();
@@ -284,6 +319,36 @@ impl Koperasi {
             save(&task_key(id), &t);
             false
         }
+    }
+
+    /// A member other than the contributor stops a held payout on trust: it now needs one other member's approval.
+    /// The poster's day still counts it (errs on the safe side).
+    pub fn veto_task(&mut self, id: u32) {
+        let who = env::predecessor_account_id();
+        let mut t = task(id);
+        require!(t.status == TaskStatus::Held, "no payout waiting for a veto");
+        require!(self.members.contains_key(&who), "only members veto");
+        require!(Some(&who) != t.contributor.as_ref(), "the contributor cannot veto");
+        env::storage_remove(&due_key(id));
+        t.status = TaskStatus::NeedsApproval;
+        save(&task_key(id), &t);
+        Event::TaskVetoed { id, by: who }.emit();
+    }
+
+    /// Anyone, once the veto window is over: pay a held payout from the treasury.
+    pub fn release_task(&mut self, id: u32) {
+        let mut t = task(id);
+        require!(t.status == TaskStatus::Held, "no payout waiting for a veto");
+        let due = read_u128(&due_key(id)).unwrap_or(0) as u64;
+        require!(env::block_timestamp() >= due, "the veto window is still open");
+        require!(self.members.contains_key(&t.poster), "the poster is no longer a member");
+        env::storage_remove(&due_key(id));
+        self.pay(&mut t, None);
+    }
+
+    /// When a held payout may be released (ns), if it is held.
+    pub fn get_task_due(&self, id: u32) -> Option<U64> {
+        read_u128(&due_key(id)).map(|d| U64(d as u64))
     }
 
     /// One other member approves a payout; membership is read from the DAO policy at that moment.
@@ -511,7 +576,12 @@ impl Koperasi {
 
     /// The trust rule, the budget left and how many tasks exist.
     pub fn get_board(&self) -> Board {
-        Board { rule: load(KEY_TRUST), budget: U128(budget()), tasks: read_u128(KEY_TASK_COUNT).unwrap_or(0) as u32 }
+        Board {
+            rule: load(KEY_TRUST),
+            budget: U128(budget()),
+            tasks: read_u128(KEY_TASK_COUNT).unwrap_or(0) as u32,
+            veto_minutes: (veto_ns() / 60_000_000_000) as u32,
+        }
     }
 
     /// Tasks, a page at a time.

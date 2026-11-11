@@ -15,7 +15,8 @@ business, every member has one vote, and profit is shared by savings and by cont
   with no member's vote). There is no second wallet and no new multisig. Task payouts are in NEAR, profit shares in USDC.
 - **Trust is earned, and it decides who has to vote.** A contributor that another member already paid (never the poster
   alone: a member cannot vouch for someone and then pay them with no vote) is paid when the poster accepts, up to a
-  small limit a day. Mid-size tasks need one other member, and large ones go to every member as a DAO bounty.
+  small limit a day. That payout first waits a veto window the members voted (10 minutes), and any member can veto it
+  into a vote. Mid-size tasks need one other member, and large ones go to every member as a DAO bounty.
   Every point on a record links to the task or proposal it came from.
 - **Profit is shared by rule.** The members vote a split (reserve, savings, contribution). The contract divides
   each payout to the last USDC unit, and each member claims their own share.
@@ -43,9 +44,10 @@ quotes its line.
 | The members own the co-op, one vote each | DAO [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet): role `member`, RoleWeight, threshold 1/2 | *every member in the contract holds role `member`*; *one member, one vote* |
 | No role can act alone | `member` votes, `tasks` only files and approves transfers, outsiders only file proposals (with a bond) | *no role can act alone* |
 | The agent runs only by-laws the members voted | v3 by proposal #7 (a member found v2's model was not served), v4 by #55 (the steward's handover); the agent runs only `4e28de45…` | *the agent's by-laws … are the ones the members voted* |
-| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys; upgrades only by vote, now #58 (0.2.4) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
+| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys; upgrades only by vote, now #61 (0.2.5) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
 | The agent can only record receipts | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, `record_receipt` / `update_receipt` | *the agent account has only function-call keys …* |
 | Small payouts on earned trust, from the treasury itself | Task #2 needed another member (#30); #3 and #4 paid on trust, no vote (#31, #34); #5, #6 (#44, #45). Each a DAO `Transfer` the contract filed | *task #n was paid from the treasury by DAO proposal #m, filed by the contract*; *the trust tiers were voted* |
+| Any member can stop a no-vote payout before it leaves | A 10-minute veto window by vote #62. Task #7 waited it out and anyone released it (#64). Task #8 was vetoed by bob ([3oQ43dwi…](https://testnet.nearblocks.io/txns/3oQ43dwiSW48PjG983VRL92Hgw4PJF13hGC1Ntc6qWWT)), so it needed one other member, and the steward approved it (#63) | *a payout on trust waits out the veto window the members voted* |
 | Every point on a record names its source | carol 5 tasks, bob 2, the steward 1, each linked to a task or a DAO bounty | *…'s record: n finished, each traced to its source* |
 | Profit is shared only by a members' vote, split by the contract | #36: 10 Circle testnet USDC to 4 members; bob claimed his 4.33 in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd); #51 filed from a [Trezu](trezu/README.md) form | *the members voted every profit share out of the treasury* |
 | The person in the middle is bonded, and serves a term | Appointed by vote #54 under contract 0.2.3, 1 NEAR bond [k6MzrgXV…](https://testnet.nearblocks.io/txns/k6MzrgXVf9E8styeNa5zNoYryY9aLCPvAqoPV1waFKZ); anyone can slash it once a paid job's earnings are 7 days late. A 90-day term by vote #59 (after Hats Protocol): when it runs out anyone ends it | *the steward was appointed by a vote and is bonded*; *the steward serves a term the members voted* |
@@ -138,9 +140,13 @@ Each one here is a contract rule or a vote you can read:
 
 ```sh
 npm install
-npm test        # lint, typecheck, 31 unit tests, 125 contract tests (unit, fuzz, invariant)
+npm test        # lint, typecheck, 31 unit tests, 130 contract tests (unit, fuzz, invariant)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
+
+The contract is also tested against the **real Sputnik DAO v2 wasm**, not a mock: `contract/tests/sputnik_sandbox.rs`
+starts a local NEAR sandbox, deploys the showcase DAO's own code (pulled from testnet), and pays a task out of the
+DAO's treasury through the contract's role `tasks` (`cd contract && cargo test --test sputnik_sandbox`, Linux/macOS).
 
 The walkthrough covers the demo's seven steps, the page, the browser tests, running the agent on the real Agent
 Market, and the scripts that keep the co-op running. It is in [`docs/DETAILS.md`](docs/DETAILS.md), together with the
@@ -229,11 +235,11 @@ person is why the steward exists. Both are listed under *Trust assumptions*.
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
-4. **The contract's code.** It runs a global contract the members approved, now proposal #58. `upgrade` obeys only the
+4. **The contract's code.** It runs a global contract the members approved, now proposal #61. `upgrade` obeys only the
    DAO, and the contract account has no full-access key left, so nobody can deploy code without a vote, the builder
    included. The live page shows the key count from the chain. Every upgrade and what it fixed:
    [`docs/DETAILS.md`](docs/DETAILS.md#code-upgrades-each-by-a-members-vote). Each upgrade publishes a global contract
-   (about 41 NEAR for this 406 KB contract).
+   (about 41 NEAR for this 412 KB contract).
 5. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
    code. The co-op's NEAR AI organization has credits, and the agent bids on real jobs; none was awarded yet.

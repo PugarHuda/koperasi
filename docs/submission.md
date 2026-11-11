@@ -28,7 +28,7 @@ file is the script.
    - NEAR AI Cloud (TEE, billing);
    - Agent Market;
    - global contracts.
-7. **Validation:** 125 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 31 unit tests, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), the bonded steward #54, by-laws v4 #55, a member who joined with an NEP-413 signed vouch #56, the DAO's Ethereum address signing by vote through Chain Signatures #57, upgrades by vote up to #58 (0.2.4), the steward's 90-day term #59, a co-op court case upheld by a random jury and refunded from the treasury #60, a member's pledge kept.
+7. **Validation:** 130 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 31 unit tests, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), the bonded steward #54, by-laws v4 #55, a member who joined with an NEP-413 signed vouch #56, the DAO's Ethereum address signing by vote through Chain Signatures #57, upgrades by vote up to #61 (0.2.5), the steward's 90-day term #59, a co-op court case upheld by a random jury and refunded from the treasury #60, a member's pledge kept, a 10-minute veto window on no-vote payouts #62 (task #7 released after it, #64; task #8 vetoed by a member and approved by another, #63).
 8. **Next:** mainnet with Circle USDC, NEAR AI credits for the organization, independent members, a tighter CSP, a USDC task budget.
 
 ## Submission form text

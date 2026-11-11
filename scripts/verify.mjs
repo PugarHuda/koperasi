@@ -84,6 +84,9 @@ const r = board.rule;
 const ruleVote = approvedCall("set_trust", (a) => JSON.stringify(a.rule) === JSON.stringify(r));
 check(r && ruleVote && BigInt(r.auto_max) <= BigInt(r.one_vote_max) && r.trusted_after >= 1, "the trust tiers were voted and trust must be earned",
   r ? `no vote ≤ ${near(r.auto_max)} NEAR once trusted by ${r.trusted_after} different source(s), ≤ ${near(r.poster_daily_auto)} NEAR a day per poster; one other member ≤ ${near(r.one_vote_max)} NEAR; above: DAO bounty; ${r.points} points a task; the contract may pay ${near(board.budget)} NEAR more; voted in proposal #${ruleVote?.id}` : "no rule");
+const vetoVote = approvedCall("set_veto_window", (a) => a.minutes === board.veto_minutes);
+check(!board.veto_minutes || vetoVote, "a payout on trust waits out the veto window the members voted",
+  `${board.veto_minutes ?? 0} minutes, voted in proposal #${vetoVote?.id}; a member's veto sends it to one other member's approval`);
 const tasks = await view(d.contract, "get_tasks", { from: 0, limit: 200 });
 for (const t of tasks.filter((x) => x.status === "Paid")) {
   const pid = await view(d.contract, "get_payout_proposal", { id: t.id });
