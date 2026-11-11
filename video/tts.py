@@ -1,8 +1,9 @@
-# python tts.py: narration.json -> public/audio/<id>.mp3 + public/audio/<id>.json (word timings, ms), with Microsoft's
+# python tts.py [sNN ...]: narration.json -> public/audio/<id>.mp3 + public/audio/<id>.json (word timings, ms), with Microsoft's
 # neural voice through edge-tts (natural, no key). The word timings drive the subtitles.
 import asyncio
 import json
 import pathlib
+import sys
 import edge_tts
 
 VOICE = "en-US-AndrewMultilingualNeural"
@@ -27,7 +28,10 @@ async def one(scene):
 
 async def main():
     OUT.mkdir(parents=True, exist_ok=True)
+    want = sys.argv[1:]  # python tts.py [sNN ...]: only these scenes
     for s in json.loads((ROOT / "narration.json").read_text(encoding="utf8")):
+        if want and s["id"] not in want:
+            continue
         for attempt in range(4):
             try:
                 await one(s)

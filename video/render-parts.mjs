@@ -21,7 +21,7 @@ for (const s of timeline) {
   if (!fs.existsSync(file)) {
     console.log(`${s.id}: frames ${from}-${to}`);
     execFileSync(process.platform === "win32" ? "npx.cmd" : "npx", ["remotion", "render", "src/index.ts", "Koperasi", rel, "--codec", "h264", "--crf", "20",
-      "--concurrency", "3", `--frames=${from}-${to}`, ...(browser ? [`--browser-executable=${browser}`] : [])], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"], shell: true });
+      "--concurrency", "2", `--frames=${from}-${to}`, ...(browser ? [`--browser-executable=${browser}`] : [])], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"], shell: true });
   }
   from = to + 1;
 }

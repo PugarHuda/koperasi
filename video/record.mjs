@@ -121,14 +121,16 @@ const scenes = {
   }),
   s08: () => scene("s08", `${LIVE}/`, async (h) => {
     await loaded(h.page);
-    await h.glide("#trust", 40);
     await h.page.waitForSelector("#tiers li", { timeout: 40000 });
+    await h.page.waitForLoadState("networkidle").catch(() => {});
+    await h.glide("#tiers", 200);
     await h.ready();
-    await h.at(1000); await h.box("#tiers", "Three tiers, voted", 5500);
-    await h.at(7000); await h.glide("#tasks", 60);
-    await h.zoom("#tasks", "Paid by DAO proposals", 5000);
-    await h.at(13000); await h.glide("#records", 60);
-    await h.box("#records", "Every point names its source", 5000);
+    await h.at(1000); await h.box("#tiers", "Three tiers, voted", 10000);
+    await h.at(11500); await h.zoom("#tiers li:nth-child(2)", "Veto window: 10 minutes, by vote", 9300);
+    await h.at(21000); await h.glide("#tasks", 60);
+    await h.zoom("#tasks", "Paid by DAO proposals", 4300);
+    await h.at(25500); await h.glide("#records", 60);
+    await h.box("#records", "Every point names its source", 3500);
   }),
   s09: () => scene("s09", `${LIVE}/`, async (h) => {
     await loaded(h.page);
