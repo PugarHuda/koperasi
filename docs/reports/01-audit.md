@@ -111,6 +111,7 @@ the video ready), real members beyond the builder's demo accounts.
 | Q7 | Docs | Medium | Stale numbers (tests, tasks, pledges, upgrade cost, who the members are), links to `docs/docs/…`, a dead `#try-it` anchor | Updated; live counts where they change |
 | Q8 | DX | Low | `.env.example` missed 9 variables; no `engines` | Every variable with where to get it; `node >= 22.3` |
 | Q9 | Tests | Low | A unit test read a signed transaction at fixed offsets and failed 1 run in 8 on CI | An RLP decoder; 300 signatures a run, 10 runs in a row pass |
+| Q10 | CI | Medium | Six browser profiles from one runner hit the public RPCs' 429 limit: 52 flaky and 3 failed tests, 43 min | A per-worker cache of answered RPC reads in the specs; it then showed a deep-link scroll race and a Reject button with no ground of its own (axe, mobile), both fixed. All green, 13 min |
 | R1–R3 | Security | Low | CSP, pledge disputes, NEAR AI measurements not pinned | Known issues, reasons in round 7 |
 
 Lighthouse (mobile, live): Accessibility 100, Best Practices 100, SEO 100, Agentic Browsing 100.

@@ -100,7 +100,7 @@ chain is kept out of the repo). The patterns:
 | Design | 8 | 8.5–9 | first screen with live proof, Lighthouse 100 ×4, LCP 1.7 s | — |
 | Impact | 5 | 6 | real cross-chain payouts; still demo members and no Agent Market job | 2–3 people outside the builder joining with a signed vouch, one paid task |
 | Originality | 9 | 9 | the co-op itself, not "agent + DAO" | say it in the first 10 seconds (README, video, page) |
-| Sustainability | 6 | 7–8 | public repo, CI green except the long Playwright job (in progress), weekly byte-for-byte rebuild | a full green run on main |
+| Sustainability | 6 | 8 | public repo, every CI job green on main (run 43266714775, Playwright 13 min over six browser profiles), weekly byte-for-byte rebuild | — |
 
 **Positioning:** For communities that want an AI agent to earn for them, who today can only buy a token that gives
 them a price but no say, Koperasi is a co-op on NEAR that owns its agent, one member one vote, unlike agent launchpads
