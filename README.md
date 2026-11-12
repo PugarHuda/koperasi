@@ -28,6 +28,10 @@ business, every member has one vote, and profit is shared by savings and by cont
 
 Built at NEAR HACKATHON (Nov 2026). Main track: **Social Money**. Also Autonomous Business and Agent Economy.
 
+Second project by the same builder, independent of this one: [Pusaka](https://github.com/PugarHuda/pusaka) (live at
+https://pusaka-two.vercel.app), NEAR NFTs that hold real Bitcoin through Chain Signatures: sell the NFT and the
+Bitcoin goes with it (tracks NFTs That Do Something, Unstoppable DeFi, Open Innovation).
+
 | The live page: who controls the agent, read from the DAO | Tasks paid from the treasury, by earned trust or by vote |
 |---|---|
 | [![Who controls this AI agent](docs/img/page-top.png)](https://koperasi-kohl.vercel.app) | [![Tasks and trust](docs/img/page-trust.png)](https://koperasi-kohl.vercel.app/#trust) |
@@ -140,7 +144,7 @@ Each one here is a contract rule or a vote you can read:
 | **NEP-297 / NEP-330** | an event for every state change (the page's live feed); source metadata of a reproducible `cargo near` build |
 | **NEP-366** | meta-transactions: members pay no gas for calls without a deposit |
 | **NEP-413** | signed messages: a member signs "I vouch for X joining this DAO" in their wallet (no transaction); X's membership request carries it, and the page checks the signature and that the key is the member's full-access key on-chain |
-| **Chain Signatures** | the DAO's own Ethereum address (`v1.signer-prod.testnet`, path `ethereum-1`), signing only when a vote makes the DAO call `sign` (`npm run chainsig`) |
+| **Chain Signatures** | the DAO's own Ethereum address (`v1.signer-prod.testnet`, path `ethereum-1`), signing only when a vote makes the DAO call `sign` (`npm run chainsig`): a statement naming the address (#57), and a payment of 0.001 Sepolia ETH to bob's own Chain Signatures address (#71; the members voted the exact transaction, and anyone can send it once the address holds Sepolia ETH for gas) |
 | **Function-call access keys** | the agent's only key can call `record_receipt` / `update_receipt`, nothing else |
 | **Staking pools** | savings are NEAR staked in the pool the DAO chose, read on-chain (`sync_savings`); on mainnet the yield buys NEAR AI credits (Staking for Inference) |
 | **NEAR AI Cloud** | private inference in TEEs (Intel TDX + NVIDIA, also Chutes-served models), attestation, signed responses, billing per request |

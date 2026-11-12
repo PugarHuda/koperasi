@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { baseEncode } from "near-api-js";
 import { DEPLOYMENT, ROOT, rawQuery, sha256, accountUrl } from "./lib.mjs";
-import { SIGNER, PATH, daoAddress, signerOf, statement } from "./chainsig.mjs";
+import { SIGNER, PATH, SEPOLIA, daoAddress, rawTx, recover, signerOf, statement, txHash } from "./chainsig.mjs";
 
 const d = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 // ponytail: rawQuery (plain fetch with a timeout, RPC failover) for every read, so a hung RPC fails instead of hanging
@@ -157,6 +157,25 @@ if (d.chainSignatures) {
     && signed?.status === "Approved" && signed.kind.FunctionCall.receiver_id === SIGNER && action?.method_name === "sign",
     "the DAO holds an Ethereum address with no private key, and signs with it only by a members' vote (Chain Signatures)",
     `${derived} (MPC ${SIGNER}, path ${PATH}); proposal #${c.proposal} ${signed?.status} asked ${SIGNER} to sign; the signature recovers ${signerOf(statement(d.dao, derived), c.signature)}`);
+
+  // a payment on Ethereum, by vote: the members approved signing exactly this transaction, and the MPC signature is the DAO's
+  const x = c.transfer;
+  if (x) {
+    const p = proposals.find((q) => q.id === x.proposal);
+    const a = p?.kind.FunctionCall?.actions[0];
+    const asked = a ? JSON.parse(Buffer.from(a.args, "base64").toString()).request?.payload_v2?.Ecdsa : null;
+    const t = { chainId: SEPOLIA.chainId, nonce: BigInt(x.nonce), maxPriorityFeePerGas: BigInt(x.maxPriorityFeePerGas), maxFeePerGas: BigInt(x.maxFeePerGas),
+      gas: BigInt(x.gas), to: x.to, value: BigInt(Math.round(x.eth * 1e6)) * 10n ** 12n };
+    const hash = Buffer.from(txHash(t)).toString("hex");
+    let sent = "not broadcast yet: the DAO's address needs Sepolia ETH for it; anyone can send it (`npm run chainsig -- --broadcast`)";
+    const r = await fetch(SEPOLIA.rpc, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [x.hash] }) }).then((q) => q.json()).catch(() => null);
+    if (r?.result) sent = `on Sepolia, status ${r.result.status === "0x1" ? "success" : "failed"}: ${SEPOLIA.explorer}${x.hash}`;
+    check(p?.status === "Approved" && p.kind.FunctionCall.receiver_id === SIGNER && asked === hash && recover(txHash(t), x.signature) === derived
+      && rawTx(t, x.signature) === x.raw && (!r?.result || r.result.status === "0x1"),
+      "a payment from the DAO's Ethereum address was signed only after the members voted for exactly that transaction",
+      `${x.eth} Sepolia ETH to ${x.to}; proposal #${x.proposal} ${p?.status} asked ${SIGNER} to sign ${hash.slice(0, 16)}…; the signature recovers ${recover(txHash(t), x.signature)}; ${sent}`);
+  }
 }
 
 // 6. profit shares: USDC left the treasury only by a members' vote, through the contract's split

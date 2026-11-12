@@ -25,6 +25,31 @@
         "scalar": "08abf7590f49830d2b55b7a106ad108323935cf0a56c0a0696d470912c9075d3"
       },
       "recovery_id": 0
+    },
+    "transfer": {
+      "network": "sepolia",
+      "from": "0xb3dc0128b4a9804de94796480bef8ba014dfca7d",
+      "to": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
+      "toNote": "bob's own Chain Signatures address",
+      "eth": 0.001,
+      "nonce": 0,
+      "maxPriorityFeePerGas": "2000000000",
+      "maxFeePerGas": "30000000000",
+      "gas": "21000",
+      "proposal": 71,
+      "tx": "3ZbeKYwioNecT2FVVhtezxT2XARfh35DhtMMTrmHjZ2E",
+      "signature": {
+        "scheme": "Secp256k1",
+        "big_r": {
+          "affine_point": "03baccb66624bfbf38e28c7adf841a87d91826970f645b52c0b2e4338601d583aa"
+        },
+        "s": {
+          "scalar": "484272e656b06238d571e000eb4e055ca6fbb9982754b2cfbd9f8c406e2f496a"
+        },
+        "recovery_id": 1
+      },
+      "raw": "0x02f87583aa36a78084773594008506fc23ac008252089489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c001a0baccb66624bfbf38e28c7adf841a87d91826970f645b52c0b2e4338601d583aaa0484272e656b06238d571e000eb4e055ca6fbb9982754b2cfbd9f8c406e2f496a",
+      "hash": "0xfdd2e7d3248a7165ffc4636c777b4732348469b9a305828d5246dcfd464e3b07"
     }
   }
 }

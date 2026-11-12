@@ -432,7 +432,8 @@ cargo near build reproducible-wasm
     const c = dep.chainSignatures;
     $("multichain").innerHTML = `The co-op also holds an Ethereum address, <a href="https://sepolia.etherscan.io/address/${esc(c.address)}"><code>${esc(c.address)}</code></a>, with no private key anywhere:
       NEAR's MPC network (<a href="${explorer(c.signer)}">${esc(c.signer)}</a>) signs for it only when the DAO asks, by a members' vote.
-      Proof: the statement signed by <a href="${txUrl(c.tx)}">vote #${esc(c.proposal)}</a> recovers to this address (<code>npm run chainsig</code>).`;
+      Proof: the statement signed by <a href="${txUrl(c.tx)}">vote #${esc(c.proposal)}</a> recovers to this address (<code>npm run chainsig</code>).${c.transfer ? `
+      And it pays on Ethereum by vote: <a href="${txUrl(c.transfer.tx)}">vote #${esc(c.transfer.proposal)}</a> had it sign a transfer of ${esc(c.transfer.eth)} Sepolia ETH to ${esc(c.transfer.to.slice(0, 10))}…${c.transfer.toNote ? `, ${esc(c.transfer.toNote)}` : ""} (<a href="https://sepolia.etherscan.io/tx/${esc(c.transfer.hash)}">the Ethereum transaction</a>${c.transfer.sent ? "" : ", sent once the address holds Sepolia ETH for gas"}).` : ""}`;
   }
   rows($("periods").tBodies[0], [...periods].reverse().map((p) => `<tr>
       <td>Share ${p.id}</td><td data-label="Date">${date(p.ts)}</td>
