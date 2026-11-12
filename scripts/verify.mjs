@@ -188,6 +188,18 @@ if (d.intents) {
       && p.description.includes(x.intent_sha256);
     return { ok, line: `${what}: proposal #${x.proposal} ${p?.status}` };
   });
+  // what the agent paid from it, inside the policy: a payout on another chain is read on that chain
+  for (const p of i.payouts ?? []) {
+    let landed = p.status === "SUCCESS";
+    let where = p.tx ? `NEAR tx ${p.tx}` : "";
+    if (p.destination_chain === "base" && p.destination_tx) {
+      const r = await fetch("https://base-sepolia-rpc.publicnode.com", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [p.destination_tx] }) }).then((q) => q.json()).catch(() => null);
+      landed = landed && r?.result?.status === "0x1";
+      where = `Base Sepolia tx ${p.destination_tx}, status ${r?.result?.status ?? "unread"}`;
+    }
+    console.log(`${landed ? "INFO " : "WARN "} the agent paid ${p.amount} USDC to ${p.to} on ${p.chain === "base" ? "Base Sepolia" : "NEAR (Intents)"}: ${p.status}; ${where}`);
+  }
   check(voted.length > 0 && voted.every((x) => x.ok) && i.owner === (await daoAddress(d.dao)),
     "the agent's NEAR Intents wallet is owned by the DAO: every owner intent was signed only after a members' vote",
     `${i.agent_id} on ${i.provider}, owner ${i.owner} (the DAO's Chain Signatures address); ${voted.map((x) => x.line).join("; ")}`);

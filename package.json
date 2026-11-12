@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "npm run lint && npm run typecheck && npm run test:unit && npm run test:contract",
-    "test:unit": "node --test --experimental-test-module-mocks tests/unit/agent.test.mjs tests/unit/runtime.test.mjs tests/unit/relay.test.mjs",
+    "test:unit": "node --test --experimental-test-module-mocks tests/unit/agent.test.mjs tests/unit/runtime.test.mjs tests/unit/relay.test.mjs tests/unit/chain.test.mjs",
     "test:contract": "cd contract && cargo test",
     "test:e2e": "playwright test",
     "lint": "eslint .",

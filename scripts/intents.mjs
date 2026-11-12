@@ -40,6 +40,15 @@ async function api(method, p, { body, grant } = {}) {
   return { status: res.status, json: await res.json().catch(() => ({})) };
 }
 const status = async (id) => (await api("GET", `/status?correlation_id=${id}&wait_ms=30000`)).json;
+/** Until the action is done: held work (the 10-minute timelock) is QUEUED first. */
+async function done(id, what) {
+  for (let i = 0; i < 40; i++) {
+    const st = await status(id);
+    if (!["QUEUED", "PROCESSING", "PENDING", "PENDING_APPROVAL"].includes(st.status)) return st;
+    if (i % 4 === 0) console.log(`${what}: ${st.status}${st.details?.execute_after ? ` until ${st.details.execute_after}` : ""}`);
+  }
+  throw new Error(`${what}: still not done after 20 minutes`);
+}
 
 /** The DAO as an EVM owner: its Chain Signatures address and public key (uncompressed). */
 async function owner() {
@@ -98,7 +107,7 @@ async function byVote(type, body, why) {
   return { st, proposal: id, tx, digest };
 }
 
-const cmd = process.argv[2];
+const cmd = import.meta.main ? process.argv[2] : "imported"; // imported by the unit tests: no command runs
 const w = dep.intents;
 if (cmd === "create") {
   if (w?.agent_id) throw new Error(`the wallet exists: ${w.agent_id}`);
@@ -153,7 +162,8 @@ if (cmd === "create") {
   let r;
   if (chain === "base") {
     const sw = await api("POST", `/agents/${w.agent_id}/swap`, { body: { origin_asset: USDC, destination_asset: BASE_USDC, amount: units }, grant: token });
-    const s1 = await status(sw.json.correlation_id);
+    if (!sw.json.correlation_id) throw new Error(`swap: HTTP ${sw.status} ${JSON.stringify(sw.json).slice(0, 300)}`);
+    const s1 = await done(sw.json.correlation_id, "swap to Base Sepolia USDC");
     console.log("swap to Base Sepolia USDC:", s1.status, s1.details?.amount_out ?? s1.failure_code);
     r = await api("POST", `/agents/${w.agent_id}/withdraw`, { body: { asset: BASE_USDC, amount: s1.details.amount_out, chain: "base", recipient: to.startsWith("0x") ? to : await daoAddress(to) }, grant: token });
   } else {
@@ -161,10 +171,12 @@ if (cmd === "create") {
   }
   console.log(`payout: HTTP ${r.status}`, JSON.stringify(r.json).slice(0, 300));
   if (r.json.correlation_id) {
-    (w.payouts ??= []).push({ to, amount, chain: chain ?? "near", correlation_id: r.json.correlation_id, at: new Date().toISOString() });
+    const st = await done(r.json.correlation_id, "payout");
+    console.log("payout:", st.status, JSON.stringify(st.details ?? {}).slice(0, 400));
+    (w.payouts ??= []).push({ to, amount, chain: chain ?? "near", status: st.status, tx: st.details?.tx_hash ?? null,
+      destination_chain: st.details?.destination_chain ?? null, destination_tx: st.details?.destination_tx_hash ?? null, at: new Date().toISOString() });
     save();
-    console.log("held by the 10-minute timelock; then: node scripts/intents.mjs status");
   }
-} else {
+} else if (cmd !== "imported") {
   console.log(fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(0, 16).join("\n"));
 }
