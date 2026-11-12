@@ -7,6 +7,24 @@ import { rawTx, recover, rlp, txHash } from "../../scripts/chainsig.mjs";
 import { refuseUnlessAsked } from "../../scripts/intents.mjs";
 
 const hex = (b) => Buffer.from(b).toString("hex");
+/** The items of one RLP list (strings only, as in a signed transfer): enough to read a transaction back. */
+function unrlp(buf) {
+  const len = (at, base) => {
+    const p = buf[at] - base;
+    return p < 56 ? [at + 1, p] : [at + 1 + (p - 55), Number(BigInt("0x" + hex(buf.subarray(at + 1, at + 1 + (p - 55)))))];
+  };
+  const [start, size] = len(0, 0xc0);
+  const out = [];
+  for (let i = start; i < start + size;) {
+    const b = buf[i];
+    if (b < 0x80) { out.push(buf.subarray(i, i + 1)); i += 1; continue; }
+    if (b >= 0xc0) { const [s, n] = len(i, 0xc0); out.push(buf.subarray(s, s + n)); i = s + n; continue; } // the access list: kept whole
+    const [s, n] = len(i, 0x80);
+    out.push(buf.subarray(s, s + n));
+    i = s + n;
+  }
+  return out;
+}
 
 test("RLP matches the Ethereum spec's vectors", () => {
   assert.equal(hex(rlp("0x")), "80");
@@ -22,18 +40,19 @@ test("a signed EIP-1559 transfer recovers its signer, with s in the low half (EI
   const N = secp256k1.Point.CURVE().n;
   const t = { chainId: 11155111n, nonce: 1n, maxPriorityFeePerGas: 1_000_000_000n, maxFeePerGas: 5_000_000_000n, gas: 245_000n,
     to: "0x89b70a44dc6ebf5f9015de6f7077561a0d927138", value: 10n ** 15n };
-  for (let k = 0; k < 16; k++) {
+  for (let k = 0; k < 300; k++) { // enough to meet r or s with leading zero bytes (1 in 128 each)
     const sk = secp256k1.utils.randomSecretKey();
     const who = "0x" + hex(keccak_256(secp256k1.getPublicKey(sk, false).subarray(1))).slice(24);
     const sig = secp256k1.sign(txHash(t), sk, { prehash: false, format: "recovered", lowS: false });
     // the shape the MPC network answers with
     const mpc = { big_r: { affine_point: "02" + hex(sig.slice(1, 33)) }, s: { scalar: hex(sig.slice(33)) }, recovery_id: sig[0] };
     assert.equal(recover(txHash(t), mpc), who);
-    const raw = Buffer.from(rawTx(t, mpc).slice(4), "hex"); // after 0x02
-    const s = raw.subarray(raw.length - 32), r = raw.subarray(raw.length - 65, raw.length - 33);
-    const y = raw[raw.length - 67] === 0x80 ? 0 : raw[raw.length - 67];
-    assert.ok(BigInt("0x" + hex(s)) <= N / 2n, "high s left in the transaction");
-    const pub = secp256k1.recoverPublicKey(Uint8Array.from([y, ...r, ...s]), txHash(t), { prehash: false });
+    // decode the signed list (after 0x02): r and s are minimal integers, shorter than 32 bytes when they start with zeros
+    const items = unrlp(Buffer.from(rawTx(t, mpc).slice(2), "hex").subarray(1));
+    const [y, r, s] = items.slice(-3).map((b) => BigInt(b.length ? "0x" + hex(b) : 0));
+    assert.ok(s <= N / 2n, "high s left in the transaction");
+    const pad = (n) => Buffer.from(n.toString(16).padStart(64, "0"), "hex");
+    const pub = secp256k1.recoverPublicKey(Uint8Array.from([Number(y), ...pad(r), ...pad(s)]), txHash(t), { prehash: false });
     assert.equal("0x" + hex(keccak_256(secp256k1.Point.fromBytes(pub).toBytes(false).subarray(1))).slice(24), who);
   }
 });
