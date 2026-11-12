@@ -47,7 +47,7 @@ code { font-size: .92em; background: #eceef6; padding: .05em .35em; border-radiu
 .hero {
   position: relative; overflow: hidden; min-height: min(100svh, 860px);
   background: radial-gradient(120% 90% at 50% 100%, #0a1c8c 0%, var(--navy) 45%, var(--black) 80%);
-  color: #fff; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 27rem); gap: 3rem; align-items: end;
+  color: #fff; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 27rem); gap: 3rem; align-items: center;
   padding: 8rem clamp(1.2rem, 4vw, 3rem) 4.5rem;
 }
 .mind { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -57,7 +57,11 @@ code { font-size: .92em; background: #eceef6; padding: .05em .35em; border-radiu
 .hero .big { display: block; font-weight: 800; font-size: clamp(5rem, 13vw, 12rem); letter-spacing: .01em; }
 .hero .line { display: block; font-weight: 300; font-size: clamp(1.8rem, 3.6vw, 3.3rem); margin-top: .25em; }
 .hero .line b { font-weight: 700; }
-.lede { text-shadow: 0 1px 12px rgba(0,0,20,.6); max-width: 34rem; margin: 1.6rem 0 2rem; color: rgba(255,255,255,.82); font-size: 1.02rem; }
+.lede { text-shadow: 0 1px 12px rgba(0,0,20,.6); max-width: 34rem; margin: 1.6rem 0 1rem; color: rgba(255,255,255,.82); font-size: 1.02rem; }
+/* the one live fact on the first screen: what is on-chain right now */
+.proofline { max-width: 34rem; margin: 0 0 1.8rem; padding-left: .9rem; border-left: 3px solid var(--blue-hi); color: #fff; font-weight: 500; text-shadow: 0 1px 12px rgba(0,0,20,.6); }
+.proofline a { color: inherit; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: .8rem; }
 
 /* the control panel: three plain steps, read top to bottom */
 .panel { position: relative; background: rgba(3, 8, 32, .78); backdrop-filter: blur(10px); border: 1px solid rgba(120, 150, 255, .28); border-radius: 8px; padding: 1.4rem 1.5rem 1.2rem; text-align: left; }
@@ -302,7 +306,7 @@ h2 .dim { color: var(--grey); }
 .jh { font: 700 1.3rem var(--display); text-transform: uppercase; margin: 1.4rem 0 .6rem; }
 .props { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
 .props li { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; padding: .6rem .8rem; background: rgba(255,255,255,.05); font-size: .86rem; }
-.props em { font-style: normal; color: #7fe0a6; font-size: .8rem; }
+.props em { font-style: normal; color: #7fe0a6; font-size: .8rem; background: #071233; padding: .1rem .45rem; } /* its own ground: a long row can wrap it over a light area */
 .props li > span:first-child { display: grid; gap: .3rem; min-width: 0; flex: 1 1 18rem; }
 .props .does { margin: 0; font-size: .74rem; background: rgba(0,0,0,.35); color: #dfe6ff; padding: .4rem .5rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow: auto; }
 .props .claim { font-size: .76rem; color: rgba(255,255,255,.55); }
@@ -330,9 +334,10 @@ h2 .dim { color: var(--grey); }
   .hero .big > span { display: block; animation: slice .9s 1.3s steps(1, end) both; }
   .hero .big::before { animation: shard-a .9s 1.3s steps(1, end) forwards; }
   .hero .big::after { animation: shard-b .9s 1.3s steps(1, end) forwards; }
-  .hero .line, .lede, .hero-text .btn { animation: up .7s 2s cubic-bezier(.2,.7,.2,1) both; }
+  .hero .line, .lede, .proofline, .hero-cta { animation: up .7s 2s cubic-bezier(.2,.7,.2,1) both; }
   .lede { animation-delay: 2.1s; }
-  .hero-text .btn { animation-delay: 2.2s; }
+  .proofline { animation-delay: 2.15s; }
+  .hero-cta { animation-delay: 2.2s; }
   .panel { animation: up .7s 2.3s cubic-bezier(.2,.7,.2,1) both; }
   .psteps > li { animation: up .5s calc(2.6s + var(--k, 0) * .25s) both; }
   .psteps > li:nth-child(2) { --k: 1; }

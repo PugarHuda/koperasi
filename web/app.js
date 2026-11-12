@@ -53,6 +53,10 @@ const brief = (tries = 3) => Promise.all([
   const [num, den] = policy.default_vote_policy.threshold;
   const needed = Math.min(members.length, Math.floor((members.length * num) / den) + 1);
   const rule = board.rule;
+  // the hero's one live line: what is on-chain now, and where the co-op has paid
+  const chains = ["NEAR", ...(dep.chainSignatures?.transfer?.sent ? ["Ethereum"] : []),
+    ...((dep.intents?.payouts ?? []).some((p) => p.chain === "base" && p.status === "SUCCESS") ? ["Base"] : [])];
+  $("proofline").innerHTML = `Right now on NEAR testnet: ${members.length} members, ${proposals} DAO votes, ${paid.length} tasks paid, and payouts that landed on ${chains.length > 1 ? `${chains.slice(0, -1).join(", ")} and ${chains.at(-1)}` : chains[0]}.`;
   $("counts").innerHTML = [
     ["Members", members.length, "one vote each"],
     ["DAO proposals", proposals, "every decision on record"],
@@ -75,6 +79,7 @@ const brief = (tries = 3) => Promise.all([
   line("br-sputnik", !!tasksRole && tasksRole.permissions.every((p) => p.startsWith("transfer:")),
     `Every payout is a Sputnik Transfer proposal. The contract files them in its own role <code>tasks</code>, which can only ${tasksRole ? tasksRole.permissions.map((p) => `<code>${esc(p)}</code>`).join(" and ") : "(missing)"}. Proposal templates for <a href="https://github.com/PugarHuda/koperasi/tree/main/trezu">Trezu</a>. <a href="#trust">Tasks</a>`);
 }).catch((e) => {
+  $("proofline").textContent = "The co-op lives on NEAR testnet; every claim below is checked in your browser.";
   for (const id of ["br-own", "br-budget", "br-rewards", "br-rep", "br-sputnik"]) $(id).querySelector(".ck-out").textContent = `Could not read the chain right now (${e.message})${tries > 1 ? "; trying again in 5 s." : "."}`;
   if (tries > 1) setTimeout(() => brief(tries - 1), 5000);
 });
@@ -95,7 +100,7 @@ try {
   const checked = [...receipts].reverse().slice(0, 50);
   const proofs = await Promise.all(checked.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch(() => null)));
   const recent = checked.slice(0, 12);
-  const proven = checked.filter((r, i) => proofs[i] && r.status === "Paid").length;
+  const proven = checked.filter((r, i) => proofs[i]).length;
 
   $("links").innerHTML = [
     `<a href="${explorer(dep.contract)}">Contract on NEAR</a>`,
@@ -170,11 +175,13 @@ try {
       : `<span class="state off">TEE not verified</span> ${esc(when)} UTC: ${esc(ev.reason ?? "a check failed")}. The agent will not send jobs to this model.`;
   }).catch((e) => verdict("ck-bylaws", false, `Could not download the by-laws file (${esc(e.message)}). Reload to try again.`));
   const paidJobs = receipts.filter((x) => x.status === "Paid").length;
+  const teeJobs = checked.filter((r, i) => proofs[i]);
+  const teeMarket = teeJobs.filter((r) => !r.job_id.startsWith("demo-")).length;
   $("p-agent").innerHTML = info.paused
     ? `<span class="state off">Paused</span> The members voted to stop it.`
-    : `<span class="state on">Allowed to work</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${proven
-      ? `${proven} paid ${proven === 1 ? "job" : "jobs"} done by a TEE-verified model.`
-      : `No real job yet: the ${paidJobs} paid receipts so far come from the testnet demo, where a local stand-in plays Agent Market and no model runs.`}`;
+    : `<span class="state on">Allowed to work</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${teeMarket
+      ? `${teeMarket} Agent Market ${teeMarket === 1 ? "job" : "jobs"} done by a TEE-verified model.`
+      : `No Agent Market job yet.${teeJobs.length ? ` ${teeJobs.length === 1 ? "One job" : `${teeJobs.length} jobs`} from a demo buyer ${teeJobs.length === 1 ? "was" : "were"} done by a TEE-verified model, with the proof on-chain;` : ""} the ${paidJobs} paid receipts come from the testnet demo, where a local stand-in plays Agent Market and no model runs.`}`;
 
   // passbook: the co-op's life as ledger lines, newest first
   const lines = [

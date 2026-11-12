@@ -128,6 +128,9 @@ test("each line of the track's brief is proven from the chain, under the co-op's
   await expect(page.locator("#br-own")).toContainText(/\d+ members hold the DAO's role member.*a decision needs \d+ of \d+/s);
   await expect(page.locator("#br-sputnik")).toContainText("transfer:AddProposal");
   await expect(page.locator("#counts")).toContainText(/DAO proposals\s*\d{2,}/);
+  // the first screen says what is on-chain now, and leads to the proof
+  await expect(page.locator("#proofline")).toContainText(/\d+ members, \d+ DAO votes, \d+ tasks paid, and payouts that landed on NEAR/);
+  await expect(page.locator(".hero-cta a").first()).toHaveAttribute("href", "#brief");
 });
 
 test("the page shows how to rebuild the contract's code, from its NEP-330 metadata", async ({ page }) => {

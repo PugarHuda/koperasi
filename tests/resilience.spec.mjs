@@ -186,7 +186,7 @@ test("visual: the page frame looks the same @visual", async ({ page }) => {
   await expect(page.locator("#p-tally")).toContainText(/Proposal #\d+/);
   await page.evaluate(() => document.fonts.ready);
   // live numbers and dates change with the chain; mask them, compare the frame around them
-  const live = ["#p-voters", "#p-tally", "#p-terms", "#p-agent", "#p-tee", "#status", "#chip"].map((s) => page.locator(s));
+  const live = ["#p-voters", "#p-tally", "#p-terms", "#p-agent", "#p-tee", "#proofline", "#status", "#chip"].map((s) => page.locator(s));
   await expect(page.locator("header.top")).toHaveScreenshot("header.png");
   await expect(page.locator(".hero")).toHaveScreenshot("hero.png", { mask: live });
 });
