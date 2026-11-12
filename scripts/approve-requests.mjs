@@ -1,6 +1,7 @@
 // node scripts/approve-requests.mjs
 // The members (whose keys are in .keys/) vote on open requests to join the showcase co-op.
-//  - only accounts that already paid the join deposit are approved, at most MAX_PER_RUN per run;
+//  - only accounts that already paid the join deposit AND carry a member's signed vouch (NEP-413, a full-access key of
+//    that member) are approved, at most MAX_PER_RUN per run; any other request waits for the members to vote by hand;
 //  - right after approval the script syncs the membership, which locks the deposit as a member's deposit;
 //  - then it sweeps: anyone holding the DAO's member role without being a member of the contract (for example someone
 //    who cancelled their deposit between the vote and the sync) is proposed for removal and voted out; someone approved
@@ -8,7 +9,8 @@
 // ponytail: closing the vote→sync gap in the contract itself (refuse cancel_join while a request is open) needs a
 // contract upgrade; the sweep bounds it to "until the next run" instead.
 import fs from "node:fs";
-import { DEPLOYMENT, account, call, decide, hasKey, view, vote } from "./lib.mjs";
+import { DEPLOYMENT, account, call, decide, hasKey, rawQuery, view, vote } from "./lib.mjs";
+import { checkVouch, inviteOf } from "../web/share.js";
 
 const MAX_PER_RUN = 3;
 const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
@@ -18,6 +20,16 @@ if (!voters.length) throw new Error("no member keys in .keys/");
 const isMember = async (who) => (await view(dep.contract, "get_member", { account_id: who })) !== null;
 const sync = (who) => call(account(voters[0]), dep.contract, "sync_member", { account_id: who }, { tgas: 60 })
   .catch((e) => console.log(`sync ${who} failed: ${e.message}`));
+
+/** The request's vouch: in the page's exact words, signed by a member with one of that member's full-access keys. */
+async function signedVouch(p, who) {
+  const inv = inviteOf(p, await roleOf());
+  if (!inv?.signed) return { ok: false, why: "no signed vouch from a member" };
+  if (!(await checkVouch({ by: inv.by, member: who, dao: dep.dao, ...inv.signed }))) return { ok: false, why: `the vouch from ${inv.by} does not verify` };
+  const key = await rawQuery({ request_type: "view_access_key", account_id: inv.by, public_key: inv.signed.pk }).catch(() => null);
+  if (key?.permission !== "FullAccess") return { ok: false, why: `the vouch is not signed with a full-access key of ${inv.by}` };
+  return { ok: true, by: inv.by };
+}
 
 const last = await view(dep.dao, "get_last_proposal_id");
 const open = (await view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 100), limit: 100 }))
@@ -29,6 +41,14 @@ for (const p of open) {
   if (approved >= MAX_PER_RUN) { console.log(`#${p.id} ${who}: left for the next run (limit ${MAX_PER_RUN})`); continue; }
   if (!(await view(dep.contract, "is_pending", { account_id: who }))) {
     console.log(`#${p.id} ${who}: has not paid the join deposit; skipped`);
+    continue;
+  }
+  // a deposit alone is not enough: anyone can pay it from many accounts and out-vote the members (sybil). The bot
+  // votes only for a request carrying a member's signed vouch (NEP-413), checked as the page checks it; any other
+  // request waits for the members themselves
+  const vouch = await signedVouch(p, who);
+  if (!vouch.ok) {
+    console.log(`#${p.id} ${who}: ${vouch.why}; left for the members to vote`);
     continue;
   }
   for (const v of voters) {

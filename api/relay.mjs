@@ -12,8 +12,9 @@ import dep from "../deployment.testnet.json" with { type: "json" };
 const RPC = "https://rpc.testnet.fastnear.com";
 const MAX_GAS = 300n * 10n ** 12n;
 const PER_HOUR = 20;
-// methods a non-member may call: asking to join, and what follows the vote
-const OPEN = new Set(["join", "cancel_join", "sync_member"]);
+// methods a non-member may call once they paid the join deposit: taking it back, and what follows the vote. `join` itself
+// carries the deposit, which the relayer never pays, so it always goes from the wallet
+const OPEN = new Set(["cancel_join", "sync_member"]);
 const DAO = new Set(["act_proposal", "add_proposal", "bounty_claim", "bounty_giveup", "bounty_done"]);
 // ponytail: per-instance memory, so the limit is per warm instance; a shared store (KV) if someone farms it
 const seen = new Map();
@@ -37,9 +38,9 @@ const relayed = new Set();
 /**
  * Why this signed delegate is refused, or null. Exported for the unit test.
  * @param {any} sd a SignedDelegate as borsh decodes it
- * @param {{ members?: string[], chain?: typeof onChain }} [opts]
+ * @param {{ members?: string[], chain?: typeof onChain, pending?: (who: string) => Promise<boolean> }} [opts]
  */
-export async function refuse(sd, { members, chain = onChain } = {}) {
+export async function refuse(sd, { members, chain = onChain, pending = (who) => view(dep.contract, "is_pending", { account_id: who }).then(Boolean) } = {}) {
   const d = sd?.delegateAction;
   if (!d) return "not a signed delegate action";
   if (d.receiverId !== dep.contract && d.receiverId !== dep.dao) return `only calls to ${dep.contract} or ${dep.dao} are relayed`;
@@ -62,10 +63,12 @@ export async function refuse(sd, { members, chain = onChain } = {}) {
   if (nonce === null) return `the signing key is not a key of ${d.senderId}`;
   if (BigInt(d.nonce) <= nonce) return "nonce already used";
   if (BigInt(d.maxBlockHeight) <= height) return "expired";
-  const open = d.receiverId === dep.contract && d.actions.every((a) => OPEN.has(a.functionCall.methodName));
-  if (!open) {
-    const list = members ?? /** @type {any} */ (await view(dep.dao, "get_policy")).roles.find((r) => r.name === "member")?.kind?.Group ?? [];
-    if (!list.includes(d.senderId)) return `${d.senderId} is not a member`;
+  const list = members ?? /** @type {any} */ (await view(dep.dao, "get_policy")).roles.find((r) => r.name === "member")?.kind?.Group ?? [];
+  if (!list.includes(d.senderId)) {
+    const open = d.receiverId === dep.contract && d.actions.every((a) => OPEN.has(a.functionCall.methodName));
+    if (!open) return `${d.senderId} is not a member`;
+    // a stranger's gas is paid only once they locked the join deposit: draining the relayer then costs 0.5 NEAR an account
+    if (!(await pending(d.senderId))) return `${d.senderId} has not paid the join deposit: send it from your wallet`;
   }
   return null;
 }
