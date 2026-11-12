@@ -331,13 +331,14 @@ h2 .dim { color: var(--grey); }
 @media (prefers-reduced-motion: no-preference) {
   .mind .rim { stroke-dasharray: 1; animation: draw 1.3s cubic-bezier(.5,0,.2,1) both; }
   .mind .layer use { animation: fill-in 1s calc(1s + var(--i) * .12s) cubic-bezier(.2,.7,.2,1) both; }
-  .hero .big > span { display: block; animation: slice .9s 1.3s steps(1, end) both; }
-  .hero .big::before { animation: shard-a .9s 1.3s steps(1, end) forwards; }
-  .hero .big::after { animation: shard-b .9s 1.3s steps(1, end) forwards; }
-  .hero .line, .lede, .proofline, .hero-cta { animation: up .7s 2s cubic-bezier(.2,.7,.2,1) both; }
-  .lede { animation-delay: 2.1s; }
-  .proofline { animation-delay: 2.15s; }
-  .hero-cta { animation-delay: 2.2s; }
+  /* the text arrives first (it is the largest paint): the headline at once, the rest half a second later, while the
+     rim draws behind it; waiting for the drawing put the first readable words 2 s (4 s on a slow phone) after load */
+  .hero .big > span { display: block; animation: slice .7s .1s steps(1, end) both; }
+  .hero .big::before { animation: shard-a .7s .1s steps(1, end) forwards; }
+  .hero .big::after { animation: shard-b .7s .1s steps(1, end) forwards; }
+  .hero .line { animation: up .6s .45s cubic-bezier(.2,.7,.2,1) both; }
+  /* the lede, the live line and the buttons are there from the first paint: text that fades in is not counted as
+     painted until it has (LCP), and the headline's glitch is the one moment of motion */
   .panel { animation: up .7s 2.3s cubic-bezier(.2,.7,.2,1) both; }
   .psteps > li { animation: up .5s calc(2.6s + var(--k, 0) * .25s) both; }
   .psteps > li:nth-child(2) { --k: 1; }
@@ -350,7 +351,7 @@ h2 .dim { color: var(--grey); }
 @keyframes fade { from { opacity: 0; } }
 /* the headline arrives in horizontal slices that snap into place, like the reference's glitch */
 @keyframes slice {
-  0% { clip-path: inset(0 0 100% 0); }
+  0% { clip-path: inset(0); } /* whole at first paint: the headline is the largest paint (LCP), and a hidden start is never counted */
   12% { clip-path: inset(0 0 62% 0); translate: -18px 0; }
   24% { clip-path: inset(38% 0 30% 0); translate: 14px 0; }
   36% { clip-path: inset(0 0 40% 0); translate: -6px 0; }
