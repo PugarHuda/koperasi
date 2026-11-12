@@ -478,7 +478,8 @@ cargo near build reproducible-wasm
   // place while the page grows, until the reader scrolls, clicks or follows another link, or 8 s pass
   const target = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
   if (target) {
-    const stick = new ResizeObserver(() => target.scrollIntoView({ block: "start" }));
+    // the hash is checked too: hashchange arrives a task after the browser has scrolled to the new section
+    const stick = new ResizeObserver(() => location.hash === `#${target.id}` && target.scrollIntoView({ block: "start" }));
     const stop = () => stick.disconnect();
     stick.observe(document.body);
     ["wheel", "touchstart", "keydown", "click", "hashchange"].forEach((ev) => addEventListener(ev, stop, { once: true, passive: true }));
