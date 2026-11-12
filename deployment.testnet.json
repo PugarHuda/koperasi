@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "4e28de45f843b798bb3f58973d19045473f5972b4ff1e3eb3bf1735c473eb395",
   "configUri": "config/config.v4.yaml",
-  "codeSha256": "c50989e8c3522e2965548d2df8b2eed0f5b28b5c4bfbf56336a539cf0baa58ce",
+  "codeSha256": "77f62ea33346f9f2a8f6f077080196f309e0e3b0ec8b46d787ebbf1470d3bf11",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -30,27 +30,27 @@
       "network": "sepolia",
       "from": "0xb3dc0128b4a9804de94796480bef8ba014dfca7d",
       "to": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
-      "toNote": "bob's own Chain Signatures address",
       "eth": 0.001,
-      "nonce": 1,
+      "nonce": 2,
       "maxPriorityFeePerGas": "1000000000",
       "maxFeePerGas": "5000000000",
-      "gas": "248869",
-      "proposal": 74,
-      "tx": "JCgDnCpXwMDVXQ9SZxV2UzjrZiq81UspKhuhBNEpWuq1",
+      "gas": "25200",
+      "proposal": 81,
+      "tx": "HvNtFRGDVXbZHLjsxf9Qi8mmWBXSqhuePzYoBYydairZ",
       "signature": {
         "scheme": "Secp256k1",
         "big_r": {
-          "affine_point": "03091280c3e6c60679b36c2c193250d1ce3ae492a5dfc4cd4d2d2515a3575a7658"
+          "affine_point": "029fa28249d989359ff2078ad978eb0dadc23af8e063d304155cee0997c71771a1"
         },
         "s": {
-          "scalar": "16bece3785be69c0090af299aebde6162652b0c9227ed209dd10eb19e19a009f"
+          "scalar": "7c6b88e58bc7c9e21dc2194dff73087e791c2c98121638acd4462e25b33e4a09"
         },
         "recovery_id": 0
       },
-      "raw": "0x02f87683aa36a701843b9aca0085012a05f2008303cc259489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c080a0091280c3e6c60679b36c2c193250d1ce3ae492a5dfc4cd4d2d2515a3575a7658a016bece3785be69c0090af299aebde6162652b0c9227ed209dd10eb19e19a009f",
-      "hash": "0x9f794e2d81f016671cf49f5c5984371e1b9c33e6c58606c9dbb5ba0cb8bf1da9",
-      "sent": true
+      "raw": "0x02f87583aa36a702843b9aca0085012a05f2008262709489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c080a09fa28249d989359ff2078ad978eb0dadc23af8e063d304155cee0997c71771a1a07c6b88e58bc7c9e21dc2194dff73087e791c2c98121638acd4462e25b33e4a09",
+      "hash": "0x8cbfea39832739c8ef053c8c567ddce05c97dd5e9f0a6a8945a52fd288fbb740",
+      "sent": true,
+      "trezu": "kop-pay-ethereum"
     },
     "transfers_before": [
       {
@@ -79,6 +79,32 @@
         "hash": "0xfdd2e7d3248a7165ffc4636c777b4732348469b9a305828d5246dcfd464e3b07",
         "sent": true,
         "result": "failed: out of gas (21 000 is too little to send to a new account on Sepolia); no ETH moved"
+      },
+      {
+        "network": "sepolia",
+        "from": "0xb3dc0128b4a9804de94796480bef8ba014dfca7d",
+        "to": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
+        "toNote": "bob's own Chain Signatures address",
+        "eth": 0.001,
+        "nonce": 1,
+        "maxPriorityFeePerGas": "1000000000",
+        "maxFeePerGas": "5000000000",
+        "gas": "248869",
+        "proposal": 74,
+        "tx": "JCgDnCpXwMDVXQ9SZxV2UzjrZiq81UspKhuhBNEpWuq1",
+        "signature": {
+          "scheme": "Secp256k1",
+          "big_r": {
+            "affine_point": "03091280c3e6c60679b36c2c193250d1ce3ae492a5dfc4cd4d2d2515a3575a7658"
+          },
+          "s": {
+            "scalar": "16bece3785be69c0090af299aebde6162652b0c9227ed209dd10eb19e19a009f"
+          },
+          "recovery_id": 0
+        },
+        "raw": "0x02f87683aa36a701843b9aca0085012a05f2008303cc259489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c080a0091280c3e6c60679b36c2c193250d1ce3ae492a5dfc4cd4d2d2515a3575a7658a016bece3785be69c0090af299aebde6162652b0c9227ed209dd10eb19e19a009f",
+        "hash": "0x9f794e2d81f016671cf49f5c5984371e1b9c33e6c58606c9dbb5ba0cb8bf1da9",
+        "sent": true
       }
     ]
   },
@@ -118,7 +144,25 @@
         "destination_tx": "0xba7491b252fe172bcc30b75647bfed5d7baddfc87cdfb107ca3e0a3c2ac763d8",
         "at": "2026-11-12T03:35:07.373Z"
       }
-    ]
+    ],
+    "policy": {
+      "proposal": 80,
+      "tx": "AtQPp5DgBRiYvLU8tk4eKsnHLAnXJ5bySB2Bu4KP2j3M",
+      "intent_sha256": "f1e5285b5d96efefa21d4060f6ea65c71446e46785947e1f81971649140e28d7",
+      "revision": 2,
+      "routes": [
+        [
+          "kop-bob-mw4i3w8f.testnet",
+          "base",
+          "0x89b70a44dc6ebf5f9015de6f7077561a0d927138"
+        ],
+        [
+          "kop-alice-mw4i3w8f.testnet",
+          "arb",
+          "0x5e3b0f2c5d9297f6d8b295ac746ca1d43340e29d"
+        ]
+      ]
+    }
   },
   "outlayer": {
     "provider": "OutLayer (Intel TDX), outlayer.testnet",

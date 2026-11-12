@@ -8,7 +8,7 @@ node_modules/
 .keys/
 deployment.*.local.json
 .funders/
-agent/.state.json
+agent/.state*.json
 PRD.md
 ANALISA_NEAR_HACKATHON.md
 .playwright-mcp/

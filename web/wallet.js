@@ -337,7 +337,7 @@ function armCommons() {
   // the deciding ruling files and approves the refund in the same transaction
   one("crule", "Rule on case", "rule_case", (b) => ({ id: Number(b.dataset.crule), uphold: b.dataset.up === "1" }), 300);
   one("cclose", "Close case", "close_case", (b) => ({ id: Number(b.dataset.cclose) }), 300);
-  one("csettle", "Settle the appeal of case", "settle_appeal", (b) => ({ id: Number(b.dataset.csettle) }), 100);
+  one("csettle", "Settle the appeal of case", "settle_appeal", (b) => ({ id: Number(b.dataset.csettle) }), 300);
   box.querySelectorAll("[data-cappeal]").forEach((b) => {
     b.onclick = () => act(`Appeal case #${b.dataset.cappeal} to the members`, () => send(dep.contract, "appeal_case", { id: Number(b.dataset.cappeal) }, { deposit: APPEAL_BOND, tgas: 100 }));
   });

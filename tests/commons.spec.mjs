@@ -20,6 +20,9 @@ test("the commons section shows the court case, its jurors and the refund, each 
   await expect(c.locator("a", { hasText: "DAO proposal #60" })).toBeVisible();
   // scripts/scenarios.mjs: two cases the jurors did not uphold, a pledge nobody called in yet
   await expect(page.locator("#cases tbody tr", { hasText: "not upheld" })).toHaveCount(2);
+  // contract 0.2.7: both went on appeal to every member (scripts/commons.mjs --appeal): one overturned, one kept
+  await expect(page.locator("#cases tbody tr", { hasText: "the members overturned it, refunded" })).toContainText("DAO proposal #77");
+  await expect(page.locator("#cases tbody tr", { hasText: "the members kept the ruling" })).toContainText("DAO proposal #78");
   await expect(page.locator("#pledges tbody tr", { hasText: "onboarding call" })).toContainText("0 of 2");
   await expect(page.locator("#pledges tbody tr", { hasText: "Review one pull request" })).toContainText(/2 of 2\s*2 \/ 0/);
   await expect(page.locator("#standing li", { hasText: ALICE })).toContainText("good standing");
@@ -32,9 +35,12 @@ test("the work record reads a member's pledges and jury duty from the chain, and
   await expect(page.locator("#cert-sum")).toContainText(/good: \d+ pledge\(s\) kept, 0 broken/);
   await expect(page.locator("#cert-pledges tbody")).toContainText(`${BOB}`);
   await expect(page.locator("#cert-juries tbody")).toContainText("job demo-court-");
+  // contract 0.2.7: alice minted her record as a NEP-171 token; its image is drawn by the contract from the record
+  await expect(page.locator("#cert-sum")).toContainText("a NEP-171 token");
+  await expect(page.locator("#cert-sum img.cert-token")).toHaveAttribute("src", /^data:image\/svg\+xml;base64,/);
   await page.goto(`/cert.html?who=${encodeURIComponent('"><img src=x onerror=alert(1)>')}`);
   await expect(page.locator("#cert-who")).toHaveText("That is not a NEAR account id.");
-  await expect(page.locator("img")).toHaveCount(0);
+  await expect(page.locator("img:not(.cert-token)")).toHaveCount(0);
 });
 
 test("a juror is offered uphold and reject; someone else is not", async ({ page }, testInfo) => {

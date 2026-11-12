@@ -169,6 +169,36 @@ for (const c of cases.filter((x) => x.status === "Upheld")) {
     `court case #${c.id}: the jury upheld it and the contract refunded the buyer from the treasury`,
     `${usd(c.amount)} USDC (job ${c.job_id}, price ${usd(price)}) to ${c.refund_to}; jurors ${c.votes.map(([j, v]) => `${j} ${v ? "upheld" : "rejected"}`).join(", ")}; DAO proposal #${c.refund_proposal} ${p?.status}`);
 }
+// appeals (0.2.7): a dismissed case taken to every member; the contract filed the refund and did not vote on it, and the
+// appeal settled as the DAO decided
+for (const c of cases.filter((x) => x.status === "Dismissed")) {
+  const a = await view(d.contract, "get_appeal", { id: c.id }).catch(() => null);
+  if (!a || a.status === "Open") continue;
+  const p = proposals.find((q) => q.id === a.proposal);
+  const tr = p?.kind?.Transfer;
+  const votes = Object.entries(p?.votes ?? {});
+  check(p?.proposer === d.contract && tr?.receiver_id === c.refund_to && tr.amount === c.amount && !votes.some(([m]) => m === d.contract)
+    && (a.status === "Upheld" ? p.status === "Approved" : ["Rejected", "Removed", "Expired"].includes(p.status)),
+  `court case #${c.id}: the jury dismissed it, the claimant appealed to every member, and the members ${a.status === "Upheld" ? "overturned it: the buyer was refunded" : "kept the jury's ruling"}`,
+  `DAO proposal #${a.proposal} filed by the contract (which did not vote): refund ${usd(c.amount)} USDC to ${c.refund_to}; ${p?.status}, ${votes.map(([m, v]) => `${m.split(".")[0]} ${v}`).join(", ")}`);
+}
+// payout routes (0.2.7) and the agent wallet's policy: the members' routes are exactly its withdrawal destinations
+const routes = await view(d.contract, "get_payout_routes").catch(() => null);
+if (routes && d.intents?.policy) {
+  const dests = d.intents.policy.routes ?? [];
+  check(routes.length === dests.length && routes.every(([a, c, x]) => dests.some(([b, e, y]) => a === b && c === e && x === y)),
+    "the agent's Intents wallet pays each member on the route they set on the contract, and the policy listing them was voted",
+    `${routes.map(([a, c, x]) => `${a.split(".")[0]} on ${c} ${x}`).join("; ")}; policy revision ${d.intents.policy.revision} by vote #${d.intents.policy.proposal}`);
+}
+// work records as tokens (0.2.7, NEP-171): each token reads the record and the standing live
+const tokens = await view(d.contract, "nft_tokens", {}).catch(() => []);
+for (const t of tokens) {
+  const extra = JSON.parse(t.metadata.extra);
+  const rec = await view(d.contract, "get_record", { account_id: t.owner_id });
+  const [st, good] = await view(d.contract, "get_standing", { account_id: t.owner_id });
+  check(t.token_id === t.owner_id && extra.done === (rec?.done ?? 0) && JSON.stringify(extra.standing) === JSON.stringify(st) && extra.good_standing === good,
+    `${t.owner_id}'s work record is a NEP-171 token that reads the record live`, t.metadata.description.slice(0, 160));
+}
 const pledges = await view(d.contract, "get_pledges", { from: 0, limit: 200 });
 const pclaims = await view(d.contract, "get_pledge_claims", { from: 0, limit: 200 });
 console.log(`INFO  pledges: ${pledges.length}, called in ${pclaims.length} times, kept ${pclaims.filter((c) => c.status === "Honored").length}, broken ${pclaims.filter((c) => c.status === "Broken").length}; court cases: ${cases.length}`);

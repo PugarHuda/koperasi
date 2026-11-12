@@ -5,8 +5,14 @@
 //   --court     a demo job the buyer disputed and the market then paid (recorded by the agent, as `npm run demo` does:
 //               Agent Market has no testnet, so its "demo-" receipts carry no inference proof); bob takes the buyer's
 //               case to the co-op court; the drawn jurors rule; an upheld case refunds the buyer from the treasury.
+//   --appeal <case> approve|reject   (0.2.7) the claimant of a dismissed case appeals to every member; the members vote
+//               the refund proposal the contract filed; anyone settles the appeal from the DAO's decision
+//   --routes    (0.2.7) bob routes his payouts to Base, alice to Arbitrum, each to their own Chain Signatures address
+//               (derived from their NEAR account: no new wallet)
+//   --mint      (0.2.7) alice, bob and the steward mint their work records as tokens
 import fs from "node:fs";
-import { DEPLOYMENT, NEAR, account, callRaw, decide, fnCall, txUrl, view } from "./lib.mjs";
+import { daoAddress } from "./chainsig.mjs";
+import { DEPLOYMENT, NEAR, account, callRaw, decide, fnCall, txUrl, view, vote } from "./lib.mjs";
 
 const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 const arg = (n) => { const i = process.argv.indexOf(n); return i < 0 ? null : process.argv[i + 1]; };
@@ -62,4 +68,36 @@ if (process.argv.includes("--court")) {
   const done = (await view(dep.contract, "get_cases", { from: id, limit: 1 }))[0];
   const after = BigInt(await view(dep.usdc, "ft_balance_of", { account_id: BUYER }));
   console.log(`case #${id}: ${done.status}, refund proposal #${done.refund_proposal}; buyer USDC ${Number(before) / 1e6} → ${Number(after) / 1e6}`);
+}
+
+if (arg("--appeal")) {
+  const id = Number(arg("--appeal"));
+  const verdict = process.argv[process.argv.indexOf("--appeal") + 2];
+  const c = (await view(dep.contract, "get_cases", { from: id, limit: 1 }))[0];
+  const a = await callRaw(account(c.claimant), dep.contract, "appeal_case", { id }, { deposit: NEAR, tgas: 100 });
+  say(`${c.claimant} appealed case #${id} to the members`, a);
+  const appeal = await view(dep.contract, "get_appeal", { id });
+  console.log(`the contract filed DAO proposal #${appeal.proposal}; the members vote it`);
+  for (const m of [A, B, S, "kop-guest-984702.testnet", "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet"]) {
+    if ((await view(dep.dao, "get_proposal", { id: appeal.proposal })).status !== "InProgress") break;
+    say(`${m}: ${verdict === "approve" ? "refund" : "keep the jury's ruling"}`, await vote(account(m), dep.dao, appeal.proposal, verdict === "approve" ? "VoteApprove" : "VoteReject"));
+  }
+  const p = await view(dep.dao, "get_proposal", { id: appeal.proposal });
+  say(`proposal #${appeal.proposal} ${p.status}; anyone settles the appeal`, await callRaw(account(S), dep.contract, "settle_appeal", { id }, { tgas: 300 }));
+  console.log(`appeal of case #${id}:`, JSON.stringify(await view(dep.contract, "get_appeal", { id })));
+}
+
+if (process.argv.includes("--routes")) {
+  for (const [who, chain] of [[B, "base"], [A, "arb"]]) {
+    const address = await daoAddress(who);
+    say(`${who} routes payouts to ${chain} ${address}`, await callRaw(account(who), dep.contract, "set_payout_route", { chain, address }, { tgas: 30 }));
+  }
+  console.log("routes:", JSON.stringify(await view(dep.contract, "get_payout_routes")));
+}
+
+if (process.argv.includes("--mint")) {
+  for (const who of [A, B, S]) {
+    say(`${who} minted their work record`, await callRaw(account(who), dep.contract, "mint_work_record", {}, { deposit: NEAR / 100n, tgas: 30 }));
+  }
+  console.log("tokens:", (await view(dep.contract, "nft_tokens", {})).map((t) => `${t.token_id}: ${t.metadata.description.slice(0, 90)}…`).join("\n"));
 }

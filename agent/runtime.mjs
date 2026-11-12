@@ -141,7 +141,9 @@ export async function infer(config, job, capMicroUsd, { local = false } = {}) {
   try {
     const res = await fetch(`${NEARAI}/chat/completions`, {
       method: "POST",
-      signal: AbortSignal.timeout(180_000), // a reasoning model writing a long answer; the per-job cap still bounds the cost
+      // a reasoning model thinks before it answers: 134 s for five bullet points on GLM 5.3 Flash (13 Nov), so 300 s; the
+      // per-job cap still bounds the cost
+      signal: AbortSignal.timeout(300_000),
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "accept-encoding": "identity" },
       body,
     });

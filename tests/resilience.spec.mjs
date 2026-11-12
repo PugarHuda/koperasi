@@ -130,6 +130,42 @@ test("hostile proposal text cannot run script or pose as another action", async 
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();
 });
 
+test("a vote to sign for the co-op's Ethereum address shows the payment, and warns when the hash is not that transaction's", async ({ page }, testInfo) => {
+  onlyLocal(testInfo);
+  const tx = '{"chainId":"11155111","nonce":"3","maxPriorityFeePerGas":"1000000000","maxFeePerGas":"5000000000","gas":"25200","to":"0x89b70a44dc6ebf5f9015de6f7077561a0d927138","value":"1000000000000000"}';
+  const good = "1d6f16af0797178406891e3d1f198d56e6f0ba5954f7ec545a2724cacafc0d21"; // that transaction's hash (trezu/check.mjs)
+  const sign = (payload) => ({ FunctionCall: { receiver_id: "v1.signer-prod.testnet", actions: [{ method_name: "sign", deposit: "1", gas: "100000000000000",
+    args: Buffer.from(JSON.stringify({ request: { payload_v2: { Ecdsa: payload }, path: "ethereum-1", domain_id: 0 } })).toString("base64") }] } });
+  await answerViews(page, {
+    get_last_proposal_id: 2,
+    get_proposals: [
+      { id: 0, proposer: "x.testnet", description: `[trezu-tmpl:kop-pay-ethereum] sign ${good} for tx ${tx}`, status: "InProgress", votes: {}, submission_time: "0", vote_counts: {}, kind: sign(good) },
+      { id: 1, proposer: "x.testnet", description: `[trezu-tmpl:kop-pay-ethereum] sign for tx ${tx}`, status: "InProgress", votes: {}, submission_time: "0", vote_counts: {}, kind: sign("ab".repeat(32)) },
+    ],
+  });
+  await page.goto("/?as=kop-bob-mw4i3w8f.testnet");
+  const items = page.locator("#joinapp .props:not(.tasks) > li");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(1).locator("pre.does")).toContainText("Pay 0.001 Sepolia ETH from the co-op's Ethereum address to 0x89b70a44dc6ebf5f9015de6f7077561a0d927138 (nonce 3");
+  await expect(items.nth(1).locator("pre.does")).toContainText("is this transaction's");
+  await expect(items.nth(0).locator("pre.does")).toContainText("WARNING: the transaction in the description does not make this hash");
+});
+
+test("a member sets where payouts land, sees the work-record token and the Ethereum payment form", async ({ page }, testInfo) => {
+  onlyLocal(testInfo);
+  await answerViews(page, { get_payout_routes: [["kop-bob-mw4i3w8f.testnet", "base", "0x89b70a44dc6ebf5f9015de6f7077561a0d927138"]] });
+  await page.goto("/?as=kop-bob-mw4i3w8f.testnet");
+  await expect(page.locator("#joinapp")).toContainText("Where your payouts land");
+  await expect(page.locator("#joinapp")).toContainText("Base, 0x89b70a44dc6ebf5f9015de6f7077561a0d927138");
+  await expect(page.locator("#w-route-chain")).toHaveValue("base");
+  await page.locator("#w-route-chain").selectOption("arb");
+  await page.locator("#w-route-addr").fill("0xNOPE");
+  await page.locator("#w-route").click();
+  await expect(page.locator("#joinapp .note-line .err")).toContainText("0x and 40 hex digits");
+  await expect(page.locator("#joinapp")).toContainText("Your work record, as a token");
+  await expect(page.locator("#joinapp details.court summary").last()).toContainText("Pay from the co-op's Ethereum address");
+});
+
 // ---------- navigation ----------
 
 test("deep links land on their section, and back/forward move between them", async ({ page }) => {

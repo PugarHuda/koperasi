@@ -444,16 +444,20 @@ cargo near build reproducible-wasm
   });
   // what members owe each other (contract 0.2.4), the steward's term, and the treasury's Ethereum address
   Promise.all([all(dep.contract, "get_pledges"), all(dep.contract, "get_pledge_claims"), all(dep.contract, "get_cases"), view(dep.contract, "get_steward_term"),
-    Promise.all(members.map(([a]) => view(dep.contract, "get_standing", { account_id: a })))]).then(([pledges, claims, cases, [days, ends], standing]) => {
+    Promise.all(members.map(([a]) => view(dep.contract, "get_standing", { account_id: a })))]).then(async ([pledges, claims, cases, [days, ends], standing]) => {
+    // contract 0.2.7: a dismissed case may go on appeal to every member, who vote the refund as a DAO proposal
+    const appeals = await Promise.all(cases.map((c) => (c.status === "Dismissed" ? view(dep.contract, "get_appeal", { id: c.id }).catch(() => null) : null)));
+    const APPEAL = { Open: "on appeal: the members vote", Upheld: "appealed: the members overturned it, refunded", Dismissed: "appealed: the members kept the ruling" };
     const kept = (id, st) => claims.filter((c) => c.pledge === id && c.status === st).length;
     rows($("pledges").tBodies[0], [...pledges].reverse().map((p) => `<tr><td><strong>#${p.id}</strong> ${esc(p.what)}</td>
       <td data-label="By"><a href="cert.html?who=${encodeURIComponent(p.issuer)}">${esc(p.issuer)}</a></td>
       <td class="num" data-label="Called in">${p.called} of ${p.units}</td><td data-label="Kept / broken">${kept(p.id, "Honored")} / ${kept(p.id, "Broken")}</td></tr>`).join(""));
     const OUT = { Open: "jury out", Upheld: "upheld: refunded", Dismissed: "not upheld" };
-    rows($("cases").tBodies[0], [...cases].reverse().map((c) => `<tr><td><strong>#${c.id}</strong> job ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, brought by ${esc(c.claimant)} for ${esc(c.refund_to)}</span></td>
+    rows($("cases").tBodies[0], [...cases].map((c, i) => [c, appeals[i]]).reverse().map(([c, a]) => `<tr><td><strong>#${c.id}</strong> job ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, brought by ${esc(c.claimant)} for ${esc(c.refund_to)}</span></td>
       <td class="num" data-label="Refund">${usdc(c.amount)} USDC</td>
       <td data-label="Jurors">${c.jurors.map((j) => { const v = c.votes.find(([x]) => x === j); return `${esc(j)}: ${v ? (v[1] ? "uphold" : "reject") : "–"}`; }).join("<br>")}</td>
-      <td data-label="Outcome">${OUT[c.status] ?? esc(c.status)}${c.refund_proposal !== null ? `; <a href="${explorer(dep.dao)}">DAO proposal #${esc(c.refund_proposal)}</a>` : ""}</td></tr>`).join(""));
+      <td data-label="Outcome">${OUT[c.status] ?? esc(c.status)}${c.refund_proposal !== null ? `; <a href="${explorer(dep.dao)}">DAO proposal #${esc(c.refund_proposal)}</a>` : ""}${
+        a ? `; ${APPEAL[a.status] ?? esc(a.status)}${a.proposal !== null ? ` (<a href="${explorer(dep.dao)}">DAO proposal #${esc(a.proposal)}</a>)` : ""}` : ""}</td></tr>`).join(""));
     $("standing").innerHTML = members.map(([a], i) => {
       const [x, good] = standing[i];
       return `<li><b><a href="cert.html?who=${encodeURIComponent(a)}">${esc(a)}</a>: ${good ? "good standing" : "not in good standing"}</b>
