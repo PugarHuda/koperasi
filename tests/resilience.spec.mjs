@@ -1,8 +1,8 @@
 // What the page does when things go wrong, odd input, navigation, accessibility and layout.
 // Failures are simulated by intercepting the page's own requests (NEAR RPCs, the by-laws and evidence files); everything else is live testnet.
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
-import { RPC, answerViews, local, onlyLocal } from "./helpers.mjs";
+import { expect } from "@playwright/test";
+import { RPC, answerViews, local, onlyLocal, test } from "./helpers.mjs";
 
 // ---------- failures ----------
 

@@ -1,7 +1,7 @@
 // "Don't trust us. Your browser checks.": the four checks a visitor runs, including the in-browser TEE verification,
 // and what they say when someone lies (a replayed attestation, a tampered by-laws file) or a service is down.
-import { expect, test } from "@playwright/test";
-import { answerViews, onlyLocal } from "./helpers.mjs";
+import { expect } from "@playwright/test";
+import { answerViews, onlyLocal, test } from "./helpers.mjs";
 
 const go = async (page) => {
   await page.goto("/");

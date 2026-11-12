@@ -1,7 +1,7 @@
 // Tasks with earned trust (contract/src/tasks.rs): the public board, read from the chain, and what each role can do
 // from the wallet panel. The board tests read the live showcase; panel states use ?as= previews on localhost.
-import { expect, test } from "@playwright/test";
-import { answerViews, onlyLocal } from "./helpers.mjs";
+import { expect } from "@playwright/test";
+import { answerViews, onlyLocal, test } from "./helpers.mjs";
 
 const CAROL = "kop-carol-mw4i2iwk.testnet";
 const ALICE = "kop-alice-mw4i3w8f.testnet";

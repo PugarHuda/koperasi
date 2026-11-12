@@ -1,5 +1,6 @@
 // End-to-end checks of the live co-op page. Everything it asserts is read from NEAR testnet, GitHub and NEAR AI.
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./helpers.mjs";
 
 // the browser logs a public RPC's rate limit (429 without CORS headers) as an error, and WebKit raises it from the
 // wallet library too; the page then uses the next RPC. Chromium, Firefox and WebKit word it differently.

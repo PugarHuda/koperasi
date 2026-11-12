@@ -1,7 +1,7 @@
 // What members owe each other (contract/src/commons.rs): the public section read from the live showcase, the work
 // record page, and what each role can do from the wallet panel (?as= previews on localhost).
-import { expect, test } from "@playwright/test";
-import { answerViews, onlyLocal } from "./helpers.mjs";
+import { expect } from "@playwright/test";
+import { answerViews, onlyLocal, test } from "./helpers.mjs";
 
 const ALICE = "kop-alice-mw4i3w8f.testnet";
 const BOB = "kop-bob-mw4i3w8f.testnet";
