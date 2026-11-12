@@ -9,7 +9,8 @@ export default defineConfig({
   testMatch: /.*\.spec\.mjs$/,
   timeout: 90_000,
   expect: { timeout: 30_000, toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: "disabled" } },
-  retries: 1,
+  // public RPCs rate-limit per IP in bursts: CI runs six profiles from one runner, so it retries once more
+  retries: process.env.CI ? 2 : 1,
   // every test reads public NEAR RPCs and GitHub, which rate-limit per IP: keep the load polite
   workers: 2,
   reporter: [["line"], ["html", { open: "never" }]],
