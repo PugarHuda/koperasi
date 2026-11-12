@@ -47,15 +47,43 @@ async function owner() {
   return { type: "evm", address: await daoAddress(dep.dao), chain_id: 11155111, public_key: `0x04${Buffer.from(baseDecode(pk.split(":")[1])).toString("hex")}` };
 }
 
+const same = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+const sorted = (x) => (Array.isArray(x) ? x.map(sorted) : x && typeof x === "object"
+  ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sorted(x[k])])) : x);
+/**
+ * Throws unless the intent text the API returned is the one asked for: its domain and network, the type, the DAO as
+ * owner, the agent, and every field of the request that the text carries (policy, grant credential) unchanged.
+ * @param {string} message @param {string} type @param {any} body @param {string} owner
+ */
+export function refuseUnlessAsked(message, type, body, owner) {
+  let t;
+  try { t = JSON.parse(message); } catch { throw new Error(`refusing to sign: the ${type} intent is not JSON`); }
+  const bad = [];
+  if (t.domain !== "tidepool-agent-api.v1" || t.network !== "testnet") bad.push(`domain ${t.domain}/${t.network}`);
+  if (t.type !== type) bad.push(`type ${t.type}`);
+  if (String(t.owner).toLowerCase() !== owner.toLowerCase()) bad.push(`owner ${t.owner}`);
+  if (body.agent_id && t.agent_id !== body.agent_id) bad.push(`agent ${t.agent_id}`);
+  const d = t.details ?? {};
+  for (const k of ["policy", "credential", "expires_at", "label", "name"]) {
+    if (body[k] !== undefined && d[k] !== undefined && !same(body[k], d[k])) bad.push(`${k} differs`);
+  }
+  if (type === "agent_create" && !same(d.policy, body.policy)) bad.push("the policy is not the one asked for");
+  if (type === "grant_issue" && d.credential !== body.credential) bad.push("the grant credential is not ours");
+  if (bad.length) throw new Error(`refusing to sign the ${type} intent: ${bad.join("; ")}`);
+}
+
 /** An owner intent, signed by the DAO only after the members vote for it; returns its final status. */
 async function byVote(type, body, why) {
   const g = await api("POST", "/generate-intent", { body: { type, ...body } });
   if (g.status !== 201) throw new Error(`generate-intent ${type}: ${g.status} ${JSON.stringify(g.json).slice(0, 300)}`);
   const message = g.json.intent.payload.message.intent;
+  const me = await daoAddress(dep.dao);
+  // never sign what the API wrote without reading it: the text must say exactly what was asked, or nothing is proposed
+  refuseUnlessAsked(message, type, body, me);
   const hash = eip191(message);
   const digest = crypto.createHash("sha256").update(message).digest("hex");
-  const { id, tx, sig } = await signByVote(hash, `NEAR Intents (Tidepool testnet): ${why}. The DAO signs, as owner of the agent's wallet, the ${type} intent whose text has sha256 ${digest}`);
-  const me = await daoAddress(dep.dao);
+  // the whole text goes in the proposal, so the members vote on what is signed, not on a summary of it
+  const { id, tx, sig } = await signByVote(hash, `NEAR Intents (Tidepool testnet): ${why}. The DAO signs, as owner of the agent's wallet, this ${type} intent (sha256 ${digest}): ${message}`);
   if (recover(hash, sig) !== me) throw new Error(`the signature recovers ${recover(hash, sig)}, not the DAO's ${me}`);
   // an Ethereum personal_sign signature: r ‖ s (low half) ‖ v
   const N = secp256k1.Point.CURVE().n;

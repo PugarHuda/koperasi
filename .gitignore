@@ -25,3 +25,6 @@ trezu/.trezu-src/
 video/public/
 video/out/
 video/src/timeline.json
+
+# OutLayer WASI builds (the published .wasm is web/outlayer/)
+outlayer/*/target/

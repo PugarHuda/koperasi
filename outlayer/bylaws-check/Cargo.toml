@@ -1,0 +1,22 @@
+[package]
+name = "bylaws-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# The by-laws gate, run inside an OutLayer TEE (Intel TDX): fetch the agent's by-laws file and the hash the members
+# voted (read from NEAR RPC), hash the file, compare. Build: cargo build --release --target wasm32-wasip2
+[[bin]]
+name = "bylaws-check"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+wasi-http-client = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
