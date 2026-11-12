@@ -8,6 +8,8 @@ export const RPC = /(rpc\.fastnear\.com|test\.rpc\.fastnear\.com|near-testnet\.d
 // about once. Routes a test sets on its page (answerViews, an RPC that is down) come first, as page routes do.
 // ponytail: per-worker, never expires; a run is ~40 min and the specs only read, so state drift is not a concern.
 const answered = new Map();
+/** The page's own testnet RPCs (web/near.js), tried in turn when one is rate-limited. */
+const MIRRORS = ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.fastnear.com"];
 export const test = base.extend({
   context: async ({ context }, use) => {
     await context.route(RPC, async (route) => {
@@ -19,11 +21,18 @@ export const test = base.extend({
         return route.fulfill({ contentType: "application/json", headers: { "access-control-allow-origin": "*" },
           body: JSON.stringify({ ...answered.get(key), id }) });
       }
+      // a rate-limited answer (HTTP 429, or fastnear's JSON-RPC error -429 with HTTP 200) is retried on the other RPCs,
+      // then once more after a pause: the page's own fallback would see the same limit from this runner's one IP
       let res;
-      // the page gives up on an RPC after 8 s and asks the next one: so does this, instead of route.fetch's 30 s
-      try { res = await route.fetch({ timeout: 8000 }); } catch { return route.abort("timedout").catch(() => {}); }
-      const json = res.ok() ? await res.json().catch(() => null) : null;
-      if (json?.result && !json.error && !json.result.error) answered.set(key, json);
+      for (const [k, url] of [req.url(), ...MIRRORS.filter((u) => !req.url().startsWith(u)), ...MIRRORS].entries()) {
+        if (k === MIRRORS.length) await new Promise((ok) => setTimeout(ok, 2000));
+        try { res = await route.fetch({ url, timeout: 8000 }); } catch { res = null; continue; }
+        const json = res.ok() ? await res.json().catch(() => null) : null;
+        if (res.status() === 429 || json?.error?.code === -429 || /rate limit/i.test(JSON.stringify(json?.error ?? ""))) continue;
+        if (json?.result && !json.error && !json.result.error) answered.set(key, json);
+        break;
+      }
+      if (!res) return route.abort("timedout").catch(() => {});
       // the page may have stopped waiting meanwhile
       return route.fulfill({ response: res }).catch(() => {});
     });
