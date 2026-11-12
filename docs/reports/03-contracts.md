@@ -135,3 +135,38 @@ votes and settles a DAO proposal across 6 receipts. Contract storage is 7,699 by
   reproducible build are in place, so the badge needs no further change.
 - **The sandbox test on Windows:** near-sandbox has no Windows binary. It runs in Docker and in CI.
 - **Mainnet:** not deployed. This is a decision for the builder (rule 7).
+
+## Pass 12 Nov: 0.2.6, and the integrations that sign by vote
+
+**Findings fixed in the contract** (from the independent review, [05-security](05-security.md) round 7):
+
+| ID | Fix | Test |
+|---|---|---|
+| S2 | `pledge` and `redeem_pledge` take `PLEDGE_FEE` (0.01 NEAR) for their storage | `a_pledge_pays_for_its_storage`, `calling_in_a_pledge_pays_for_the_claim` |
+| S3 | `end_steward_term` waits 7 days after the term while the steward still holds earnings of a paid job | `a_term_ending_just_after_a_paid_job_gives_the_steward_seven_days` |
+
+**Deployed** by the same path as every upgrade: a reproducible build in Docker, published as a global contract, then a
+members' vote.
+
+| | |
+|---|---|
+| Version | 0.2.6, `contract_source_metadata.build_info` names commit `8d0de11` and the pinned `sourcescan/cargo-near:0.21.1-rust-1.96.0` image |
+| sha256 | `c50989e8c3522e2965548d2df8b2eed0f5b28b5c4bfbf56336a539cf0baa58ce` (413 347 bytes) |
+| Global code | `EG9keYhsBTLMtk2ShbnN6HKg8oZFfikvFZkevxckww5F`, published by `kop-publisher-mw5tkpfo.testnet` |
+| Vote | DAO proposal **#75**, `koperasi-mw4i2iwk.testnet.upgrade(EG9keYhs…)`; 5 members, 11 receipts and by-laws v4 intact, 0 full-access keys |
+| Proof on chain | a pledge without the fee is refused; with it, pledge #4 ([BKB2kFQp…](https://testnet.nearblocks.io/txns/BKB2kFQp6JJ9uF25nyLsNR3bChsUoVEYUPvp69aDrGqb)) |
+| Rebuild | CI `rebuild.yml` reads the commit from the chain, rebuilds in the same image and compares the sha256 (green for 0.2.5 on its first public run) |
+
+**Tests:** 133 contract tests (`cargo test --lib`: 133 passed), plus the sandbox test against the real Sputnik DAO
+wasm, green on CI (Linux).
+
+**On-chain work by vote today, outside the contract** (each a DAO `FunctionCall` to the MPC signer, read back by
+`npm run verify`):
+
+| Proposal | What the members voted | Result |
+|---|---|---|
+| #71 | sign an EIP-1559 transfer of 0.001 Sepolia ETH from the DAO's Chain Signatures address to bob's | signed, but with 21 000 gas, too little to send to a new account on Sepolia today: it failed on chain and moved no ETH |
+| #74 | the same transfer, gas from the node (+20%) | landed: [0x9f794e2d…](https://sepolia.etherscan.io/tx/0x9f794e2d81f016671cf49f5c5984371e1b9c33e6c58606c9dbb5ba0cb8bf1da9) |
+| #72 | the DAO creates the agent's NEAR Intents wallet (Tidepool's testnet Agent API) with a members-only policy | wallet `agent_7faa1d7f6f2be9e778c9fd18`, owner = the DAO's address |
+| #73 | the DAO issues the agent its grant (30 days) | the agent then paid bob 2 USDC on NEAR and 3 USDC on Base Sepolia ([0xba7491b2…](https://sepolia.basescan.org/tx/0xba7491b252fe172bcc30b75647bfed5d7baddfc87cdfb107ca3e0a3c2ac763d8)), each held 10 minutes |
+| — | (not a vote) the by-laws gate run inside an Intel TDX enclave through OutLayer | `match: true` resumed into alice's transaction ([4EShvWPa…](https://testnet.nearblocks.io/txns/4EShvWPavQuFDZtNMfyEBgVGMuA7J2oy8h9VxgCsqFma)) |

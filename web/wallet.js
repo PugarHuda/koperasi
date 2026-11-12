@@ -84,8 +84,8 @@ const describe = (p, s) => {
   const k = kindOf(p);
   const shared = s && shareCall(p);
   if (shared) return `Profit share: send ${usdc(shared)} USDC from the treasury to the co-op contract, split by its rule.\nIf approved now:\n  ${preview(shared, s).join("\n  ")}`;
-  if (k === "AddMemberToRole") return `Add ${p.kind.AddMemberToRole.member_id} to role ${oneLine(p.kind.AddMemberToRole.role)}`;
-  if (k === "RemoveMemberFromRole") return `Remove ${p.kind.RemoveMemberFromRole.member_id} from role ${oneLine(p.kind.RemoveMemberFromRole.role)}`;
+  if (k === "AddMemberToRole") return `Add ${oneLine(p.kind.AddMemberToRole.member_id)} to role ${oneLine(p.kind.AddMemberToRole.role)}`;
+  if (k === "RemoveMemberFromRole") return `Remove ${oneLine(p.kind.RemoveMemberFromRole.member_id)} from role ${oneLine(p.kind.RemoveMemberFromRole.role)}`;
   if (k === "AddBounty") {
     const b = p.kind.AddBounty.bounty;
     // the terms first, from the proposal's own fields; the proposer's task text last, on one line and cut, so it
@@ -94,8 +94,8 @@ const describe = (p, s) => {
     return `Open a paid task: ${pays(b.token, b.amount)} × ${b.times} = up to ${pays(b.token, BigInt(b.amount) * BigInt(b.times))}, `
       + `${Number(BigInt(b.max_deadline) / DAY_NS)} days to deliver once taken\nTask text (proposer's words): “${task}”`;
   }
-  if (k === "BountyDone") return `Pay task #${p.kind.BountyDone.bounty_id} to ${p.kind.BountyDone.receiver_id} from the treasury`;
-  if (k === "Transfer") return `Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${p.kind.Transfer.receiver_id}`;
+  if (k === "BountyDone") return `Pay task #${p.kind.BountyDone.bounty_id} to ${oneLine(p.kind.BountyDone.receiver_id)} from the treasury`;
+  if (k === "Transfer") return `Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${oneLine(p.kind.Transfer.receiver_id)}`;
   if (k === "FunctionCall") {
     const f = p.kind.FunctionCall;
     // for the co-op's own contract, a sentence first; the raw call stays under it, so the sentence can be checked

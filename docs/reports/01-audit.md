@@ -78,3 +78,39 @@ paging and module preloading.
 1. **A1:** this is the track brief itself (Social Money: "reputation-based access", "programmable rewards").
 2. **A2 and A3:** they block the upgrade A1 needs.
 3. **A4, A5 and A6.**
+
+## Pass 12 Nov (the day the repo went public)
+
+Two independent read-only reviews (security; claims, integrations and DX), a Lighthouse audit and a performance trace,
+and a grep for mocks and placeholders. Every finding below was fixed and checked the same day unless marked.
+
+**Mocks and placeholders.** None in what the page shows. `agent/mock-market.mjs` is the local stand-in for Agent
+Market (which has no testnet), used by `npm run demo` only; its jobs are now `demo-` prefixed on-chain and the page
+labels them ("Demo market, no model", or "demo buyer, real model" for the one a real model did). `todo` in
+`wallet.js` is a step state; `mock` in `tests.rs` is near-sdk's test VM.
+
+**Readiness for submission: 95%.** What is left is not code: the submission form, the X post (draft and a 2:03 cut of
+the video ready), real members beyond the builder's demo accounts.
+
+| ID | Area | Severity | Finding | Fix |
+|---|---|---|---|---|
+| K1 | Security | Critical | The members' bot voted in anyone who paid a deposit: a few accounts out-vote the DAO | Signed vouch required ([05-security](05-security.md) round 7) |
+| T1 | CI | High | Every run 9–12 Nov failed in 2–4 s (Actions billing on a private repo); "daily CI" was not true | The repo is public: rebuild, tee-attestation, members, chain, contract, sandbox and static jobs are green |
+| T2 | DX | High | `cp .env.example .env` then `node agent/runtime.mjs`: nothing loads `.env` | `node --env-file=.env …` in the docs |
+| T3 | DX | High | The local page from a clean clone misses `config/` and `evidence/` (gitignored, copied at deploy) | `npm run web:files` first, in the docs |
+| T4 | Page | High | The brief's retry reused one rejected promise | A shared read that is forgotten on failure |
+| T5 | Page | High | A proof the RPC did not answer showed as "Demo market, no model" | Shown as unread; the status says "TEE proofs not read yet" |
+| P1 | Performance | High | LCP 3.9 s on a slow phone: the headline started hidden and the text faded in after 2 s | 1.7 s, CLS 0 (headline whole at first paint, no fade on text) |
+| S1–S4 | Security | Medium | Relayer gas, pledge storage, steward slashed at term end, owner intents | Fixed (round 7) |
+| Q1 | Page | Medium | By-laws *Verify* hashed a 404 page and said "Mismatch" | Reports the missing file |
+| Q2 | Page | Medium | The brief's budget line was always green | Checks the DAO policy: no role but the members' does more than file proposals, except `tasks` (transfers only) |
+| Q3 | Page | Medium | "earns 5 points" per task | The contract's rule: in proportion to the pay, members only |
+| Q4 | verify | Medium | Payouts only printed WARN; outbound calls had no timeout or fallback | Payouts are checks; 15 s timeout and fallback RPCs |
+| Q5 | Agent, scripts, page | Medium | No timeout on 16 outbound calls (a hung API stopped a `--loop` agent) | Timeouts everywhere (inference 180 s) |
+| Q6 | Scripts | Medium | `intents.mjs` booked a payout from an unreadable status; `outlayer.mjs` hashed a 404 | Refused |
+| Q7 | Docs | Medium | Stale numbers (tests, tasks, pledges, upgrade cost, who the members are), links to `docs/docs/…`, a dead `#try-it` anchor | Updated; live counts where they change |
+| Q8 | DX | Low | `.env.example` missed 9 variables; no `engines` | Every variable with where to get it; `node >= 22.3` |
+| Q9 | Tests | Low | A unit test read a signed transaction at fixed offsets and failed 1 run in 8 on CI | An RLP decoder; 300 signatures a run, 10 runs in a row pass |
+| R1–R3 | Security | Low | CSP, pledge disputes, NEAR AI measurements not pinned | Known issues, reasons in round 7 |
+
+Lighthouse (mobile, live): Accessibility 100, Best Practices 100, SEO 100, Agentic Browsing 100.

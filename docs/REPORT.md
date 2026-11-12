@@ -1,107 +1,117 @@
-# Koperasi: final report (8 Nov 2026)
+# Koperasi: final report (12 Nov 2026)
 
-Per-phase detail is in [`docs/reports/`](reports): [01 audit](reports/01-audit.md) · [02 strategy](reports/02-strategi.md) ·
-[03 contract](reports/03-kontrak.md) · [03 contracts, quality pass](reports/03-contracts.md) · [04 dApp](reports/04-dapp.md) · [05 security](reports/05-keamanan.md) · [05 security, round 2](reports/05-security.md) ·
-[06 QA](reports/06-qa.md) · [09 improvements toward the top 3](reports/09-peningkatan.md) · [submission materials](submission.md).
+Koperasi is a co-op on NEAR that owns an AI agent, one member one vote. The agent's prompt, model, prices, its NEAR
+Intents wallet and the co-op's Ethereum address all answer to the members' votes, and every claim is checked from the
+chain, in the browser or with `npm run verify`.
 
-## 1. Judges' scorecard and checklist
+Per-phase detail is in [`docs/reports/`](reports), each with a *12 Nov* pass at the end: [01 audit](reports/01-audit.md) ·
+[02 strategy](reports/02-strategi.md) · [03 contracts](reports/03-contracts.md) · [04 dApp](reports/04-dapp.md) ·
+[05 security](reports/05-security.md) (round 7) · [06 QA](reports/06-qa.md) · [submission materials](submission.md) ·
+[the judges' checklist](../JUDGE.md).
 
-| Criterion | Start | End |
-|---|---|---|
-| Social Money: ownership and a shared budget | 9 | 9 |
-| Social Money: programmable rewards | 8 | 9 |
-| Social Money: reputation-based access | 4 | 9 |
-| Sputnik/Trezu without a new multisig | 8 | 9 |
-| Autonomous Business / Agent Economy | 7 | 7 (blocked by NEAR AI credits and Agent Market having no testnet) |
-| Demo with real transactions | 8 | 9 |
+## 1. Judges' scorecard and the track's brief
 
-The Social Money checklist (custody in the DAO, records per named account, three tiers, a public board) is all ticked,
-with testnet evidence in [02](reports/02-strategi.md#social-money-checklist-the-briefs-sample-prompt).
+Our own estimate on the rubric (technical, design, impact, originality, sustainability), so read it as biased:
+
+| Criterion | 8 Nov | 12 Nov | What moved it |
+|---|---|---|---|
+| Technical | 8 | 9–10 | 0.2.6 with round-7 fixes; the DAO pays on Ethereum by vote; the agent's Intents wallet is the DAO's; the by-laws gate ran in a TDX enclave; a real TEE-proven job; 133 contract + 35 unit tests; byte-for-byte rebuild in CI |
+| Design | 8 | 8.5–9 | live proof on the first screen; Lighthouse 100 on accessibility, best practices, SEO; LCP 1.7 s on a slow phone, CLS 0 |
+| Impact | 5 | 6 | testnet money landed on NEAR, Ethereum and Base by member votes; still demo members and no Agent Market job |
+| Originality | 9 | 9 | a co-op's whole life on chain, not only "an agent bound by a DAO" |
+| Sustainability | 6 | 7–8 | public repo; green CI for rebuild, TEE re-checks, members, verify, contract, sandbox and static jobs |
+
+The Social Money brief, each line proven live on the page's first section: collective ownership (DAO role `member`, a
+majority decides), a shared budget (only a vote spends the treasury; the contract's role `tasks` files transfers only),
+programmable rewards (shares split by savings and points), access by reputation (earned trust, a veto window, jurors
+in good standing), built on Sputnik DAO (every payout a Transfer proposal) with Trezu forms.
 
 ## 2. Audit and security
 
+Round 7 ([05-security](reports/05-security.md)): an independent review the day the repo went public.
+
 | ID | Severity | Finding | Status |
 |---|---|---|---|
-| A1 | High | No reputation-based access | **built**: `contract/src/tasks.rs`, proposals #19 and #25 |
-| A2 | Medium | `upgrade.mjs` underestimated the global-code cost tenfold | fixed |
-| A3 | Medium | `upgrade.mjs` stopped early on a lagging RPC (duplicate proposal #20) | fixed, proven at #25 (no duplicate) |
-| A4 | Low | Bounties only in USDC; `list` printed NEAR bounties as USDC | fixed (`--near`) |
-| A5 | Low | No security headers | fixed, except CSP (known issue) |
-| A6 / S7 | Low | 3 clippy style warnings in the old on-chain code | known issue |
-| S1–S5 | High/Medium (prevented) | self-approval, stale member, bounced payout, approval race, double credit | safe from the start, each with a test |
-| S10 | Medium | a removed poster could still pay on trust | **fixed**, proposal #25 |
-| S11 | Medium | `trusted_after = 0` made everyone trusted | **fixed**, proposal #25 |
-| S6 | Medium | collusion between two members up to `one_vote_max`, capped by the voted budget | **mitigated** (#27/#32): trust needs different posters, a daily no-vote limit per poster, points follow the pay; three colluding members remain a known limit |
-| S12–S14 | High/Medium | points farmed with tiny tasks; a bounced transfer left Approved by Sputnik counted as paid; a rejected payout refiled | **fixed**, proposal #32, bounce proven on testnet ([09](reports/09-peningkatan.md)) |
-| S15–S16 | Medium | `settle_task` racing the contract's own check; points unclamped after `one_vote_max` drops | **fixed**, proposal #33 |
-| S17 | Medium | A payout whose own callback failed stayed Paying for good (T6 in [01-tech-lead](reports/01-tech-lead.md)) | **fixed**, proposals #35 and #38 (four review fixes: never filed twice, a bounce never counted, unclear cases settled by the members) |
-| S8, S9 | Low | `TASK_FEE` slightly below the largest task's storage; contributor protection goes through the DAO | known issue |
+| K1 | Critical | the members' bot voted in anyone who paid a deposit: a few accounts could out-vote the DAO | fixed: a member's signed vouch is required (`6787171`) |
+| A2 | High | the OutLayer program trusted a caller-chosen RPC | fixed: NEAR's RPCs only, named in the signed output |
+| S1 | Medium | strangers could make the relayer pay gas | fixed: only after the join deposit |
+| S2 | Medium | pledges and claims filled storage for free | fixed in 0.2.6 (#75), proven on testnet |
+| S3 | Medium | an honest steward slashed when the term ended just after a paid job | fixed in 0.2.6 (#75) |
+| S4, A1 | Medium | the DAO's owner signature on Agent API intents | fixed: exact fields, whole text in the proposal; #72/#73 audited |
+| R1–R3, D | Low | CSP, pledge disputes, NEAR AI measurements, `video/` dependencies | known issues, with reasons |
 
-Scanners:
-- `npm audit`: 0 high/critical (2 low).
-- clippy wasm: 0 warnings in the new module.
-- Secret scan: clean.
+QA ([01-audit](reports/01-audit.md) pass 12 Nov): a retry that reused a failed read, an unread proof shown as "no
+proof", a false "Mismatch" on a missing file, a check that could not fail, no timeouts on 16 outbound calls, two setup
+steps that worked only on the builder's machine, stale numbers in the docs. All fixed.
 
-## 3. Sponsor integration, before → after
+Scanners: `npm audit` 0 high/critical at the root (2 low); no secrets in the repo or its history; no XSS found.
 
-| | Before | After |
+## 3. Integrations, before → after
+
+| | Before | After (✓ = on a public chain, read back by `npm run verify`) |
 |---|---|---|
-| Sputnik DAO | Deep | Deeper: the contract is a member of the DAO through role `tasks` (transfer proposals only), so every task payout is a Transfer from the treasury it files and approves under the members' rule; approval rights from `get_policy`; `BountyDone` read through `get_proposal` onto the record; budget and rule only by `FunctionCall` proposals |
-| Trezu | Shallow (displays the treasury on mainnet) | Unchanged; the tiers are what its single Finance threshold lacks |
-| NEAR AI Cloud, Agent Market, global contracts | Deep | Unchanged; global contracts were used for vote-only upgrades (#19, #25, #27, #32, #33, #35, #41) |
+| Sputnik DAO | deep | ✓ every task, pledge and case state on the showcase; a rejected and an open proposal |
+| Chain Signatures | a signed statement (#57) | ✓ a payment on Ethereum Sepolia by vote (#74) |
+| NEAR Intents | none (no testnet) | ✓ the agent's wallet owned by the DAO (Tidepool's testnet Agent API, #72/#73), members-only policy, payouts on NEAR and Base Sepolia |
+| OutLayer | none | ✓ the by-laws gate inside an Intel TDX enclave, on-chain |
+| NEAR AI Cloud | attestation, no job | ✓ one job by a TEE-verified model, billed cost and proof on-chain |
+| Global contracts | upgrades by vote | ✓ #75 (0.2.6), rebuilt byte for byte by CI from the commit the chain names |
+| Trezu | forms, #51 | unchanged: trezu.app indexes mainnet only |
 
 ## 4. Competitors and positioning
 
-Full table: README › Prior art (7 agent platforms). For this feature: [02 › competitors](reports/02-strategi.md#competitors-for-this-feature)
-(Sputnik, Trezu, Dework XP, Pocket PEP-42, Zodiac Roles).
+The track had 74 entries on 12 Nov. "An AI agent bound by DAO rules" is now parity; none of them combines a co-op's
+whole life on chain with an agent whose wallet and cross-chain payments answer to the members. Detail and positioning:
+[02-strategi](reports/02-strategi.md).
 
-> For small communities that want to own the AI agent working for them, Koperasi is a member-owned AI co-op on NEAR
-> where one member, one vote pins the agent's mind by hash, every visitor can verify the TEE with their own nonce, and
-> contributors earn the right to be paid without a vote, task by task. Token-launched agents leave control with large
-> holders, and DAO bounty tools make every payout a full vote.
+> For communities that want an AI agent to earn for them, Koperasi is a co-op on NEAR that owns its agent, one member
+> one vote, unlike agent launchpads where holders vote by weight if at all and the operator holds the keys.
 
 ## 5. Differentiators, and why they are hard to copy
 
-1. **The visitor verifies the TEE with their own nonce** (earlier rounds): it needs by-laws pinned by hash to check against.
-2. **Rules nobody changes alone:** no full-access key; code only by vote (four times now: #12, #16, #19, #25).
-3. **A share preview with the contract's integer maths.**
-4. **An audited, bonded steward.**
-5. **New: trust earned on-chain, beside an unmodified Sputnik DAO.**
-   - Evidence: task #0 approved by one member, [`CUkTGkh4…`](https://testnet.nearblocks.io/txns/CUkTGkh4oRazcc6XshUEoBKjzMcCaiEaVu8PB5cCNTC9);
-     task #1 paid on trust, [`AVExx89C…`](https://testnet.nearblocks.io/txns/AVExx89CuGs1PkG3zk5ARdELQMFv3NS9Pdau2E9boFTA);
-     DAO bounty #24 counted, [`68LWnW2G…`](https://testnet.nearblocks.io/txns/68LWnW2GYqRxZHFBhrz7MNmsx3sCPVLxfYuG3x1Q8Dvp).
-   - Hard to copy: it needs a record whose every point can be traced, and a budget capped by vote, and the rights are read
-     from the DAO at the moment of approval.
+1. **The agent's money answers to the co-op, on every chain.** Its Intents wallet and the co-op's Ethereum address have
+   no private key anywhere: the owner is the DAO's Chain Signatures address, which signs only after a vote. Copying it
+   needs a DAO that votes the exact text it signs, which we check field by field.
+2. **The co-op's whole life on chain**, not a payout tool: membership by vote and signed vouch, savings, shares by
+   rule, earned trust with a veto window, pledges, a court drawn at random.
+3. **Don't trust us:** the page checks the by-laws hash, the code (0 full-access keys, rebuilt byte for byte), the
+   model's TEE with the visitor's own nonce, and the brief itself, live.
 
-## 6. New feature: how to try it
+## 6. How to try it
 
-- **The board:** https://koperasi-kohl.vercel.app/#trust (read from the chain).
-- **As a contributor:** connect a testnet wallet; under "Tasks with earned trust" you can take, deliver and give up tasks.
-- **As a member:** `node scripts/tasks.mjs post|accept|approve …` (see [04](reports/04-dapp.md#new-feature-how-to-try-it)).
-- **References:** Sputnik v2 `policy.rs`/`bounties.rs`, the Trezu docs (roles, voting), and the patterns in [02](reports/02-strategi.md).
+- **The page:** https://koperasi-kohl.vercel.app — *Check it yourself* goes to the live brief.
+- **Every claim, read-only:** `npm install && npm run verify` (ends with `every claim checks out`).
+- **Step by step for judges:** [JUDGE.md](../JUDGE.md).
+- **Join:** a member's invite link with a signed vouch, a testnet wallet and the 0.5 NEAR deposit.
 
 ## 7. Testing
 
 | Suite | Result |
 |---|---|
-| Contract (`cargo test`) | **69 passed**: 13 new for tasks, including 2 for the security fixes |
-| Unit (`npm run test:unit`) | **14 pass** |
+| Contract (`cargo test --lib`) | **133 passed** |
+| Sandbox against the real Sputnik DAO wasm | green on CI (Linux) |
+| Unit (`npm run test:unit`) | **35 pass**; the Ethereum-signature test 10 runs in a row (3 000 signatures) |
 | Lint, typecheck | clean |
-| Playwright local, 6 profiles (desktop, firefox, webkit, tablet, Pixel 7, iPhone 13) | see [06-qa](reports/06-qa.md) |
+| `npm run verify` | **every claim checks out** |
+| Playwright, locally, desktop + mobile | 42 passed, 1 flaky (passed on retry), 0 failed; axe clean; visual snapshots for 6 profiles |
+| CI on the public repo | rebuild, tee-attestation, members, chain, contract, sandbox: green |
 
 ## 8. Contracts and links
 
 | | |
 |---|---|
 | Live page | https://koperasi-kohl.vercel.app |
-| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet), code `3wCdocCi3UyfoBLmKTNFfveH1mDcxskR4Nk3zvde8nhX` (proposal #25), rebuild = chain |
+| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet), 0.2.6, global code `EG9keYhs…`, sha256 `c50989e8…`, proposal #75, 0 full-access keys |
 | DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet) |
-| Video / pitch deck | **not made yet**: script and outline in [submission.md](submission.md) |
+| The DAO's Ethereum address | `0xb3dc0128b4a9804de94796480bef8ba014dfca7d` (Chain Signatures) |
+| The agent's Intents wallet | `agent_7faa1d7f6f2be9e778c9fd18` (Tidepool testnet), owner: the address above |
+| Every co-op from this repo | https://koperasi-kohl.vercel.app/coops.html |
+| Video | rendered: 4:27, and a 2:03 cut for X (`video/`); not posted yet |
 
 ## 9. Blockers (only what needs you)
 
-1. **Demo video and pitch deck:** they need your voice and screen. The script is ready.
-2. ~~Circle USDC in the treasury~~: done 9 Nov, 20 USDC from faucet.circle.com; profit share by vote #36, bob claimed 4.33 USDC.
-3. **NEAR AI credits** for the co-op's organization: without them, the agent refuses real jobs.
-4. **Agent Market has no testnet:** the first real loop can only happen on mainnet (a decision for you; not done).
-5. **Submit the form** before 14 Nov 23:59 UTC. The repo opens automatically on 13 Nov at 09:00 WIB.
+1. **Submit the form** on nearhackathon.com before 14 Nov 23:59 UTC (it cannot be edited after).
+2. **Post on X** with the 2:03 video (draft in [submission.md](submission.md)).
+3. **Real members:** 2–3 people outside the builder, through a member's invite link with a signed vouch.
+4. **A real Agent Market job:** the agent has bid on every matching job; a buyer has to award one.
+5. **Mainnet:** not deployed, by choice (rule 7: it needs real NEAR and your decision).

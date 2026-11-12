@@ -149,3 +149,24 @@ The 7 E2E tests cover:
 - the poster seeing the pay path;
 - the approval button for another member only;
 - amount validation on posting.
+
+## Pass 12 Nov: integrations deepened, the first screen, resilience
+
+**Integrations, before → after** (✓ = a transaction on a public chain, read back by `npm run verify`):
+
+| Integration | Before | After |
+|---|---|---|
+| Chain Signatures | the DAO signed a statement naming its Ethereum address (#57) | ✓ the DAO **pays on Ethereum by vote**: an EIP-1559 transfer the members voted (#74) landed on Sepolia; RLP and low-s by hand, no Ethereum library |
+| NEAR Intents | none (no testnet) | ✓ the agent's **Intents wallet owned by the DAO** on Tidepool's testnet mirror of the Intents Agent API: creation (#72) and grant (#73) are owner intents the MPC network signed by vote; the policy pays only members, ≤ 5 USDC a payment, $10 a day, each payout held 10 minutes; ✓ the agent paid bob on NEAR and on Base Sepolia |
+| OutLayer | none | ✓ the **by-laws gate inside an Intel TDX enclave**, on-chain: `outlayer/bylaws-check` (WASI) reads the voted hash from NEAR's RPC and hashes the file |
+| NEAR AI Cloud | attestation and signatures checked; no job had run | ✓ one job done by a real model, TEE-verified, response signature checked, billed cost ($0.002392) and proof on-chain (demo buyer) |
+| Sputnik DAO | tasks, bounties, shares, court | + every task, pledge and case state on the showcase (`scripts/scenarios.mjs`), a rejected proposal (#68) and an open one (#69) |
+
+**The page.** A live "Social Money brief, proven live" section (each line of the track's brief and the co-op's
+activity read from the chain); a first screen with one live line and a call to action to the proof (both visible on
+a 900 px laptop); proposals to the co-op's own contract read in one plain sentence above their raw arguments;
+`/coops.html`, every co-op deployed from the repo; LCP 3.9 s → 1.7 s on a slow phone, CLS 0.
+
+**Resilience** (QA audit): first reads and the shared task board retried; an unread proof shown as unread, never as
+"no proof"; a missing by-laws file reported as missing; timeouts on the relayer calls and on Intel's collateral; the
+brief's budget line checks the DAO policy.

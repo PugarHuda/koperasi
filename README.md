@@ -48,7 +48,7 @@ quotes its line.
 | The members own the co-op, one vote each | DAO [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet): role `member`, RoleWeight, threshold 1/2 | *every member in the contract holds role `member`*; *one member, one vote* |
 | No role can act alone | `member` votes, `tasks` only files and approves transfers, outsiders only file proposals (with a bond) | *no role can act alone* |
 | The agent runs only by-laws the members voted | v3 by proposal #7 (a member found v2's model was not served), v4 by #55 (the steward's handover); the agent runs only `4e28de45…` | *the agent's by-laws … are the ones the members voted* |
-| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys; upgrades only by vote, now #65 (0.2.5) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
+| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys; upgrades only by vote, now #75 (0.2.6) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
 | The agent can only record receipts | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, `record_receipt` / `update_receipt` | *the agent account has only function-call keys …* |
 | Small payouts on earned trust, from the treasury itself | Task #2 needed another member (#30); #3 and #4 paid on trust, no vote (#31, #34); #5, #6 (#44, #45). Each a DAO `Transfer` the contract filed | *task #n was paid from the treasury by DAO proposal #m, filed by the contract*; *the trust tiers were voted* |
 | Any member can stop a no-vote payout before it leaves | A 10-minute veto window by vote #62. Task #7 waited it out and anyone released it (#64). Task #8 was vetoed by bob ([3oQ43dwi…](https://testnet.nearblocks.io/txns/3oQ43dwiSW48PjG983VRL92Hgw4PJF13hGC1Ntc6qWWT)), so it needed one other member, and the steward approved it (#63) | *a payout on trust waits out the veto window the members voted* |
@@ -56,7 +56,7 @@ quotes its line.
 | Profit is shared only by a members' vote, split by the contract | #36: 10 Circle testnet USDC to 4 members; bob claimed his 4.33 in [Cq25VUHM…](https://testnet.nearblocks.io/txns/Cq25VUHME68yfVZDM7ZxdKnjHttHtBhSUF6GXHhsCzxd); #51 filed from a [Trezu](trezu/README.md) form | *the members voted every profit share out of the treasury* |
 | The person in the middle is bonded, and serves a term | Appointed by vote #54 under contract 0.2.3, 1 NEAR bond [k6MzrgXV…](https://testnet.nearblocks.io/txns/k6MzrgXVf9E8styeNa5zNoYryY9aLCPvAqoPV1waFKZ); anyone can slash it once a paid job's earnings are 7 days late. A 90-day term by vote #59 (after Hats Protocol): when it runs out anyone ends it | *the steward was appointed by a vote and is bonded*; *the steward serves a term the members voted* |
 | A buyer's dispute goes to a jury of members, not to the builder | Case #0 ([opened](https://testnet.nearblocks.io/txns/49D9tavwVg2X8YseBDsgXXzjeJgLUVcNjNG5n9q69E2J) by bob for a job the buyer disputed and the market paid): three members in good standing drawn at random; two upheld ([6z5pkYgS…](https://testnet.nearblocks.io/txns/6z5pkYgSWivVrxTjr8mARUe6DSjAof7M4QtRf8MdrEeF), [3k2UPtib…](https://testnet.nearblocks.io/txns/3k2UPtibuzncctR96YGzy8cMc5Lgysfc9wLnyZ5rSw2Z)); the contract filed and approved refund #60, and the buyer got 0.5 USDC from the treasury | *court case #0: the jury upheld it and the contract refunded the buyer* |
-| Members owe each other work, not only money | Pledge #0: alice promised two reviews; bob called both in and said each was kept ([BwFvywKm…](https://testnet.nearblocks.io/txns/BwFvywKmxqX6tyNPWL5jBF1DZp4uctifQ3yMGTmZ9nJh)). Kept and broken pledges, jury duty and slashes are each member's standing; only good standing sits on a jury | *pledges: 4, called in 5 times, kept 4* |
+| Members owe each other work, not only money | Pledge #0: alice promised two reviews; bob called both in and said each was kept ([BwFvywKm…](https://testnet.nearblocks.io/txns/BwFvywKmxqX6tyNPWL5jBF1DZp4uctifQ3yMGTmZ9nJh)). Kept and broken pledges, jury duty and slashes are each member's standing; only good standing sits on a jury | *pledges: n, called in m times, kept k, broken 0* (live counts) |
 | The co-op holds an Ethereum address with no private key | `0xb3dc0128b4a9804de94796480bef8ba014dfca7d`, derived by NEAR's MPC network (Chain Signatures) from the DAO; vote #57 had it sign a statement naming itself, which recovers to that address | *the DAO holds an Ethereum address with no private key …* |
 | Anyone can join and leave; a member can vouch with a signature | `kop-guest-984702.testnet` asked from the page and was voted in (#8); `vouched-mwa7jwhw…` asked with alice's **NEP-413 signed vouch**, which every member's browser checks against alice's full-access key before voting ([screenshot](docs/img/signed-vouch.png)), and was voted in (#56, [joined](https://testnet.nearblocks.io/txns/CEPs9FH7U7Ng9wQowsWYoGQgYRvDELFc4BpRnPDdYpCf)); `kop-leaver-mw8pw94w.testnet` left with its deposit in [pH35xFRx…](https://testnet.nearblocks.io/txns/pH35xFRxjKWxqwGhJ4VXzL3mvphTQDxAvNF7R1wruzV) | (page flows; E2E tests) |
 | Members pay no gas | NEP-366 relayer, calls without a deposit: [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) | (unit tests of `api/relay.mjs`) |
@@ -164,7 +164,7 @@ Each one here is a contract rule or a vote you can read:
 
 ```sh
 npm install
-npm test        # lint, typecheck, 35 unit tests, 130 contract tests (unit, fuzz, invariant); needs Rust (rustup)
+npm test        # lint, typecheck, 35 unit tests, 133 contract tests (unit, fuzz, invariant); needs Rust (rustup)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 
@@ -262,7 +262,7 @@ person is why the steward exists. Both are listed under *Trust assumptions*.
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
-4. **The contract's code.** It runs a global contract the members approved, now proposal #65. `upgrade` obeys only the
+4. **The contract's code.** It runs a global contract the members approved, now proposal #75. `upgrade` obeys only the
    DAO, and the contract account has no full-access key left, so nobody can deploy code without a vote, the builder
    included. The live page shows the key count from the chain. Every upgrade and what it fixed:
    [`docs/DETAILS.md`](docs/DETAILS.md#code-upgrades-each-by-a-members-vote). Each upgrade publishes a global contract
