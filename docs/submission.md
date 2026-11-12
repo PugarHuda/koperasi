@@ -4,7 +4,7 @@ Every number and transaction here can be checked on testnet; see [reports/03-kon
 The video and the deck must be recorded and made by the builder, because they need a face, a voice and a screen. This
 file is the script.
 
-## Demo video script (2:30)
+## Demo video script (the 2:03 cut; the full video is 4:27)
 
 | Time | Screen | Narration |
 |---|---|---|
@@ -12,11 +12,11 @@ file is the script.
 | 0:15–0:40 | section *Don't trust us*: click **Verify with your own nonce** | "Don't trust us. This browser just asked NEAR AI Cloud for an attestation with a nonce it made up, and checked it against Intel's collateral. The model runs in a TEE, and it is the model the members voted." (the table: Verified) |
 | 0:40–1:00 | *By-laws* + *No one changes the rules alone* | "The agent's prompt, model and prices are its by-laws. They are pinned by hash, and the contract rejects receipts from any other config. Even the contract's code changes only by vote: there is no full-access key, not even mine." |
 | 1:00–1:25 | *Work* and *Audit* | "The agent sells work on Agent Market, and each job leaves a receipt with its inference cost. The audit compares earnings with what reached the treasury, and the steward who holds the market account is bonded." |
-| 1:25–2:05 | **06 Tasks & trust** | "Members also pay people for tasks. A newcomer's payout needs another member's approval: here, Bob approved task #0. Carol now has a record, so task #1 was paid the moment Alice accepted it, with no vote. Large tasks are still voted by everyone, like bounty #24, and each point on Carol's record links to the task or proposal it came from. All of it runs on an unmodified Sputnik DAO; Sputnik and Trezu alone can only set one threshold per proposal type." |
+| 1:25–2:05 | **06 Tasks & trust** | "Members also pay people for tasks. A newcomer's payout needs another member's approval: here, Bob approved task #0. Carol now has a record, so task #1 was paid the moment Alice accepted it, with no vote. Large tasks are still voted by everyone, like bounty #1 (paid by proposal #24), and each point on Carol's record links to the task or proposal it came from. All of it runs on an unmodified Sputnik DAO; Sputnik and Trezu alone can only set one threshold per proposal type." |
 | 2:05–2:20 | *Profit shares* + wallet panel | "Profit is shared by rule, and every member sees their part before voting. Savings count only after seven days, so nobody stakes the night before a share. And members don't pay gas: the co-op's relayer does." |
 | 2:20–2:30 | closing | "Koperasi. Own the agent that works for you. Built on NEAR: Sputnik DAO, NEAR AI Cloud, Agent Market." |
 
-## Pitch deck outline (8 slides)
+## Pitch deck outline (9 slides)
 
 1. **Problem:** agents earn money, holders get a price but no say; DAO bounties make every payout a full vote.
 2. **Solution:** an AI co-op where one member, one vote holds the agent's by-laws, and trust is earned on-chain.

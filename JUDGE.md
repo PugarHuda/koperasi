@@ -30,7 +30,7 @@ on every push and every day (`.github/workflows/tests.yml`).
 | 12 | The co-op holds an Ethereum address with no private key | *Commons* → Chain Signatures | `0xb3dc…ca7d`; it signed a statement (proposal #57) and a payment of 0.001 Sepolia ETH to a member that landed on Ethereum (proposal #74), each by vote |
 | 13b | The by-laws checked inside an Intel TDX enclave | `npm run verify` (the OutLayer line), or the tx in `deployment.testnet.json` → `outlayer` | `outlayer.testnet` ran `web/outlayer/bylaws-check.wasm` (same sha256 as the repo) and answered `match: true` for v4 |
 | 13a | The agent's NEAR Intents wallet is the DAO's | *Commons* → Chain Signatures; `npm run verify` | created by vote #72, grant by vote #73, each a `sign` request naming the sha256 of the exact owner intent; owner `0xb3dc…ca7d` |
-| 13c | Many co-ops, one code | `/coops.html` | every co-op deployed with this code, read live; the showcase and one more run voted code with 0 full-access keys |
+| 13c | Many co-ops from this repo | `/coops.html` | every co-op deployed from this repo, read live (members, jobs, shares, by-laws); the showcase and one more have 0 full-access keys, so their code changes only by a vote |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source

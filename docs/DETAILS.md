@@ -15,7 +15,7 @@ npm install
 npm test     # lint (ESLint), typecheck (tsc --checkJs), agent unit tests (node:test), contract tests (cargo test)
 ```
 
-See: `104 passed` for the contract and `pass 29` for the agent, scripts and page logic: response-signature recovery, the TDX quote
+See: `130 passed` for the contract and `pass 35` for the agent, scripts and page logic: response-signature recovery, the TDX quote
 binding the server's signing address and our nonce, the attested docker compose, the per-job spend cap, the demo-market
 check, the page's profit-share preview matching the contract's split to the last USDC unit, views that move past a
 rate-limited RPC, and the agent's money path when a job fails half-way (a billed inference that then fails is booked at
@@ -69,7 +69,7 @@ accounts in a folder and run with `KOP_FUNDER_KEYS=<folder>`.
 ### 3. The web page (live data from the contract)
 
 ```sh
-cd web && python -m http.server 5173     # or any static server
+npm run web:files && cd web && python -m http.server 5173   # copies config/ and evidence/ next to the page first
 ```
 
 Open http://localhost:5173 (or the live page). See:
@@ -135,7 +135,7 @@ The showcase co-op's audit is RED on purpose: the demo's last step has the stewa
 
 ```sh
 cp .env.example .env    # KOP_MARKET_TOKEN=aat_… from your agent's page, NEARAI_API_KEY=sk-…
-node agent/runtime.mjs  # one pass; --loop to keep polling every 45 s
+node --env-file=.env agent/runtime.mjs  # one pass; --loop to keep polling every 45 s (Node reads .env itself)
 ```
 
 Before it accepts any job it checks, and refuses on any failure:
@@ -175,8 +175,8 @@ The result is committed to [`evidence/`](../evidence) and shown on the live page
 | Refresh every member's savings from the staking pool | `node scripts/sync-savings.mjs` | same workflow |
 | Re-prove the by-laws model runs in TEEs | `node agent/tee.mjs <model>` | `.github/workflows/tee.yml`, daily, commits `evidence/` |
 | Propose new by-laws | `node scripts/propose-bylaws.mjs config/config.vN.yaml <member> <points> "why" [voters…]` | by vote only |
-| Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposals #12, #16, #19, #25, #27, #32, #33, #35, #38, #41) |
-| One time: delete the contract account's full-access keys, so only a vote can change the code | `node scripts/upgrade.mjs --lock` | no (done on the demo co-op `koperasi-mw57ou3m.testnet`: 0 keys) |
+| Upgrade the contract code: publish the wasm as a NEAR global contract, the members vote `upgrade({code_hash})`; checks members, receipts and by-laws survive | `node scripts/upgrade.mjs [--publisher <account>]` | by vote only (showcase: proposals #12 to #41, then #48, #50, #52, #53, #58, #61, #65) |
+| One time: delete the contract account's full-access keys, so only a vote can change the code | `node scripts/upgrade.mjs --lock` | no (done on the demo co-op `koperasi-mw57ou3m.testnet` and on the showcase: 0 keys) |
 | Tasks the co-op pays for: post by vote, take, file the work, vote the payout (USDC, or NEAR with `--near`) | `node scripts/bounty.mjs post\|claim\|done\|vote\|list …` | by vote only |
 | Tasks with earned trust: vote the rule and how much the contract may pay from the treasury, post, take, deliver, accept, approve, count a DAO bounty on a record, settle a payout the members voted by hand | `node scripts/tasks.mjs rule\|budget\|post\|claim\|submit\|accept\|approve\|credit\|settle\|list …` | rule and budget by vote; each payout is a DAO Transfer proposal the contract files and approves in its role `tasks` |
 | Pledges, the co-op court, the steward's term: vote the term, run a pledge, take a demo disputed job to court (jurors drawn on-chain rule; an upheld case refunds from the treasury) | `node scripts/commons.mjs [--term <days>] [--pledge] [--court]` | term by vote; members act from the page |
@@ -224,7 +224,7 @@ work (Olas Mech, Virtuals ACP), a DAO treasury and revenue share (Botto, Agents 
 
 **What others have that we do not:** agent-to-agent hiring (Olas, Virtuals: ours only sells); a liquid exit (tokens:
 ours is deliberate, a member leaves and gets the join deposit back, as in a koperasi); volume and track record (we have
-none on mainnet until the co-op's NEAR AI organization has credits).
+none on mainnet yet: the credits are in place, and no Agent Market buyer has awarded the agent a job).
 
 **What nobody else does, and Koperasi does now:**
 
@@ -270,8 +270,8 @@ none on mainnet until the co-op's NEAR AI organization has credits).
 
 ## Code upgrades, each by a members' vote
 
-It runs a global contract the members approved (first #12, then #16, #19 for the task tiers, #25 with two fixes from a security review, #27 for payouts from the treasury through role `tasks`, #32 with three fixes from a security review of #27 (points follow the pay; a transfer that bounces, which Sputnik leaves Approved, is not counted, as tested on testnet; a payout the members rejected is not filed again), #33 with two more from a second review (nobody can settle a payout while the contract's own vote is in flight; points never exceed the voted amount), #35: a payout whose own callback failed (e.g. out of gas) no longer stays Paying for good, `settle_task` unsticks it after an hour; #38 with four fixes from reviews of #35 (a stuck payout is never filed twice, a bounce on record is never counted as paid, and a stuck payout whose result was never read is settled or cancelled only by the members), #41: NEP-297 events for every state change and NEP-330 source metadata from a reproducible build (`contract_source_metadata` names the git commit and the Docker image; rebuild it and get the same sha256, see [03-contracts](docs/reports/03-contracts.md)), #48: a stake increase counts as savings only after 7 days (security finding S12, see [05-security](docs/reports/05-security.md)), #50: and only if it was read at least once a day throughout (the co-op's keeper reads twice a day); #52 and #53 (0.2.3): contribution points halve at each share, a reserve floor for shares, anyone can slash a steward whose paid job is 7 days late, staking rewards no longer restart the savings wait, a poster cannot vouch for their own no-vote payout (security round 5); #58 (0.2.4, global code `EXg8cR2R…`, sha256 `c90399a1…`): pledges, the co-op court, standing, and the steward's term (`contract/src/commons.rs`, security round 6); #61 (0.2.5, global code `DKKR8Whg…`): a veto window on payouts on trust (`set_veto_window`, `veto_task`, `release_task`; voted at 10 minutes by #62); now #65, the same source built reproducibly (global code `FyQ8NqSn…`, sha256 `de764ad1…`, NEP-330 `build_info` names commit b84f950); #20 re-ran #19's
+It runs a global contract the members approved (first #12, then #16, #19 for the task tiers, #25 with two fixes from a security review, #27 for payouts from the treasury through role `tasks`, #32 with three fixes from a security review of #27 (points follow the pay; a transfer that bounces, which Sputnik leaves Approved, is not counted, as tested on testnet; a payout the members rejected is not filed again), #33 with two more from a second review (nobody can settle a payout while the contract's own vote is in flight; points never exceed the voted amount), #35: a payout whose own callback failed (e.g. out of gas) no longer stays Paying for good, `settle_task` unsticks it after an hour; #38 with four fixes from reviews of #35 (a stuck payout is never filed twice, a bounce on record is never counted as paid, and a stuck payout whose result was never read is settled or cancelled only by the members), #41: NEP-297 events for every state change and NEP-330 source metadata from a reproducible build (`contract_source_metadata` names the git commit and the Docker image; rebuild it and get the same sha256, see [03-contracts](reports/03-contracts.md)), #48: a stake increase counts as savings only after 7 days (security finding S12, see [05-security](reports/05-security.md)), #50: and only if it was read at least once a day throughout (the co-op's keeper reads twice a day); #52 and #53 (0.2.3): contribution points halve at each share, a reserve floor for shares, anyone can slash a steward whose paid job is 7 days late, staking rewards no longer restart the savings wait, a poster cannot vouch for their own no-vote payout (security round 5); #58 (0.2.4, global code `EXg8cR2R…`, sha256 `c90399a1…`): pledges, the co-op court, standing, and the steward's term (`contract/src/commons.rs`, security round 6); #61 (0.2.5, global code `DKKR8Whg…`): a veto window on payouts on trust (`set_veto_window`, `veto_task`, `release_task`; voted at 10 minutes by #62); now #65, the same source built reproducibly (global code `FyQ8NqSn…`, sha256 `de764ad1…`, NEP-330 `build_info` names commit b84f950); #20 re-ran #19's
 upgrade after a lagging RPC made the script stop early), and `upgrade` only obeys the
 DAO. Both the showcase and the demo co-op are locked: their contract accounts have no full-access key left, so no
 one, the builder included, can deploy code without a vote; the live page shows the key count from the chain. Each upgrade publishes a global contract, which burns ~10x normal storage
-(about 33 NEAR for this 330 KB contract).
+(about 41 NEAR for this 413 KB contract).
