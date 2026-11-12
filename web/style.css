@@ -307,6 +307,8 @@ h2 .dim { color: var(--grey); }
 .props { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
 .props li { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; padding: .6rem .8rem; background: rgba(255,255,255,.05); font-size: .86rem; }
 .props em { font-style: normal; color: #7fe0a6; font-size: .8rem; background: #071233; padding: .1rem .45rem; } /* its own ground: a long row can wrap it over a light area */
+.props .btn.ghost { background: #071233; } /* same reason: Reject and Give up are white text, transparent by default */
+.props .btn.ghost:hover { background: #142463; }
 .props li > span:first-child { display: grid; gap: .3rem; min-width: 0; flex: 1 1 18rem; }
 .props .does { margin: 0; font-size: .74rem; background: rgba(0,0,0,.35); color: #dfe6ff; padding: .4rem .5rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow: auto; }
 .props .claim { font-size: .76rem; color: rgba(255,255,255,.55); }
