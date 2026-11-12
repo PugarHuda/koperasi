@@ -84,15 +84,15 @@ if (run("tasks")) {
 // ---------- pledges ----------
 if (run("pledges")) {
   const value = (out) => JSON.parse(Buffer.from(out.status.SuccessValue, "base64").toString());
-  const p1 = value(await tx(B, K, "pledge", { what: "Translate one document of the co-op into Bahasa Indonesia", units: 3 }));
-  await tx(A, K, "redeem_pledge", { id: p1 });
-  const c2 = value(await tx(S, K, "redeem_pledge", { id: p1 }));
+  const p1 = value(await tx(B, K, "pledge", { what: "Translate one document of the co-op into Bahasa Indonesia", units: 3 }, { deposit: NEAR / 100n }));
+  await tx(A, K, "redeem_pledge", { id: p1 }, { deposit: NEAR / 100n });
+  const c2 = value(await tx(S, K, "redeem_pledge", { id: p1 }, { deposit: NEAR / 100n }));
   await tx(S, K, "settle_pledge", { claim: c2, honored: true });
 
-  await tx(G, K, "pledge", { what: "Host a 30-minute onboarding call for a new member", units: 2 });
+  await tx(G, K, "pledge", { what: "Host a 30-minute onboarding call for a new member", units: 2 }, { deposit: NEAR / 100n });
 
-  const p3 = value(await tx(V, K, "pledge", { what: "Test the page on a phone and report what breaks", units: 1 }));
-  const c3 = value(await tx(B, K, "redeem_pledge", { id: p3 }));
+  const p3 = value(await tx(V, K, "pledge", { what: "Test the page on a phone and report what breaks", units: 1 }, { deposit: NEAR / 100n }));
+  const c3 = value(await tx(B, K, "redeem_pledge", { id: p3 }, { deposit: NEAR / 100n }));
   await tx(B, K, "settle_pledge", { claim: c3, honored: true });
 }
 

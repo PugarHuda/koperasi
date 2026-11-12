@@ -7,7 +7,7 @@ const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 const bob = account("kop-bob-mw4i3w8f.testnet");
 const value = (out) => JSON.parse(Buffer.from(out.status.SuccessValue, "base64").toString());
 console.log("$ node scripts/commons.mjs: bob calls in alice's pledge #0");
-const r = await callRaw(bob, dep.contract, "redeem_pledge", { id: 0 }, { tgas: 30 });
+const r = await callRaw(bob, dep.contract, "redeem_pledge", { id: 0 }, { deposit: 10n ** 22n, tgas: 30 }); // 0.01 NEAR: the claim pays for its storage
 const claim = value(r);
 console.log(`redeem_pledge → claim #${claim}  ${txUrl(r.transaction.hash)}`);
 const s = await callRaw(bob, dep.contract, "settle_pledge", { claim, honored: true }, { tgas: 30 });

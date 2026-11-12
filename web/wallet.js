@@ -184,6 +184,7 @@ async function act(label, fn, check) {
 }
 
 const TASK_FEE = 10n ** 22n; // 0.01 NEAR, kept for the task's storage (TASK_FEE in contract/src/tasks.rs)
+const PLEDGE_FEE = 10n ** 22n; // 0.01 NEAR, kept for a pledge's or a claim's storage (PLEDGE_FEE in contract/src/commons.rs)
 const workLink = (d) => (/^https:\/\/\S+$/.test(d) ? `<a href="${esc(d)}" rel="noopener">${esc(d)}</a>` : esc(d));
 function tasksPanel(s) {
   const r = s.board.rule;
@@ -279,7 +280,9 @@ function armCommons() {
   const one = (attr, label, method, args, tgas = 30) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => {
     b.onclick = () => act(`${label} #${b.dataset[attr]}`, () => send(dep.contract, method, args(b), { tgas }));
   });
-  one("predeem", "Call in pledge", "redeem_pledge", (b) => ({ id: Number(b.dataset.predeem) }));
+  box.querySelectorAll("[data-predeem]").forEach((b) => {
+    b.onclick = () => act(`Call in pledge #${b.dataset.predeem}`, () => send(dep.contract, "redeem_pledge", { id: Number(b.dataset.predeem) }, { deposit: PLEDGE_FEE, tgas: 30 }));
+  });
   one("pkept", "Kept: pledge claim", "settle_pledge", (b) => ({ claim: Number(b.dataset.pkept), honored: true }));
   one("pbroken", "Not kept: pledge claim", "settle_pledge", (b) => ({ claim: Number(b.dataset.pbroken), honored: false }));
   // the deciding ruling files and approves the refund in the same transaction
@@ -290,7 +293,7 @@ function armCommons() {
     const what = $("w-pl-what").value.trim();
     const units = Number($("w-pl-units").value);
     if (!what || !(units >= 1 && units <= 20)) { say(`<span class="err">Pledge: say what you promise, 1 to 20 times.</span>`); return; }
-    act("Pledge", () => send(dep.contract, "pledge", { what, units }, { tgas: 30 }));
+    act("Pledge", () => send(dep.contract, "pledge", { what, units }, { deposit: PLEDGE_FEE, tgas: 30 }));
   };
   const open = $("w-c-open");
   if (open) open.onclick = () => {

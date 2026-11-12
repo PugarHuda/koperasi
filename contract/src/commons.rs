@@ -28,6 +28,9 @@ const KEY_CASES: &[u8] = b"case_count";
 const KEY_STEWARD_TERM: &[u8] = b"steward_term_days";
 const MAX_WHAT: usize = 280;
 const MAX_UNITS: u32 = 20;
+/// Storage for a pledge or a claim, paid by whoever makes it (as `TASK_FEE` for a task): otherwise one member could fill
+/// the contract's storage for free and leave it unable to write state or refund deposits.
+pub const PLEDGE_FEE: NearToken = NearToken::from_millinear(10);
 /// The issuer has this long to keep a called-in pledge before the holder may report it broken.
 const PLEDGE_DUE_NS: u64 = 14 * DAY_NS;
 /// Points for a juror who rules (cases need a market dispute and a bond, so they cannot be minted at will).
@@ -170,9 +173,11 @@ impl Koperasi {
 
     // ---------- pledges ----------
 
-    /// A member promises a service to the co-op, `units` times (1 to 20).
+    /// A member promises a service to the co-op, `units` times (1 to 20). Attach `PLEDGE_FEE` (0.01 NEAR) for its storage.
+    #[payable]
     pub fn pledge(&mut self, what: String, units: u32) -> u32 {
         let issuer = self.assert_member();
+        require!(env::attached_deposit() >= PLEDGE_FEE, "attach 0.01 NEAR for the pledge's storage");
         require!(!what.trim().is_empty() && what.len() <= MAX_WHAT, "what: 1 to 280 characters");
         require!((1..=MAX_UNITS).contains(&units), "units: 1 to 20");
         let id = next(KEY_PLEDGES);
@@ -181,9 +186,11 @@ impl Koperasi {
         id
     }
 
-    /// Another member calls in one unit of a pledge.
+    /// Another member calls in one unit of a pledge. Attach `PLEDGE_FEE` (0.01 NEAR) for the claim's storage.
+    #[payable]
     pub fn redeem_pledge(&mut self, id: u32) -> u32 {
         let holder = self.assert_member();
+        require!(env::attached_deposit() >= PLEDGE_FEE, "attach 0.01 NEAR for the claim's storage");
         let mut p: Pledge = load(&pledge_key(id)).unwrap_or_else(|| env::panic_str("no such pledge"));
         require!(p.issuer != holder, "you cannot call in your own pledge");
         require!(p.called < p.units, "every unit of this pledge was called in");
@@ -386,11 +393,16 @@ impl Koperasi {
         (days, ends)
     }
 
-    /// Anyone, once the term ran out: the role is empty and the bond is settled as on a replacement.
+    /// Anyone, once the term ran out: the role is empty and the bond is settled as on a replacement. A steward who still
+    /// holds earnings of jobs paid in the last days gets the same 7 days as `slash_overdue` gives, after the term, to pass
+    /// them on: ending the term at once would slash an honest steward for a job paid an hour before.
     pub fn end_steward_term(&mut self) {
         let (_, ends) = self.get_steward_term();
         let ends = ends.unwrap_or_else(|| env::panic_str("no steward with a term"));
-        require!(env::block_timestamp() >= ends.0, "the steward's term has not ended");
+        let now = env::block_timestamp();
+        require!(now >= ends.0, "the steward's term has not ended");
+        require!(now >= ends.0.saturating_add(STEWARD_GRACE_NS) || self.steward_unpaid(u64::MAX) == 0, // every job paid so far
+            "the steward has 7 days after the term to pass on the earnings of recent jobs");
         let old = self.steward.clone().unwrap();
         self.replace_steward(None);
         Event::StewardTermEnded { steward: old }.emit();

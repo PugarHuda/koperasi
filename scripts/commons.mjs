@@ -24,10 +24,10 @@ if (arg("--term")) {
 }
 
 if (process.argv.includes("--pledge")) {
-  const p = await callRaw(account(A), dep.contract, "pledge", { what: "Review one pull request to the co-op's agent or contract within a week", units: 2 }, { tgas: 30 });
+  const p = await callRaw(account(A), dep.contract, "pledge", { what: "Review one pull request to the co-op's agent or contract within a week", units: 2 }, { deposit: NEAR / 100n, tgas: 30 });
   const id = value(p);
   say(`alice pledged #${id}`, p);
-  const r = await callRaw(account(B), dep.contract, "redeem_pledge", { id }, { tgas: 30 });
+  const r = await callRaw(account(B), dep.contract, "redeem_pledge", { id }, { deposit: NEAR / 100n, tgas: 30 });
   const claim = value(r);
   say(`bob called in one unit (claim #${claim})`, r);
   say("bob: kept", await callRaw(account(B), dep.contract, "settle_pledge", { claim, honored: true }, { tgas: 30 }));

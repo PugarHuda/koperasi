@@ -1485,6 +1485,14 @@ fn members_are_read_a_page_at_a_time() {
 /// who stakes a large amount just before a profit share, syncs, and unstakes after takes most of the savings pool.
 /// The cost is only the stake's lock-up (unstaking takes about 4 epochs). Fixing it (count a raise only after a delay)
 /// needs an upgrade by vote; this test shows the current behaviour and flips when the fix lands.
+/// `at`, attaching the pledge fee (pledges and claims pay for their storage).
+fn paying(who: &AccountId, ns: u64) {
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(who.clone()).account_balance(near(100)).block_timestamp(ns)
+        .attached_deposit(commons::PLEDGE_FEE);
+    testing_env!(b.build());
+}
+
 fn at(who: &AccountId, ns: u64) {
     let mut b = VMContextBuilder::new();
     b.current_account_id(me()).predecessor_account_id(who.clone()).account_balance(near(100)).block_timestamp(ns);
@@ -1758,9 +1766,9 @@ fn fails(f: impl FnOnce()) -> bool {
 fn a_kept_pledge_earns_the_issuer_points_and_standing() {
     let mut k = setup();
     with_members(&mut k, &["alice.testnet", "bob.testnet"]);
-    at(&acc("alice.testnet"), DAY);
+    paying(&acc("alice.testnet"), DAY);
     let id = k.pledge("review one pull request".into(), 2);
-    at(&acc("bob.testnet"), DAY);
+    paying(&acc("bob.testnet"), DAY);
     let c = k.redeem_pledge(id);
     k.settle_pledge(c, true);
     assert_eq!(k.get_member(acc("alice.testnet")).unwrap().points, 0, "reputation only, never profit-share points");
@@ -1774,7 +1782,7 @@ fn a_kept_pledge_earns_the_issuer_points_and_standing() {
 fn nobody_calls_in_their_own_pledge() {
     let mut k = setup();
     with_members(&mut k, &["alice.testnet"]);
-    at(&acc("alice.testnet"), DAY);
+    paying(&acc("alice.testnet"), DAY);
     let id = k.pledge("one design review".into(), 1);
     k.redeem_pledge(id);
 }
@@ -1783,7 +1791,7 @@ fn nobody_calls_in_their_own_pledge() {
 #[should_panic(expected = "only a member")]
 fn only_members_pledge() {
     let mut k = setup();
-    at(&acc("outsider.testnet"), DAY);
+    paying(&acc("outsider.testnet"), DAY);
     k.pledge("anything".into(), 1);
 }
 
@@ -1792,9 +1800,9 @@ fn only_members_pledge() {
 fn a_pledge_is_called_in_at_most_units_times() {
     let mut k = setup();
     with_members(&mut k, &["alice.testnet", "bob.testnet"]);
-    at(&acc("alice.testnet"), DAY);
+    paying(&acc("alice.testnet"), DAY);
     let id = k.pledge("one translation".into(), 1);
-    at(&acc("bob.testnet"), DAY);
+    paying(&acc("bob.testnet"), DAY);
     k.redeem_pledge(id);
     k.redeem_pledge(id);
 }
@@ -1803,9 +1811,9 @@ fn a_pledge_is_called_in_at_most_units_times() {
 fn a_pledge_is_broken_only_after_14_days_and_only_by_its_holder() {
     let mut k = setup();
     with_members(&mut k, &["alice.testnet", "bob.testnet", "carol.testnet"]);
-    at(&acc("alice.testnet"), DAY);
+    paying(&acc("alice.testnet"), DAY);
     let id = k.pledge("one review".into(), 1);
-    at(&acc("bob.testnet"), DAY);
+    paying(&acc("bob.testnet"), DAY);
     let c = k.redeem_pledge(id);
     at(&acc("bob.testnet"), 14 * DAY);
     assert!(fails(|| k.settle_pledge(c, false)), "too early");
@@ -2013,6 +2021,42 @@ fn only_jurors_rule() {
     let id = open(&mut k, "frank.testnet", 2 * DAY);
     at(&acc("frank.testnet"), 2 * DAY);
     k.rule_case(id, true);
+}
+
+#[test]
+#[should_panic(expected = "pledge's storage")]
+fn a_pledge_pays_for_its_storage() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    at(&acc("alice.testnet"), DAY);
+    k.pledge("one review".into(), 1);
+}
+
+#[test]
+#[should_panic(expected = "claim's storage")]
+fn calling_in_a_pledge_pays_for_the_claim() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    paying(&acc("alice.testnet"), DAY);
+    let id = k.pledge("one review".into(), 1);
+    at(&acc("bob.testnet"), DAY);
+    k.redeem_pledge(id);
+}
+
+/// Security review 12 Nov (S3): a term that ends just after a paid job must not slash an honest steward; they get the
+/// same 7 days as `slash_overdue` gives, after the term, and are slashed only if they still owe then.
+#[test]
+fn a_term_ending_just_after_a_paid_job_gives_the_steward_seven_days() {
+    let mut k = owing_steward(); // a 10 USDC job paid at day 1, nothing passed on
+    as_(&dao(), near(0));
+    k.set_steward_term(1);
+    let ends = k.get_steward_term().1.unwrap().0;
+    at(&acc("anyone.testnet"), ends);
+    assert!(fails(|| k.end_steward_term()), "the steward still has days to pass the earnings on");
+    at(&acc("anyone.testnet"), ends + 7 * DAY);
+    k.end_steward_term();
+    assert!(logs_have("\"steward_slashed\""), "still owing after the grace: slashed");
+    assert!(k.get_info().steward.is_none());
 }
 
 #[test]
