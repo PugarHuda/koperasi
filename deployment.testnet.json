@@ -32,25 +32,55 @@
       "to": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
       "toNote": "bob's own Chain Signatures address",
       "eth": 0.001,
-      "nonce": 0,
-      "maxPriorityFeePerGas": "2000000000",
-      "maxFeePerGas": "30000000000",
-      "gas": "21000",
-      "proposal": 71,
-      "tx": "3ZbeKYwioNecT2FVVhtezxT2XARfh35DhtMMTrmHjZ2E",
+      "nonce": 1,
+      "maxPriorityFeePerGas": "1000000000",
+      "maxFeePerGas": "5000000000",
+      "gas": "248869",
+      "proposal": 74,
+      "tx": "JCgDnCpXwMDVXQ9SZxV2UzjrZiq81UspKhuhBNEpWuq1",
       "signature": {
         "scheme": "Secp256k1",
         "big_r": {
-          "affine_point": "03baccb66624bfbf38e28c7adf841a87d91826970f645b52c0b2e4338601d583aa"
+          "affine_point": "03091280c3e6c60679b36c2c193250d1ce3ae492a5dfc4cd4d2d2515a3575a7658"
         },
         "s": {
-          "scalar": "484272e656b06238d571e000eb4e055ca6fbb9982754b2cfbd9f8c406e2f496a"
+          "scalar": "16bece3785be69c0090af299aebde6162652b0c9227ed209dd10eb19e19a009f"
         },
-        "recovery_id": 1
+        "recovery_id": 0
       },
-      "raw": "0x02f87583aa36a78084773594008506fc23ac008252089489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c001a0baccb66624bfbf38e28c7adf841a87d91826970f645b52c0b2e4338601d583aaa0484272e656b06238d571e000eb4e055ca6fbb9982754b2cfbd9f8c406e2f496a",
-      "hash": "0xfdd2e7d3248a7165ffc4636c777b4732348469b9a305828d5246dcfd464e3b07"
-    }
+      "raw": "0x02f87683aa36a701843b9aca0085012a05f2008303cc259489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c080a0091280c3e6c60679b36c2c193250d1ce3ae492a5dfc4cd4d2d2515a3575a7658a016bece3785be69c0090af299aebde6162652b0c9227ed209dd10eb19e19a009f",
+      "hash": "0x9f794e2d81f016671cf49f5c5984371e1b9c33e6c58606c9dbb5ba0cb8bf1da9",
+      "sent": true
+    },
+    "transfers_before": [
+      {
+        "network": "sepolia",
+        "from": "0xb3dc0128b4a9804de94796480bef8ba014dfca7d",
+        "to": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
+        "toNote": "bob's own Chain Signatures address",
+        "eth": 0.001,
+        "nonce": 0,
+        "maxPriorityFeePerGas": "2000000000",
+        "maxFeePerGas": "30000000000",
+        "gas": "21000",
+        "proposal": 71,
+        "tx": "3ZbeKYwioNecT2FVVhtezxT2XARfh35DhtMMTrmHjZ2E",
+        "signature": {
+          "scheme": "Secp256k1",
+          "big_r": {
+            "affine_point": "03baccb66624bfbf38e28c7adf841a87d91826970f645b52c0b2e4338601d583aa"
+          },
+          "s": {
+            "scalar": "484272e656b06238d571e000eb4e055ca6fbb9982754b2cfbd9f8c406e2f496a"
+          },
+          "recovery_id": 1
+        },
+        "raw": "0x02f87583aa36a78084773594008506fc23ac008252089489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c001a0baccb66624bfbf38e28c7adf841a87d91826970f645b52c0b2e4338601d583aaa0484272e656b06238d571e000eb4e055ca6fbb9982754b2cfbd9f8c406e2f496a",
+        "hash": "0xfdd2e7d3248a7165ffc4636c777b4732348469b9a305828d5246dcfd464e3b07",
+        "sent": true,
+        "result": "failed: out of gas (21 000 is too little to send to a new account on Sepolia); no ETH moved"
+      }
+    ]
   },
   "intents": {
     "provider": "Tidepool (testnet mirror of the NEAR Intents Agent API)",

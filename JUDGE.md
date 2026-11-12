@@ -27,7 +27,7 @@ on every push and every day (`.github/workflows/tests.yml`).
 | 9 | The co-op court | *Commons* | case #0 upheld and refunded by DAO proposal #60; cases #1 and #2 not upheld (one split 1–2) |
 | 10 | Work members owe each other | *Commons* → pledges | pledges kept, partly called in, and never called in |
 | 11 | A work record nobody can type in | `/cert.html?who=kop-alice-mw4i3w8f.testnet` | kept pledges and jury duty, each line read from the chain |
-| 12 | The co-op holds an Ethereum address with no private key | *Commons* → Chain Signatures | `0xb3dc…ca7d`; it signed a statement (proposal #57) and a Sepolia payment to a member (proposal #71), each by vote |
+| 12 | The co-op holds an Ethereum address with no private key | *Commons* → Chain Signatures | `0xb3dc…ca7d`; it signed a statement (proposal #57) and a payment of 0.001 Sepolia ETH to a member that landed on Ethereum (proposal #74), each by vote |
 | 13b | The by-laws checked inside an Intel TDX enclave | `npm run verify` (the OutLayer line), or the tx in `deployment.testnet.json` → `outlayer` | `outlayer.testnet` ran `web/outlayer/bylaws-check.wasm` (same sha256 as the repo) and answered `match: true` for v4 |
 | 13a | The agent's NEAR Intents wallet is the DAO's | *Commons* → Chain Signatures; `npm run verify` | created by vote #72, grant by vote #73, each a `sign` request naming the sha256 of the exact owner intent; owner `0xb3dc…ca7d` |
 | 13c | Many co-ops, one code | `/coops.html` | every co-op deployed with this code, read live; the showcase and one more run voted code with 0 full-access keys |

@@ -120,22 +120,26 @@ if (main && process.argv.includes("--sign")) {
   const to = process.argv[i + 1]?.startsWith("0x") ? process.argv[i + 1].toLowerCase() : await daoAddress("kop-bob-mw4i3w8f.testnet");
   const amount = Number(process.argv[i + 1]?.startsWith("0x") ? process.argv[i + 2] : process.argv[i + 1]) || 0.001;
   if (!/^0x[0-9a-f]{40}$/.test(to)) throw new Error(`not an Ethereum address: ${to}`);
-  // fees with room: the vote signs now, the transfer may be broadcast later; unused fee is not charged (EIP-1559)
+  const value = BigInt(Math.round(amount * 1e6)) * 10n ** 12n;
+  // gas from the node, with 20% room: sending to a new account costs far more than 21 000 on Sepolia today (a first
+  // attempt signed with 21 000 ran out of gas: #71); unused gas and fee are not charged (EIP-1559)
+  const gas = (BigInt(await eth("eth_estimateGas", [{ from: address, to, value: `0x${value.toString(16)}` }])) * 12n) / 10n;
   const t = { chainId: SEPOLIA.chainId, nonce: BigInt(await eth("eth_getTransactionCount", [address, "latest"])),
-    maxPriorityFeePerGas: 2_000_000_000n, maxFeePerGas: 30_000_000_000n, gas: 21_000n, to, value: BigInt(Math.round(amount * 1e6)) * 10n ** 12n };
+    maxPriorityFeePerGas: 1_000_000_000n, maxFeePerGas: 5_000_000_000n, gas, to, value };
   const what = `Pay ${amount} Sepolia ETH from the co-op's Ethereum address ${address} to ${to}${to === await daoAddress("kop-bob-mw4i3w8f.testnet") ? " (bob's own Chain Signatures address)" : ""}: sign the EIP-1559 transaction (nonce ${t.nonce}, NEAR Chain Signatures)`;
   const { id, tx, sig } = await signByVote(txHash(t), what);
   const recovered = recover(txHash(t), sig);
   if (recovered !== address) throw new Error(`the signature recovers ${recovered}, not ${address}`);
   const raw = rawTx(t, sig);
-  dep.chainSignatures = { ...dep.chainSignatures, transfer: { network: "sepolia", from: address, to, ...(to === await daoAddress("kop-bob-mw4i3w8f.testnet") ? { toNote: "bob's own Chain Signatures address" } : {}), eth: amount, nonce: Number(t.nonce),
+  const earlier = dep.chainSignatures?.transfer;
+  dep.chainSignatures = { ...dep.chainSignatures, ...(earlier ? { transfers_before: [...(dep.chainSignatures.transfers_before ?? []), earlier] } : {}), transfer: { network: "sepolia", from: address, to, ...(to === await daoAddress("kop-bob-mw4i3w8f.testnet") ? { toNote: "bob's own Chain Signatures address" } : {}), eth: amount, nonce: Number(t.nonce),
     maxPriorityFeePerGas: String(t.maxPriorityFeePerGas), maxFeePerGas: String(t.maxFeePerGas), gas: String(t.gas), proposal: id, tx, signature: sig, raw, hash: `0x${hex(keccak_256(Buffer.from(raw.slice(2), "hex")))}` } };
   save();
   console.log(`signed by vote #${id}: ${what}\nethereum tx ${dep.chainSignatures.transfer.hash} (broadcast with --broadcast once ${address} holds Sepolia ETH)`);
 } else if (main && process.argv.includes("--broadcast")) {
   const x = dep.chainSignatures?.transfer;
   if (!x) throw new Error("no signed transfer: run --tx first");
-  const need = BigInt(Math.round(x.eth * 1e6)) * 10n ** 12n + 21_000n * 30_000_000_000n;
+  const need = BigInt(Math.round(x.eth * 1e6)) * 10n ** 12n + BigInt(x.gas) * BigInt(x.maxFeePerGas);
   const has = BigInt(await eth("eth_getBalance", [address, "latest"]));
   if (has < need) throw new Error(`${address} holds ${Number(has) / 1e18} Sepolia ETH; the transfer and its gas need up to ${Number(need) / 1e18}`);
   const hash = await eth("eth_sendRawTransaction", [x.raw]);
