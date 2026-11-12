@@ -37,6 +37,10 @@ async function rpcCall(urls, method, params) {
 }
 const SEPOLIA_RPCS = ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.gateway.tenderly.co"];
 const BASE_SEPOLIA_RPCS = ["https://base-sepolia-rpc.publicnode.com", "https://sepolia.base.org"];
+/** Each chain a member can route payouts to, read on that chain. */
+const EVM_RPCS = { base: BASE_SEPOLIA_RPCS, arb: ["https://arbitrum-sepolia-rpc.publicnode.com", "https://sepolia-rollup.arbitrum.io/rpc"],
+  eth: ["https://ethereum-sepolia-rpc.publicnode.com", "https://rpc.sepolia.org"] };
+const CHAIN_NAME = { near: "NEAR (Intents)", base: "Base Sepolia", arb: "Arbitrum Sepolia", eth: "Ethereum Sepolia" };
 const NEAR_TX_RPCS = ["https://rpc.testnet.fastnear.com", "https://archival-rpc.testnet.fastnear.com", "https://rpc.testnet.near.org"];
 
 const check = (ok, claim, detail) => {
@@ -203,22 +207,34 @@ if (d.chainSignatures) {
 // each owner intent was a sign request the members voted, naming the sha256 of the exact intent text
 if (d.intents) {
   const i = d.intents;
-  const voted = [["create the wallet", i.created], ["issue the agent's grant", i.grant]].filter(([, x]) => x).map(([what, x]) => {
+  const voted = [["create the wallet", i.created], ["issue the agent's grant", i.grant], ["pay members on their own routes", i.policy]].filter(([, x]) => x).map(([what, x]) => {
     const p = proposals.find((q) => q.id === x.proposal);
     const ok = p?.status === "Approved" && p.kind.FunctionCall?.receiver_id === SIGNER && p.kind.FunctionCall.actions[0]?.method_name === "sign"
       && p.description.includes(x.intent_sha256);
     return { ok, line: `${what}: proposal #${x.proposal} ${p?.status}` };
   });
   // what the agent paid from it, inside the policy: a payout on another chain is read on that chain
-  for (const p of i.payouts ?? []) {
+  const landedOn = async (p) => {
     let landed = p.status === "SUCCESS";
     let where = p.tx ? `NEAR tx ${p.tx}` : "";
-    if (p.destination_chain === "base" && p.destination_tx) {
-      const r = { result: await rpcCall(BASE_SEPOLIA_RPCS, "eth_getTransactionReceipt", [p.destination_tx]) };
-      landed = landed && r?.result?.status === "0x1";
-      where = `Base Sepolia tx ${p.destination_tx}, status ${r?.result?.status ?? "unread"}`;
+    const chain = p.destination_chain ?? (p.chain !== "near" ? p.chain : null);
+    if (chain && EVM_RPCS[chain]) {
+      const r = p.destination_tx ? await rpcCall(EVM_RPCS[chain], "eth_getTransactionReceipt", [p.destination_tx]) : null;
+      landed = landed && r?.status === "0x1";
+      where = `${CHAIN_NAME[chain]} tx ${p.destination_tx ?? "none"}, status ${r?.status ?? "unread"}`;
     }
-    check(landed, `the agent paid ${p.amount} USDC to ${p.to} from the wallet, on ${p.chain === "base" ? "Base Sepolia (read on Base)" : "NEAR (Intents)"}`, `${p.status}; ${where}`);
+    return { landed, where };
+  };
+  for (const p of i.payouts ?? []) {
+    const { landed, where } = await landedOn(p);
+    check(landed, `the agent paid ${p.amount} USDC to ${p.to} from the wallet, on ${CHAIN_NAME[p.chain] ?? p.chain}${p.chain !== "near" ? " (read on that chain)" : ""}`, `${p.status}; ${where}`);
+  }
+  // profit shares from the wallet: split by the contract's voted rule, each part on the route the member set on-chain
+  for (const sh of i.shares ?? []) {
+    const res = await Promise.all(sh.payouts.map(landedOn));
+    check(res.every((r) => r.landed), `the agent shared ${sh.amount} USDC from its wallet by the voted rule, each member paid on their own route`,
+      sh.payouts.map((p, k) => `${p.to.split(".")[0]} ${p.amount} on ${CHAIN_NAME[p.chain] ?? p.chain}: ${res[k].landed ? "landed" : "FAILED"} (${res[k].where})`).join("; ")
+      + `; ${sh.reserve} USDC kept as the reserve`);
   }
   check(voted.length > 0 && voted.every((x) => x.ok) && i.owner === (await daoAddress(d.dao)),
     "the agent's NEAR Intents wallet is owned by the DAO: every owner intent was signed only after a members' vote",
@@ -226,18 +242,23 @@ if (d.intents) {
 }
 
 // the by-laws gate, run inside an Intel TDX enclave by OutLayer: the tx ran this repo's wasm, and resumed with a match
-if (d.outlayer) {
-  const o = d.outlayer;
-  const t = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: o.tx, sender_account_id: o.sender, wait_until: "FINAL" });
+const GATE_WASM = sha256(fs.readFileSync(path.join(ROOT, "web/outlayer/bylaws-check.wasm")));
+/** Reads an OutLayer gate transaction: this repo's program, a NEAR RPC, and a match with `voted`. */
+async function gate(tx, sender, voted) {
+  const t = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: tx, sender_account_id: sender, wait_until: "FINAL" });
   const action = t?.transaction.actions[0]?.FunctionCall;
   const args = action ? JSON.parse(Buffer.from(action.args, "base64").toString()) : {};
   const out = t?.status.SuccessValue ? JSON.parse(Buffer.from(t.status.SuccessValue, "base64").toString()) : {};
-  const local = sha256(fs.readFileSync(path.join(ROOT, "web/outlayer/bylaws-check.wasm")));
-  check(t?.transaction.receiver_id === "outlayer.testnet" && action?.method_name === "request_execution" && args.source?.WasmUrl?.hash === local
-    && out.match === true && out.voted_sha256 === d.configHash && out.file_sha256 === d.configHash
-    && ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org"].includes(out.rpc),
-    "the by-laws were also checked inside an Intel TDX enclave (OutLayer), by this repo's program, on-chain",
-    `tx ${o.tx} by ${o.sender}: wasm ${local.slice(0, 12)}… (web/outlayer/bylaws-check.wasm, source outlayer/bylaws-check) read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}… = voted ${String(out.voted_sha256).slice(0, 12)}…`);
+  const ok = t?.transaction.receiver_id === "outlayer.testnet" && action?.method_name === "request_execution" && args.source?.WasmUrl?.hash === GATE_WASM
+    && out.match === true && out.voted_sha256 === voted && out.file_sha256 === voted && out.contract === d.contract
+    && ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org"].includes(out.rpc);
+  return { ok, out, line: `tx ${tx} by ${sender}: read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}… = voted ${String(out.voted_sha256).slice(0, 12)}…` };
+}
+if (d.outlayer) {
+  const o = d.outlayer;
+  const g = await gate(o.tx, o.sender, d.configHash);
+  check(g.ok, "the by-laws were also checked inside an Intel TDX enclave (OutLayer), by this repo's program, on-chain",
+    `wasm ${GATE_WASM.slice(0, 12)}… (web/outlayer/bylaws-check.wasm, source outlayer/bylaws-check), ${g.line}`);
 }
 
 // 6. profit shares: USDC left the treasury only by a members' vote, through the contract's split
@@ -248,7 +269,15 @@ check(shares.length > 0, "the members voted every profit share out of the treasu
 // 7. what the README admits: no real jobs yet, audit red on purpose, treasury empty
 const receipts = await view(d.contract, "get_receipts", { from: 0, limit: 200 });
 const proofs = await Promise.all(receipts.map((x) => view(d.contract, "get_proof", { job_id: x.job_id })));
-const proven = receipts.filter((x, i) => proofs[i]);
+const parsedProofs = proofs.map((p) => { try { return p ? JSON.parse(p) : null; } catch { return null; } });
+const proven = receipts.filter((x, i) => parsedProofs[i]?.model);
+// every job since the agent runs the gate: its by-laws were checked in the enclave, on-chain, before it started
+const gated = receipts.map((x, i) => [x, parsedProofs[i]?.gate]).filter(([, g]) => g?.tx);
+if (gated.length) {
+  const res = await Promise.all(gated.map(([x, g]) => gate(g.tx, g.by, x.config_hash)));
+  check(res.every((r) => r.ok), "every job that names a by-laws gate had its by-laws checked inside an Intel TDX enclave first, against the hash its receipt carries",
+    gated.map(([x], i) => `${x.job_id.slice(0, 14)}…: ${res[i].ok ? "match" : "FAILED"} (${res[i].line})`).join("; "));
+}
 const market = proven.filter((x) => !x.job_id.startsWith("demo-")).length;
 console.log(`INFO  receipts: ${receipts.length}, ${proven.length} with a TEE inference proof (${proven.length - market} for a demo buyer, ${market} from Agent Market: 0 = no real Agent Market job yet, as the README says)`);
 console.log(`INFO  audit: expected ${usd(audit.expected)} USDC, deposited ${usd(audit.deposited)}, owed ${usd(audit.owed)} (red on purpose: the demo's last step has the steward keep a payout)`);

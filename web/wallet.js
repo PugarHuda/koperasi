@@ -1,6 +1,7 @@
 // Join the co-op from the page with a testnet wallet: pay the deposit, ask the members (a DAO proposal from your own
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
+import { SEPOLIA, eth, rawHash, rawTx, toHex, transfer, txFromText, txHash, txText } from "./eth.js";
 import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
 import { affordable, checkVouch, inviteOf, inviteParam, joinText, vouchParam, vouchSuffix, vouchText, nearUnits, oneLine, payPath, plainCall, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
@@ -37,6 +38,10 @@ const notSent = (msg) => Object.assign(new Error(msg), { notSent: true });
 // those and they go from the member's wallet. Off when the relayer is off (e.g. on localhost).
 const relay = fetch("/api/relay", { signal: AbortSignal.timeout(8_000) }).then((r) => r.ok && r.json()).then((j) => !!j?.on, () => false);
 let gasless = false;
+/** The last transaction's outcome: a vote that completed an Ethereum signature carries the MPC network's answer. */
+let lastOut = null;
+/** HTML added to a confirmation, built from escaped values only. */
+let extra = "";
 
 async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } = {}) {
   const wallet = await connector.wallet();
@@ -55,6 +60,7 @@ async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } =
     else out = body.outcome;
   }
   out ??= await wallet.signAndSendTransaction({ receiverId, actions: [action] });
+  lastOut = out;
   const failure = out?.status?.Failure ?? out?.receipts_outcome?.find((r) => r.outcome.status.Failure)?.outcome.status.Failure;
   if (failure) {
     const s = JSON.stringify(failure);
@@ -96,6 +102,12 @@ const describe = (p, s) => {
   }
   if (k === "BountyDone") return `Pay task #${p.kind.BountyDone.bounty_id} to ${oneLine(p.kind.BountyDone.receiver_id)} from the treasury`;
   if (k === "Transfer") return `Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${oneLine(p.kind.Transfer.receiver_id)}`;
+  const pay = ethPayment(p);
+  if (pay) return pay.ok
+    ? `Pay ${ethAmt(pay.t.value)} Sepolia ETH from the co-op's Ethereum address to ${pay.t.to} (nonce ${pay.t.nonce}, gas up to ${pay.t.gas}): NEAR's MPC network signs it for the DAO.
+Checked here: the hash to sign, ${pay.asked.slice(0, 16)}…, is this transaction's.`
+    : `Sign ${pay.asked} with the co-op's Ethereum address.
+WARNING: the transaction in the description does not make this hash. Do not approve: you would sign something else.`;
   if (k === "FunctionCall") {
     const f = p.kind.FunctionCall;
     // for the co-op's own contract, a sentence first; the raw call stays under it, so the sentence can be checked
@@ -104,6 +116,20 @@ const describe = (p, s) => {
   }
   return `${k} (open the DAO to inspect)`;
 };
+
+// a proposal that asks NEAR's MPC network to sign for the co-op's Ethereum address (trezu/testnet/kop-pay-ethereum.json)
+const SIGNER = dep.chainSignatures?.signer ?? "v1.signer-prod.testnet";
+const ethAmt = (wei) => (Number(BigInt(wei) / 10n ** 12n) / 1e6).toString();
+function ethPayment(p) {
+  if (kindOf(p) !== "FunctionCall" || p.kind.FunctionCall.receiver_id !== SIGNER) return null;
+  const a = p.kind.FunctionCall.actions;
+  if (a.length !== 1 || a[0].method_name !== "sign") return null;
+  let asked;
+  try { asked = JSON.parse(atob(a[0].args)).request.payload_v2.Ecdsa; } catch { return null; }
+  if (!/^[0-9a-f]{64}$/.test(String(asked))) return null;
+  const t = txFromText(p.description);
+  return { asked, t, ok: !!t && toHex(txHash(t)) === asked };
+}
 
 // proposals are anyone's on-chain data: one malformed proposal must not take the panel down for every member
 const safeDescribe = (p, s) => {
@@ -151,7 +177,12 @@ async function load() {
   const [pledges, pclaims, cases, standing, receipts] = await Promise.all([all(dep.contract, "get_pledges"), all(dep.contract, "get_pledge_claims"),
     all(dep.contract, "get_cases"), view(dep.contract, "get_standing", { account_id: me }), member ? all(dep.contract, "get_receipts") : []]
     .map((x) => Promise.resolve(x).catch(() => null)));
-  return { onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
+  // contract 0.2.7: appeals of dismissed cases, the members' payout routes, the work-record token (null on older code)
+  const appeals = Object.fromEntries(await Promise.all((cases ?? []).filter((c) => c.status === "Dismissed")
+    .map(async (c) => [c.id, await view(dep.contract, "get_appeal", { id: c.id }).catch(() => null)])));
+  const [routes, token] = await Promise.all([view(dep.contract, "get_payout_routes"), view(dep.contract, "nft_token", { token_id: me })]
+    .map((x) => x.catch(() => undefined)));
+  return { appeals, routes, token, onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
     board, tasks, dues, records: Object.fromEntries(recs), pledges, pclaims, cases, standing, receipts };
 }
 
@@ -161,6 +192,7 @@ async function load() {
 async function act(label, fn, check) {
   if (busy) return;
   busy = true;
+  extra = "";
   box.querySelectorAll("button, input, select").forEach((el) => { el.disabled = true; });
   say(`${label}: checking with the chain first…`);
   try {
@@ -168,7 +200,7 @@ async function act(label, fn, check) {
     if (problem) throw notSent(problem);
     say(`${label}: waiting for your signature in the wallet. Once signed, NEAR confirms it in about 2 seconds.`);
     const hash = await fn();
-    note = `<span class="ok">${label}: confirmed on-chain${gasless ? ", gas paid by the co-op's relayer" : ""}.</span>${hash ? ` <a href="${esc(txUrl(hash))}">See the transaction</a>.` : ""}`;
+    note = `<span class="ok">${label}: confirmed on-chain${gasless ? ", gas paid by the co-op's relayer" : ""}.</span>${hash ? ` <a href="${esc(txUrl(hash))}">See the transaction</a>.` : ""}${extra}`;
   } catch (e) {
     const link = e?.hash ? ` <a href="${esc(txUrl(e.hash))}">See the failed transaction</a>.` : "";
     if (e?.notSent) note = `<span class="err">${label}: not sent. ${esc(e.message)}</span>`;
@@ -229,6 +261,7 @@ function tasksPanel(s) {
 
 // pledges and the co-op court (contract/src/commons.rs): members only; the contract re-checks every rule
 const COURT_BOND = 5n * 10n ** 23n; // 0.5 NEAR (COURT_BOND)
+const APPEAL_BOND = 10n ** 24n; // 1 NEAR (APPEAL_BOND)
 const DAY_MS = 86_400_000;
 const nsMs = (ns) => Number(BigInt(ns) / 1_000_000n);
 function commonsPanel(s) {
@@ -248,6 +281,21 @@ function commonsPanel(s) {
     const late = Date.now() >= nsMs(c.ts) + 14 * DAY_MS;
     items.push(`<li><span><strong>You called in</strong> ${esc(p?.what ?? `pledge #${c.pledge}`)}<span class="claim">from ${esc(p?.issuer ?? "?")}: was it kept?</span></span>
       <span class="task-done"><button type="button" class="btn small" data-pkept="${c.id}">Kept</button>${late ? `<button type="button" class="btn ghost small" data-pbroken="${c.id}">Not kept (14 days passed)</button>` : ""}</span></li>`);
+  }
+  // appeal to the members (0.2.7): the claimant of a dismissed case a juror ruled on, within 7 days after the jury's 3
+  for (const c of s.cases) {
+    const a = s.appeals?.[c.id];
+    const head = `<span><strong>Case #${c.id}</strong> job ${esc(c.job_id)}: refund ${usdc(c.amount)} USDC to ${esc(c.refund_to)}<span class="claim">dismissed by the jury (${c.votes.length} ruled)`;
+    if (c.status === "Dismissed" && a === null && c.claimant === me && c.votes.length && Date.now() < nsMs(c.opened) + 10 * DAY_MS) {
+      items.push(`<li>${head}; you may appeal to every member until ${new Date(nsMs(c.opened) + 10 * DAY_MS).toLocaleDateString()}</span></span>
+        <button type="button" class="btn small" data-cappeal="${c.id}">Appeal to the members (1 NEAR bond)</button></li>`);
+    }
+    if (a?.status === "Open" && a.proposal !== null) {
+      const p = s.proposals.find((x) => x.id === a.proposal);
+      const decided = p && p.status !== "InProgress";
+      items.push(`<li>${head}; on appeal: the members vote DAO proposal #${a.proposal}${decided ? ` (${esc(p.status)})` : " below"}</span></span>${
+        decided ? `<button type="button" class="btn small" data-csettle="${c.id}">Settle the appeal</button>` : ""}</li>`);
+    }
   }
   for (const c of s.cases) {
     if (c.status !== "Open") continue;
@@ -271,7 +319,8 @@ function commonsPanel(s) {
       <div class="stake-row"><label>Why <input id="w-c-why" type="text" maxlength="280" autocomplete="off" aria-label="Why the buyer should be refunded"></label>
       <button type="button" class="btn" id="w-c-open">Open the case</button></div>
       <p class="small">Only a job the buyer disputed on Agent Market and the market then paid to the agent. Three members in good standing are drawn at random;
-      two must uphold. Upheld: your bond comes back and the contract refunds the buyer from the treasury. Not upheld: the bond goes to the DAO.</p></details>`;
+      two must uphold. Upheld: your bond comes back and the contract refunds the buyer from the treasury. Not upheld: the bond goes to the DAO,
+      and within 7 days you may appeal to every member (1 NEAR bond): the refund becomes a DAO proposal, one member one vote.</p></details>`;
   }
   return html;
 }
@@ -288,6 +337,10 @@ function armCommons() {
   // the deciding ruling files and approves the refund in the same transaction
   one("crule", "Rule on case", "rule_case", (b) => ({ id: Number(b.dataset.crule), uphold: b.dataset.up === "1" }), 300);
   one("cclose", "Close case", "close_case", (b) => ({ id: Number(b.dataset.cclose) }), 300);
+  one("csettle", "Settle the appeal of case", "settle_appeal", (b) => ({ id: Number(b.dataset.csettle) }), 100);
+  box.querySelectorAll("[data-cappeal]").forEach((b) => {
+    b.onclick = () => act(`Appeal case #${b.dataset.cappeal} to the members`, () => send(dep.contract, "appeal_case", { id: Number(b.dataset.cappeal) }, { deposit: APPEAL_BOND, tgas: 100 }));
+  });
   const post = $("w-pl-post");
   if (post) post.onclick = () => {
     const what = $("w-pl-what").value.trim();
@@ -304,6 +357,89 @@ function armCommons() {
     act("Open a court case", () => send(dep.contract, "open_case", { job_id: $("w-c-job").value, refund_to: to, amount: amt.toString(), reason: why },
       { deposit: COURT_BOND, tgas: 30 }));
   };
+}
+
+// beyond the co-op (contract 0.2.7, contract/src/reach.rs): where your payouts land, your work record as a token, and
+// payments from the co-op's Ethereum address, which NEAR's MPC network signs only by the members' vote
+const CHAINS = { near: "NEAR (your account)", base: "Base", arb: "Arbitrum", eth: "Ethereum" };
+function reachPanel(s) {
+  let html = "";
+  if (s.member && s.routes !== undefined) {
+    const mine = s.routes.find(([a]) => a === me);
+    html += `<h3 class="jh">Where your payouts land</h3>
+      <p class="small">Now: <strong>${mine ? `${CHAINS[mine[1]] ?? esc(mine[1])}, ${esc(mine[2])}` : CHAINS.near}</strong>. The agent's NEAR Intents wallet pays profit
+      shares by these routes; its policy lists exactly the members' routes, and only a members' vote changes it.</p>
+      <div class="stake-row"><label>Chain <select id="w-route-chain">${Object.entries(CHAINS).map(([k, v]) => `<option value="${k}"${(mine?.[1] ?? "near") === k ? " selected" : ""}>${v}</option>`).join("")}</select></label>
+      <label>Address <input id="w-route-addr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…" aria-label="Your address on that chain" value="${esc(mine?.[2] ?? "")}"></label>
+      <button type="button" class="btn" id="w-route">Save my route</button></div>`;
+  }
+  if (s.token !== undefined && (s.member || s.records[me] || s.standing?.[0]?.juries_served)) {
+    html += `<h3 class="jh">Your work record, as a token</h3>`;
+    html += s.token
+      ? `<p class="small">Minted: any NEAR wallet or explorer that reads NFTs (NEP-171) shows it, read live from the contract; it cannot be transferred.
+          <a href="/cert.html?who=${encodeURIComponent(me)}">See it</a>.</p>`
+      : `<p class="small">Take your record (tasks, pledges kept, juries) beyond this co-op: a token in your wallet, read live from the contract, never transferable.</p>
+          <button type="button" class="btn" id="w-mint">Mint my work record (0.01 NEAR storage)</button>`;
+  }
+  if (s.member && dep.chainSignatures?.address) {
+    html += `<details class="court"><summary>Pay from the co-op's Ethereum address (members vote, NEAR signs)</summary>
+      <p class="small">${esc(dep.chainSignatures.address)} on Sepolia has no private key: NEAR's MPC network signs for it only when the DAO calls it, by a vote.
+      This files that vote, in the same form as the Trezu template <code>kop-pay-ethereum</code>; the vote that passes it sends the payment.</p>
+      <div class="stake-row"><label>To <input id="w-eth-to" type="text" autocomplete="off" spellcheck="false" placeholder="0x…" aria-label="Ethereum address to pay"></label>
+      <label>ETH <input id="w-eth-amt" type="text" inputmode="decimal" autocomplete="off" placeholder="0.001" aria-label="Sepolia ETH to pay"></label>
+      <button type="button" class="btn" id="w-eth">Propose the payment</button></div></details>`;
+  }
+  return html;
+}
+
+function armReach(s) {
+  const route = $("w-route");
+  if (route) route.onclick = () => {
+    const chain = $("w-route-chain").value;
+    const address = $("w-route-addr").value.trim().toLowerCase();
+    if (chain !== "near" && !/^0x[0-9a-f]{40}$/.test(address)) { say(`<span class="err">Route: an address of 0x and 40 hex digits.</span>`); return; }
+    act(`Payouts on ${CHAINS[chain]}`, () => send(dep.contract, "set_payout_route", { chain, address: chain === "near" ? null : address }, { tgas: 30 }));
+  };
+  const mint = $("w-mint");
+  if (mint) mint.onclick = () => act("Mint your work record", () => send(dep.contract, "mint_work_record", {}, { deposit: PLEDGE_FEE, tgas: 30 }));
+  const pay = $("w-eth");
+  if (pay) pay.onclick = () => {
+    const to = $("w-eth-to").value.trim().toLowerCase();
+    const amt = $("w-eth-amt").value.trim();
+    if (!/^0x[0-9a-f]{40}$/.test(to) || !/^\d{1,3}(\.\d{1,6})?$/.test(amt) || !(Number(amt) > 0)) {
+      say(`<span class="err">Ethereum payment: an address of 0x and 40 hex digits, and a positive ETH amount (at most 6 decimals).</span>`); return;
+    }
+    const [w, f = ""] = amt.split(".");
+    const wei = (BigInt(w) * 10n ** 6n + BigInt(f.padEnd(6, "0"))) * 10n ** 12n;
+    act(`Propose paying ${amt} Sepolia ETH`, async () => {
+      // nonce and gas from Sepolia now; the members vote on the transaction itself, its fields in the description
+      const t = await transfer(dep.chainSignatures.address, to, wei);
+      const payload = toHex(txHash(t));
+      return send(dep.dao, "add_proposal", { proposal: {
+        description: `[trezu-tmpl:kop-pay-ethereum] Pay from the co-op's Ethereum address (NEAR Chain Signatures): sign ${payload} for tx ${txText(t)}`,
+        kind: { FunctionCall: { receiver_id: SIGNER, actions: [{ method_name: "sign",
+          args: btoa(JSON.stringify({ request: { payload_v2: { Ecdsa: payload }, path: dep.chainSignatures.path ?? "ethereum-1", domain_id: 0 } })),
+          deposit: "1", gas: (100n * 10n ** 12n).toString() }] } },
+      } }, { deposit: BigInt(s.policy.proposal_bond), tgas: 50 });
+    });
+  };
+}
+
+/** After a vote that passed an Ethereum payment: the MPC network's signature is in that vote's outcome; send it. */
+async function sendSigned(p) {
+  const pay = ethPayment(p);
+  if (!pay?.ok) return "";
+  const sig = (lastOut?.receipts_outcome ?? []).map((r) => r.outcome.status?.SuccessValue).filter(Boolean)
+    .map((v) => { try { return JSON.parse(atob(v)); } catch { return null; } }).find((j) => j?.big_r);
+  if (!sig) return "";
+  const raw = rawTx(pay.t, sig);
+  const hash = rawHash(raw);
+  try {
+    await eth("eth_sendRawTransaction", [raw]);
+    return ` Your vote completed the signature: the payment was sent to Sepolia, <a href="${SEPOLIA.explorer}${hash}">${hash.slice(0, 12)}…</a>.`;
+  } catch (e) {
+    return ` Your vote completed the signature, but Sepolia refused the payment (${esc(e.message)}).`;
+  }
 }
 
 const step = (state, title, body) => `<li class="${state}"><b>${title}</b>${body ? `<div>${body}</div>` : ""}</li>`;
@@ -441,11 +577,13 @@ async function render() {
   }
   html += tasksPanel(s);
   html += commonsPanel(s);
+  html += reachPanel(s);
   if (note) html += `<p class="note-line">${note}</p>`;
   box.innerHTML = html;
 
   $("w-out").onclick = () => connector.disconnect().catch(() => {});
   armCommons();
+  armReach(s);
   const copy = $("w-invite-copy");
   if (copy) copy.onclick = () => navigator.clipboard.writeText($("w-invite").value).then(() => { copy.textContent = "Copied"; }, () => $("w-invite").select());
   const vouch = $("w-vouch");
@@ -586,7 +724,11 @@ async function render() {
   box.querySelectorAll("[data-vote]").forEach((b) => {
     let p;
     b.onclick = () => act(b.dataset.vote === "VoteApprove" ? "Approve" : "Reject",
-      () => send(dep.dao, "act_proposal", { id: p.id, action: b.dataset.vote, proposal: p.kind }, { tgas: 200 }),
+      async () => {
+        const hash = await send(dep.dao, "act_proposal", { id: p.id, action: b.dataset.vote, proposal: p.kind }, { tgas: 200 });
+        if (b.dataset.vote === "VoteApprove") extra = await sendSigned(p);
+        return hash;
+      },
       async () => {
         p = await view(dep.dao, "get_proposal", { id: Number(b.dataset.id) });
         if (p.status !== "InProgress") return `Proposal #${p.id} already ended: ${p.status}.`;

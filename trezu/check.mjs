@@ -15,7 +15,12 @@ const samples = {
   "kop-trust-rule": { auto_max: String(YOCTO / 10n), one_vote_max: String(YOCTO / 2n), trusted_after: 2, poster_daily_auto: String(YOCTO / 5n), points: 5 },
   "kop-task-budget": { amount: String(YOCTO) },
   "kop-award-points": { account_id: "kop-alice-mw4i3w8f.testnet", points: 1, reason: "filed from a Trezu template" },
+  "kop-pay-ethereum": { tx: '{"chainId":"11155111","nonce":"3","maxPriorityFeePerGas":"1000000000","maxFeePerGas":"5000000000","gas":"25200","to":"0x89b70a44dc6ebf5f9015de6f7077561a0d927138","value":"1000000000000000"}',
+    payload: "" },
 };
+// the hash the members are asked to sign is the transaction's own: the page rebuilds it from the description the same way
+const { txFromText, txHash, toHex } = await import("../web/eth.js");
+samples["kop-pay-ethereum"].payload = toHex(txHash(txFromText(`tx ${samples["kop-pay-ethereum"].tx}`)));
 
 const compiled = {};
 for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
@@ -29,6 +34,44 @@ for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
   const a = p.kind.FunctionCall.actions[0];
   compiled[parsed.data.id] = p;
   console.log(`✓ ${f} → ${p.kind.FunctionCall.receiver_id.slice(0, 24)}.${a.method_name}(${Buffer.from(a.args, "base64").toString()}) deposit=${a.deposit} gas=${a.gas}`);
+  if (parsed.data.id === "kop-pay-ethereum") {
+    const t = txFromText(p.description);
+    const asked = JSON.parse(Buffer.from(a.args, "base64").toString()).request.payload_v2.Ecdsa;
+    if (!t || toHex(txHash(t)) !== asked) { console.error(`✗ ${f}: the description does not rebuild the hash it asks to sign`); process.exitCode = 1; }
+    else console.log(`  the description rebuilds the signed hash ${asked.slice(0, 16)}…`);
+  }
+}
+
+// --submit-eth [0x… ETH]: the kop-pay-ethereum form, filled from Sepolia, compiled by Trezu, voted by the demo members;
+// the deciding vote's signature makes the raw transaction, which is sent to Sepolia and saved for `npm run verify`
+if (process.argv.includes("--submit-eth") && !process.exitCode) {
+  const { DEPLOYMENT } = await import("../scripts/lib.mjs");
+  const { daoAddress, recover, signByVote } = await import("../scripts/chainsig.mjs");
+  const { transfer, txText, rawTx, rawHash, eth, SEPOLIA } = await import("../web/eth.js");
+  const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
+  const i = process.argv.indexOf("--submit-eth");
+  const from = await daoAddress(dep.dao);
+  const to = process.argv[i + 1]?.startsWith("0x") ? process.argv[i + 1].toLowerCase() : await daoAddress("kop-bob-mw4i3w8f.testnet");
+  const amount = Number(process.argv[i + 2]) || 0.001;
+  const t = await transfer(from, to, BigInt(Math.round(amount * 1e6)) * 10n ** 12n);
+  const tx = txText(t);
+  const payload = toHex(txHash(t));
+  const compiled = buildTemplateProposal(parseManifest(JSON.parse(fs.readFileSync(path.join(dir, "kop-pay-ethereum.json"), "utf8"))).data, { tx, payload });
+  const { id, tx: vote, sig } = await signByVote(txHash(t), "", compiled);
+  if (recover(txHash(t), sig) !== from) throw new Error(`the signature recovers ${recover(txHash(t), sig)}, not ${from}`);
+  const raw = rawTx(t, sig);
+  const hash = await eth("eth_sendRawTransaction", [raw]);
+  console.log(`filed from the Trezu template kop-pay-ethereum: DAO proposal #${id}; signed in ${vote}; sent ${SEPOLIA.explorer}${hash}`);
+  const c = dep.chainSignatures ?? {};
+  const earlier = c.transfer;
+  dep.chainSignatures = { ...c, ...(earlier ? { transfers_before: [...(c.transfers_before ?? []), earlier] } : {}), transfer: {
+    network: "sepolia", from, to, eth: amount, nonce: Number(t.nonce), maxPriorityFeePerGas: String(t.maxPriorityFeePerGas),
+    maxFeePerGas: String(t.maxFeePerGas), gas: String(t.gas), proposal: id, tx: vote, signature: sig, raw, hash: rawHash(raw), sent: true,
+    trezu: "kop-pay-ethereum" } };
+  for (const f of [DEPLOYMENT, path.join(import.meta.dirname, "..", "web", "deployment.json")]) {
+    const d = JSON.parse(fs.readFileSync(f, "utf8"));
+    fs.writeFileSync(f, JSON.stringify({ ...d, chainSignatures: dep.chainSignatures }, null, 2) + "\n");
+  }
 }
 
 if (process.argv.includes("--submit") && !process.exitCode) {

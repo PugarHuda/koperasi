@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "kop-pay-ethereum",
+  "title": "Koperasi: pay from the co-op's Ethereum address",
+  "description": "The co-op's Ethereum address (0xb3dc0128b4a9804de94796480bef8ba014dfca7d on Sepolia) has no private key: NEAR's MPC network signs for it only when the DAO calls `sign`, which it does only by this vote. Get both fields from the page's \"Pay on Ethereum\" form (it reads the nonce and gas from Sepolia): the transaction's fields, and the hash they make. The page checks that the hash is the transaction's before you vote, and sends the signed transaction once the vote passes.",
+  "summary": "Pay from the co-op's Ethereum address (NEAR Chain Signatures): sign {{payload}} for tx {{tx}}",
+  "binding": {
+    "receiver_id": "v1.signer-prod.testnet",
+    "method_name": "sign",
+    "deposit": "1",
+    "gas": "100000000000000"
+  },
+  "fields": [
+    {
+      "name": "tx",
+      "label": "The transaction's fields (JSON, from the page)",
+      "type": "text",
+      "required": true,
+      "validation": {
+        "pattern": "^\\{\"chainId\":\"11155111\",.*\"to\":\"0x[0-9a-f]{40}\",\"value\":\"[0-9]+\"\\}$"
+      }
+    },
+    {
+      "name": "payload",
+      "label": "The hash to sign (64 hex digits, from the page)",
+      "type": "text",
+      "required": true,
+      "validation": {
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    }
+  ],
+  "args": {
+    "request": {
+      "payload_v2": { "Ecdsa": "{{payload}}" },
+      "path": "ethereum-1",
+      "domain_id": 0
+    }
+  }
+}

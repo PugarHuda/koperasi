@@ -119,7 +119,9 @@ try {
   const proofs = await Promise.all(checked.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch((e) => (e.final ? null : undefined))));
   const unread = proofs.some((p) => p === undefined);
   const recent = checked.slice(0, 12);
-  const proven = checked.filter((r, i) => proofs[i]).length;
+  // a proof is JSON: `model`… when a TEE-verified model did the job, `gate` when the by-laws were checked in an enclave first
+  const parsed = proofs.map((p) => { try { return p ? JSON.parse(p) : null; } catch { return null; } });
+  const proven = checked.filter((r, i) => parsed[i]?.model).length;
 
   $("links").innerHTML = [
     `<a href="${explorer(dep.contract)}">Contract on NEAR</a>`,
@@ -194,7 +196,7 @@ try {
       : `<span class="state off">TEE not verified</span> ${esc(when)} UTC: ${esc(ev.reason ?? "a check failed")}. The agent will not send jobs to this model.`;
   }).catch((e) => verdict("ck-bylaws", false, `Could not download the by-laws file (${esc(e.message)}). Reload to try again.`));
   const paidJobs = receipts.filter((x) => x.status === "Paid").length;
-  const teeJobs = checked.filter((r, i) => proofs[i]);
+  const teeJobs = checked.filter((r, i) => parsed[i]?.model);
   const teeMarket = teeJobs.filter((r) => !r.job_id.startsWith("demo-")).length;
   $("p-agent").innerHTML = info.paused
     ? `<span class="state off">Paused</span> The members voted to stop it.`
@@ -301,11 +303,13 @@ try {
   const proofCell = (p, job) => {
     if (p === undefined) return `<span class="muted">Proof not read (NEAR RPC busy): reload to check</span>`;
     if (!p) return `<span class="muted" title="Recorded by npm run demo against a local stand-in for Agent Market; no model ran">Demo market, no model</span>`;
-    try {
-      const x = JSON.parse(p);
-      // a demo- job came from a stand-in buyer, but a real model in a verified TEE did it and signed the answer
-      return `<span class="badge Paid" title="${esc(p)}">TEE-signed</span> <span class="muted">${job.startsWith("demo-") ? "demo buyer, real model" : esc(String(x.tee_signer ?? "").slice(0, 10)) + "…"}</span>`;
-    } catch { return `<span class="muted">${esc(p.slice(0, 16))}</span>`; }
+    let x;
+    try { x = JSON.parse(p); } catch { return `<span class="muted">${esc(p.slice(0, 16))}</span>`; }
+    // the by-laws gate ran on-chain in an Intel TDX enclave (OutLayer) before the job started
+    const gate = x.gate?.tx ? ` <a class="badge Paid" href="${txUrl(String(x.gate.tx))}" title="By-laws checked inside an Intel TDX enclave (OutLayer) before this job">TDX gate</a>` : "";
+    if (!x.model) return `<span class="muted" title="Recorded by npm run demo against a local stand-in for Agent Market; no model ran">Demo market, no model</span>${gate}`;
+    // a demo- job came from a stand-in buyer, but a real model in a verified TEE did it and signed the answer
+    return `<span class="badge Paid" title="${esc(p)}">TEE-signed</span> <span class="muted">${job.startsWith("demo-") ? "demo buyer, real model" : esc(String(x.tee_signer ?? "").slice(0, 10)) + "…"}</span>${gate}`;
   };
   rows($("receipts").tBodies[0], recent.map((r, i) => `<tr>
       <td>${esc(r.job_id.slice(0, 8))}… <span class="muted">${date(r.ts)}</span></td>

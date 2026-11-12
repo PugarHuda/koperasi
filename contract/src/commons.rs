@@ -38,6 +38,10 @@ pub const JUROR_POINTS: u64 = 5;
 pub const JURORS: usize = 3;
 pub const COURT_BOND: NearToken = NearToken::from_millinear(500);
 const COURT_DAYS_NS: u64 = 3 * DAY_NS;
+/// An appeal costs twice the court bond: the whole membership is asked, not three jurors.
+pub const APPEAL_BOND: NearToken = NearToken::from_near(1);
+/// After the jury's 3 days, the claimant has this long to appeal a dismissed case.
+const APPEAL_DAYS_NS: u64 = 7 * DAY_NS;
 const GAS_FILED: Gas = Gas::from_tgas(80);
 
 #[near(serializers = [borsh, json])]
@@ -94,6 +98,18 @@ pub struct Case {
     pub refund_proposal: Option<u64>,
 }
 
+/// A dismissed case taken to the members' meeting (its own key: `Case` stays as it was stored).
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Appeal {
+    pub case: u32,
+    /// The DAO proposal the members vote: the refund itself.
+    pub proposal: Option<u64>,
+    /// Open while the members vote; Upheld (refunded) or Dismissed (the jury's ruling stands) once settled.
+    pub status: CaseStatus,
+    pub opened: U64,
+}
+
 #[near(serializers = [borsh, json])]
 #[derive(Clone, Default)]
 pub struct Standing {
@@ -127,7 +143,10 @@ fn claim_key(id: u32) -> Vec<u8> {
 fn case_key(id: u32) -> Vec<u8> {
     format!("case:{id}").into_bytes()
 }
-/// [0] a case for this job is open, [1] the court refunded it. Removed when a case is not upheld.
+fn appeal_key(id: u32) -> Vec<u8> {
+    format!("appeal:{id}").into_bytes()
+}
+/// [0] a case (or an appeal) for this job is open, [1] the court refunded it. Removed when a case is not upheld.
 fn job_case_key(job: &str) -> Vec<u8> {
     format!("job_case:{job}").into_bytes()
 }
@@ -366,6 +385,99 @@ impl Koperasi {
         Event::RefundFiled { id, proposal_id: pid }.emit();
         PromiseOrValue::Promise(ext_dao_proposals::ext(self.dao_id.clone()).with_static_gas(GAS_ACT)
             .act_proposal(pid, "VoteApprove".into(), refund_kind(&self.usdc_id, &c), None))
+    }
+
+    // ---------- appeal to the assembly ----------
+
+    /// The claimant of a dismissed case, with a 1 NEAR bond, within 7 days after the jury's 3 days: take it to every
+    /// member. A co-op of a handful of members has no second, larger jury to draw (the first one, the claimant, the
+    /// receiver and the steward are already out), so the appeal goes where a koperasi's last word is, the members'
+    /// meeting: the contract files the refund as a DAO proposal and does not vote on it; one member, one vote decides.
+    /// Only a case a juror ruled on (a case nobody ruled on already gave the bond back and leaves the second case open).
+    #[payable]
+    pub fn appeal_case(&mut self, id: u32) -> Promise {
+        let c = case(id);
+        require!(env::predecessor_account_id() == c.claimant, "only the member who opened the case");
+        require!(c.status == CaseStatus::Dismissed, "only a dismissed case");
+        require!(!c.votes.is_empty(), "no juror ruled: open the job's second case instead");
+        require!(env::attached_deposit() >= APPEAL_BOND, "attach the 1 NEAR appeal bond");
+        require!(env::block_timestamp() < c.opened.0 + COURT_DAYS_NS + APPEAL_DAYS_NS, "the 7 days to appeal are over");
+        require!(load::<Appeal>(&appeal_key(id)).is_none(), "this case was appealed");
+        require!(env::storage_read(&job_case_key(&c.job_id)).is_none(), "another case or appeal for this job is open, or it was refunded");
+        env::storage_write(&job_case_key(&c.job_id), &[0]);
+        save(&appeal_key(id), &Appeal { case: id, proposal: None, status: CaseStatus::Open, opened: U64(env::block_timestamp()) });
+        let description = format!("Koperasi court case #{} on appeal to the members: refund {} USDC (6 decimals: {}) to {} for job {}. \
+            The jury dismissed it; {} appeals. Approve to refund, reject to keep the jury's ruling. Reason: {}",
+            id, c.amount.0 as f64 / 1e6, c.amount.0, c.refund_to, c.job_id, c.claimant, c.reason);
+        ext_dao_proposals::ext(self.dao_id.clone())
+            .with_attached_deposit(PAYOUT_BOND)
+            .with_static_gas(GAS_PROPOSE)
+            .add_proposal(near_sdk::serde_json::json!({ "description": description, "kind": refund_kind(&self.usdc_id, &c) }))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_FILED).on_appeal_filed(id))
+    }
+
+    /// Callback: the appeal's proposal is on the DAO, for the members to vote. If it could not be filed, the appeal is
+    /// withdrawn and the bond goes back.
+    #[private]
+    pub fn on_appeal_filed(&mut self, id: u32, #[callback_result] pid: Result<u64, PromiseError>) {
+        let mut a: Appeal = load(&appeal_key(id)).unwrap();
+        let c = case(id);
+        match pid {
+            Ok(pid) => {
+                a.proposal = Some(pid);
+                save(&appeal_key(id), &a);
+                Event::CaseAppealed { id, proposal_id: pid, claimant: c.claimant }.emit();
+            }
+            Err(_) => {
+                env::storage_remove(&appeal_key(id));
+                env::storage_remove(&job_case_key(&c.job_id));
+                let _ = Promise::new(c.claimant).transfer(APPEAL_BOND);
+                log!("case #{}: the appeal could not be filed; bond returned", id);
+            }
+        }
+    }
+
+    /// Anyone, once the members voted: read the appeal's DAO proposal and settle it. Approved (the DAO paid the refund):
+    /// the bond goes back. Rejected, removed or expired: the jury's ruling stands and the bond goes to the DAO.
+    pub fn settle_appeal(&mut self, id: u32) -> Promise {
+        let a: Appeal = load(&appeal_key(id)).unwrap_or_else(|| env::panic_str("this case was not appealed"));
+        require!(a.status == CaseStatus::Open, "the appeal is settled");
+        let pid = a.proposal.unwrap_or_else(|| env::panic_str("the appeal's proposal is not filed yet"));
+        ext_dao_proposals::ext(self.dao_id.clone())
+            .with_static_gas(GAS_FILED)
+            .get_proposal(pid)
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_FILED).on_appeal_read(id))
+    }
+
+    /// Callback of `settle_appeal`.
+    // ponytail: an Approved transfer that bounced (Sputnik leaves it Approved) counts as refunded, as settle_task
+    // takes a payout the members approved by hand; the claimant would then ask the members to pay it again
+    #[private]
+    pub fn on_appeal_read(&mut self, id: u32, #[callback_result] p: Result<Value, PromiseError>) {
+        let mut a: Appeal = load(&appeal_key(id)).unwrap();
+        require!(a.status == CaseStatus::Open, "the appeal is settled");
+        let status = p.ok().and_then(|p| p["status"].as_str().map(String::from)).unwrap_or_default();
+        let c = case(id);
+        let upheld = match status.as_str() {
+            "Approved" => true,
+            "Rejected" | "Removed" | "Expired" | "Failed" | "Moved" => false,
+            _ => env::panic_str("the members have not decided the appeal yet"),
+        };
+        a.status = if upheld { CaseStatus::Upheld } else { CaseStatus::Dismissed };
+        save(&appeal_key(id), &a);
+        if upheld {
+            env::storage_write(&job_case_key(&c.job_id), &[1]);
+            let _ = Promise::new(c.claimant.clone()).transfer(APPEAL_BOND);
+        } else {
+            env::storage_remove(&job_case_key(&c.job_id));
+            let _ = Promise::new(self.dao_id.clone()).transfer(APPEAL_BOND);
+        }
+        Event::AppealSettled { id, upheld }.emit();
+    }
+
+    /// The appeal of a case, if there was one.
+    pub fn get_appeal(&self, id: u32) -> Option<Appeal> {
+        load(&appeal_key(id))
     }
 
     pub fn get_cases(&self, from: Option<u32>, limit: Option<u32>) -> Vec<Case> {

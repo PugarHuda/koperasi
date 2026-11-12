@@ -8,6 +8,10 @@
 //   node scripts/intents.mjs refused         what the policy refuses, shown live (a non-member, over the limit)
 //   node scripts/intents.mjs deposit         the address to fund the wallet (test tokens: https://app.usetidepool.tech/faucet)
 //   node scripts/intents.mjs pay <member|0x…> <USDC> [base]   the agent pays a member (on NEAR, or on Base Sepolia)
+//   node scripts/intents.mjs policy          members vote: the wallet's destinations become the members' own payout routes
+//                                            (set on the contract with set_payout_route: NEAR, Base, Arbitrum or Ethereum)
+//   node scripts/intents.mjs share <USDC>    the agent shares USDC from its wallet with the members, split by the
+//                                            contract's voted share rule, each part paid on the member's own route
 //
 // The owner is the DAO's Ethereum address from NEAR Chain Signatures: it has no private key, so every owner intent
 // (create, grant, policy, freeze) is an ERC-191 message the MPC network signs only when the DAO calls it, by a members'
@@ -19,6 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { baseDecode } from "near-api-js";
+import { splitShare } from "../web/share.js";
 import { DEPLOYMENT, ROOT, view } from "./lib.mjs";
 import { PATH, SIGNER, daoAddress, eip191, recover, signByVote } from "./chainsig.mjs";
 
@@ -36,6 +41,29 @@ const save = () => {
 const USDC = "nep141:usdc.tidepool-sandbox.testnet";
 const BASE_USDC = "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet";
 const BOB = "kop-bob-mw4i3w8f.testnet";
+/** Testnet USDC per chain a member can route payouts to (Tidepool's /v1/tokens, 13 Nov 2026). */
+export const CHAIN_USDC = { near: USDC, base: BASE_USDC, arb: "nep141:arb-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+  eth: "nep141:eth-0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2.tp-omft.testnet" };
+const CAP = "5000000"; // 5 USDC a payment, on every chain
+
+/**
+ * The wallet's policy from the members and their routes: pay a member only on NEAR or at the route they set on the
+ * contract, at most 5 USDC a payment and $10 a day, each payout held 10 minutes (as the members' veto window, #62).
+ * @param {string[]} members @param {[string, string, string][]} routes (account, chain, address)
+ */
+export function policyFor(members, routes) {
+  const ok = routes.filter(([a, c]) => members.includes(a) && c !== "near" && CHAIN_USDC[c]);
+  const assets = [USDC, ...[...new Set(ok.map(([, c]) => c))].sort().map((c) => CHAIN_USDC[c])];
+  return {
+    frozen: false, confidential: false, owner_approval: false, actions: ["transfer", "withdraw", "swap"], assets,
+    limits: { per_transaction: Object.fromEntries(assets.map((a) => [a, CAP])) },
+    max_actions_per_hour: 10,
+    destinations: { mode: "only", list: [...members.map((m) => ({ action: "transfer", address: m, confidential: false })),
+      ...ok.map(([, chain, address]) => ({ action: "withdraw", chain, address, memo: null }))] },
+    budget: { daily_usd: "10", weekly_usd: null, monthly_usd: null },
+    timelock_ms: 600_000,
+  };
+}
 
 /** @param {string} method @param {string} p @param {{ body?: any, grant?: string }} [opts] */
 async function api(method, p, { body, grant } = {}) {
@@ -74,6 +102,7 @@ const DETAILS = {
   grant_issue: new Set(["label", "credential", "expires_at"]),
   agent_freeze: new Set(["expected_revision", "policy_hash"]),
   agent_unfreeze: new Set(["expected_revision", "policy_hash"]),
+  policy_update: new Set(["expected_revision", "policy_hash", "policy"]),
 };
 /**
  * Throws unless the intent text the API returned is the one asked for: its domain and network, the type, the DAO as
@@ -97,10 +126,10 @@ export function refuseUnlessAsked(message, type, body, owner) {
   const unknown = Object.keys(d).filter((k) => !allowed?.has(k));
   if (unknown.length) bad.push(`unexpected details ${unknown.join(", ")}`);
   // every field asked for must be there, unchanged: a missing expiry or credential is a different grant
-  for (const k of ["policy", "credential", "expires_at", "label", "name"]) {
+  for (const k of ["policy", "credential", "expires_at", "label", "name", "expected_revision"]) {
     if (body[k] !== undefined && !same(body[k], d[k])) bad.push(d[k] === undefined ? `${k} missing` : `${k} differs`);
   }
-  if (type === "agent_create" && !same(d.policy, body.policy)) bad.push("the policy is not the one asked for");
+  if ((type === "agent_create" || type === "policy_update") && !same(d.policy, body.policy)) bad.push("the policy is not the one asked for");
   if (type === "grant_issue" && d.credential !== body.credential) bad.push("the grant credential is not ours");
   if (bad.length) throw new Error(`refusing to sign the ${type} intent: ${bad.join("; ")}`);
 }
@@ -129,6 +158,34 @@ async function byVote(type, body, why) {
   if (st.status !== "SUCCESS") throw new Error(`${type}: ${st.status} ${st.failure_code ?? ""}`);
   console.log(`${type}: signed by vote #${id} (NEAR tx ${tx}), accepted by the Agent API`);
   return { st, proposal: id, tx, digest };
+}
+
+/**
+ * The agent pays `units` USDC from its wallet: a transfer on NEAR, or a swap to that chain's USDC and a withdrawal to
+ * `address`. The policy refuses anything the members did not list. Returns what landed.
+ * @param {bigint} units @param {string} chain @param {string} address
+ */
+async function payout(units, chain, address) {
+  const { token } = JSON.parse(fs.readFileSync(GRANT_FILE, "utf8"));
+  let r;
+  if (chain !== "near") {
+    const asset = CHAIN_USDC[chain];
+    if (!asset) throw new Error(`no USDC on ${chain}`);
+    const sw = await api("POST", `/agents/${w.agent_id}/swap`, { body: { origin_asset: USDC, destination_asset: asset, amount: String(units) }, grant: token });
+    if (!sw.json.correlation_id) throw new Error(`swap: HTTP ${sw.status} ${JSON.stringify(sw.json).slice(0, 300)}`);
+    const s1 = await done(sw.json.correlation_id, `swap to ${chain} USDC`);
+    if (s1.status !== "SUCCESS" || !/^\d+$/.test(String(s1.details?.amount_out))) throw new Error(`swap: ${s1.status} ${s1.failure_code ?? ""}: nothing to withdraw`);
+    console.log(`swap to ${chain} USDC:`, s1.status, s1.details.amount_out);
+    r = await api("POST", `/agents/${w.agent_id}/withdraw`, { body: { asset, amount: s1.details.amount_out, chain, recipient: address }, grant: token });
+  } else {
+    r = await api("POST", `/agents/${w.agent_id}/transfer`, { body: { asset: USDC, amount: String(units), recipient: address }, grant: token });
+  }
+  console.log(`payout on ${chain} to ${address}: HTTP ${r.status}`, JSON.stringify(r.json).slice(0, 300));
+  if (!r.json.correlation_id) throw new Error(`payout: HTTP ${r.status} ${JSON.stringify(r.json.errors ?? r.json).slice(0, 200)}`);
+  const st = await done(r.json.correlation_id, "payout");
+  console.log("payout:", st.status, JSON.stringify(st.details ?? {}).slice(0, 400));
+  return { address, amount: Number(units) / 1e6, chain, status: st.status, tx: st.details?.tx_hash ?? null,
+    destination_chain: st.details?.destination_chain ?? null, destination_tx: st.details?.destination_tx_hash ?? null, at: new Date().toISOString() };
 }
 
 const cmd = import.meta.main ? process.argv[2] : "imported"; // imported by the unit tests: no command runs
@@ -180,28 +237,42 @@ if (cmd === "create") {
     console.log(`${what}: HTTP ${r.status} ${r.json.errors?.[0]?.code ?? r.json.status ?? ""}`);
   }
 } else if (cmd === "pay") {
-  const { token } = JSON.parse(fs.readFileSync(GRANT_FILE, "utf8"));
-  const [to, amount, chain] = process.argv.slice(3);
-  const units = String(Math.round(Number(amount) * 1e6));
-  let r;
-  if (chain === "base") {
-    const sw = await api("POST", `/agents/${w.agent_id}/swap`, { body: { origin_asset: USDC, destination_asset: BASE_USDC, amount: units }, grant: token });
-    if (!sw.json.correlation_id) throw new Error(`swap: HTTP ${sw.status} ${JSON.stringify(sw.json).slice(0, 300)}`);
-    const s1 = await done(sw.json.correlation_id, "swap to Base Sepolia USDC");
-    if (s1.status !== "SUCCESS" || !/^d+$/.test(String(s1.details?.amount_out))) throw new Error(`swap: ${s1.status} ${s1.failure_code ?? ""}: nothing to withdraw`);
-    console.log("swap to Base Sepolia USDC:", s1.status, s1.details?.amount_out ?? s1.failure_code);
-    r = await api("POST", `/agents/${w.agent_id}/withdraw`, { body: { asset: BASE_USDC, amount: s1.details.amount_out, chain: "base", recipient: to.startsWith("0x") ? to : await daoAddress(to) }, grant: token });
-  } else {
-    r = await api("POST", `/agents/${w.agent_id}/transfer`, { body: { asset: USDC, amount: units, recipient: to }, grant: token });
+  const [to, amount, chain = "near"] = process.argv.slice(3);
+  const address = to.startsWith("0x") ? to : chain === "near" ? to : await daoAddress(to);
+  const p = await payout(BigInt(Math.round(Number(amount) * 1e6)), chain, address);
+  (w.payouts ??= []).push({ ...p, to, amount: Number(amount) });
+  save();
+} else if (cmd === "policy") {
+  const members = (await view(dep.dao, "get_policy")).roles.find((r) => r.name === "member").kind.Group;
+  const routes = await view(dep.contract, "get_payout_routes");
+  const policy = policyFor(members, routes);
+  const cur = (await api("GET", `/agents/${w.agent_id}/policy`)).json;
+  if (!Number.isInteger(cur.revision)) throw new Error(`policy: no revision (${JSON.stringify(cur).slice(0, 200)})`);
+  const where = routes.map(([a, c, x]) => `${a.split(".")[0]} on ${c} (${x})`).join(", ") || "none";
+  const r = await byVote("policy_update", { agent_id: w.agent_id, policy, expected_revision: cur.revision },
+    `the agent's wallet pays the ${members.length} members on NEAR, or on the route each set on the contract (${where}), at most 5 USDC a payment and $10 a day, each payout held 10 minutes`);
+  w.policy = { proposal: r.proposal, tx: r.tx, intent_sha256: r.digest, revision: cur.revision + 1, routes };
+  save();
+} else if (cmd === "share") {
+  const units = BigInt(Math.round(Number(process.argv[3]) * 1e6));
+  if (!(units > 0n)) throw new Error("share <USDC>: a positive amount");
+  const info = await view(dep.contract, "get_info");
+  const roster = await view(dep.contract, "get_members", { from: 0, limit: 100 });
+  const routes = await view(dep.contract, "get_payout_routes");
+  const { shares, reserve } = splitShare(units, info.share_rule, roster);
+  console.log(`share ${process.argv[3]} USDC by the voted rule (${JSON.stringify(info.share_rule)}); ${Number(reserve) / 1e6} USDC stays in the wallet as the reserve`);
+  const payouts = [];
+  for (const { account, share } of shares.filter((x) => x.share > 0n)) {
+    const [, chain = "near", address = account] = routes.find(([a]) => a === account) ?? [];
+    try {
+      payouts.push({ ...(await payout(share, chain, address)), to: account });
+    } catch (e) {
+      console.error(`${account}: ${e.message}`);
+      payouts.push({ to: account, address, amount: Number(share) / 1e6, chain, status: "NOT_SENT", error: e.message.slice(0, 200), at: new Date().toISOString() });
+    }
   }
-  console.log(`payout: HTTP ${r.status}`, JSON.stringify(r.json).slice(0, 300));
-  if (r.json.correlation_id) {
-    const st = await done(r.json.correlation_id, "payout");
-    console.log("payout:", st.status, JSON.stringify(st.details ?? {}).slice(0, 400));
-    (w.payouts ??= []).push({ to, amount, chain: chain ?? "near", status: st.status, tx: st.details?.tx_hash ?? null,
-      destination_chain: st.details?.destination_chain ?? null, destination_tx: st.details?.destination_tx_hash ?? null, at: new Date().toISOString() });
-    save();
-  }
+  (w.shares ??= []).push({ amount: Number(units) / 1e6, rule: info.share_rule, reserve: Number(reserve) / 1e6, payouts, at: new Date().toISOString() });
+  save();
 } else if (cmd !== "imported") {
   console.log(fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(0, 16).join("\n"));
 }

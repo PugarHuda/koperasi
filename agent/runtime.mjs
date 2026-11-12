@@ -1,8 +1,9 @@
 // Koperasi agent runtime. One pass (or --loop):
 //   1. load the by-laws (config) and refuse to work unless its sha256 equals the hash the DAO approved on-chain
 //   2. bid on board jobs that match the config's filter
-//   3. for each awarded assignment: start, do the work on NEAR AI Cloud (TEE), check the spend caps, submit,
-//      record a receipt on-chain with the config hash, the inference cost and the deliverable hash
+//   3. for each awarded assignment: check the by-laws inside an Intel TDX enclave on-chain (OutLayer, agent/gate.mjs),
+//      start, do the work on NEAR AI Cloud (TEE), check the spend caps, submit, record a receipt on-chain with the
+//      config hash, the inference cost, the deliverable hash and the gate's transaction
 //   4. mirror accepted / cancelled / disputed assignments into the on-chain receipt status
 //
 // env: KOP_MARKET_URL (default https://market.near.ai), KOP_MARKET_TOKEN (aat_…), NEARAI_API_KEY (sk-…).
@@ -12,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { ROOT, DEPLOYMENT, account, call, sha256, view } from "../scripts/lib.mjs";
+import { bylawsGate } from "./gate.mjs";
 import { market } from "./market.mjs";
 import { recoverPersonal } from "./sig.mjs";
 import { verifyModel } from "./tee.mjs";
@@ -298,10 +300,23 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
           continue;
         }
       }
+      // the by-laws gate: an enclave reads the voted hash from the chain and hashes the file, on-chain, before each job
+      let gate;
+      try {
+        const g = await bylawsGate(process.env.KOP_GATE_PAYER ?? dep.steward, dep.contract);
+        if (!g.out?.match || g.out.voted_sha256 !== hash) throw new Error(`no match (${JSON.stringify(g.out).slice(0, 160)})`);
+        gate = { tx: g.tx, by: g.sender };
+        log(`by-laws v${version} checked inside an Intel TDX enclave (OutLayer): tx ${g.tx}`);
+      } catch (e) {
+        log(`not starting "${job.title}": the by-laws gate did not pass: ${e.message}`);
+        halted = true;
+        continue;
+      }
       await m.start(a.assignmentId);
       let done;
       try {
         done = await infer(config, job, capJob, { local });
+        done = { ...done, proof: { ...done.proof, gate } };
       } catch (e) {
         if (e.spentMicroUsd) {
           state.spentMicroUsd += e.spentMicroUsd;

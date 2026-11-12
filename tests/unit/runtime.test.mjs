@@ -18,7 +18,7 @@ const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const CAP_JOB = 500_000; // config v3: 0.50 USD per job
 
 // ---- world ----
-const w = { receipts: [], calls: [], completions: 0, signatureStatus: 200, submitFails: 0, receiptFails: 0, assignment: null };
+const w = { receipts: [], calls: [], completions: 0, signatureStatus: 200, submitFails: 0, receiptFails: 0, assignment: null, gateFails: false, gates: 0 };
 const priv = secp256k1.utils.randomSecretKey();
 const signer = ethAddressOf(secp256k1.getPublicKey(priv, false));
 const personalSign = (msg) => {
@@ -42,6 +42,11 @@ mock.module(pathToFileURL(path.join(ROOT, "scripts/lib.mjs")).href, { namedExpor
 } });
 mock.module(pathToFileURL(path.join(ROOT, "agent/tee.mjs")).href, { namedExports: {
   verifyModel: async () => ({ ok: true, at: new Date().toISOString(), gateway: { signing_address: signer }, models: [] }),
+} });
+// the OutLayer gate: matches the voted hash unless a test says otherwise
+mock.module(pathToFileURL(path.join(ROOT, "agent/gate.mjs")).href, { namedExports: {
+  bylawsGate: async () => { w.gates = (w.gates ?? 0) + 1; return { tx: "GateTx", sender: dep.steward,
+    out: { match: !w.gateFails, voted_sha256: sha256(fs.readFileSync(path.join(ROOT, dep.configUri))) } }; },
 } });
 const market = {
   platformConfig: async () => ({ platform_fee_bps: 500 }),
@@ -85,7 +90,7 @@ const { runOnce } = await import("../../agent/runtime.mjs");
 
 const fresh = (t, setup = {}) => {
   fs.rmSync(process.env.KOP_STATE, { force: true });
-  Object.assign(w, { receipts: [], calls: [], completions: 0, signatureStatus: 200, submitFails: 0, receiptFails: 0,
+  Object.assign(w, { receipts: [], calls: [], completions: 0, signatureStatus: 200, submitFails: 0, receiptFails: 0, gateFails: false, gates: 0,
     assignment: { assignmentId: `a-${t}`, status: "in_progress", escrowAmount: "6" } }, setup);
 };
 const state = () => JSON.parse(fs.readFileSync(process.env.KOP_STATE, "utf8"));
@@ -132,4 +137,21 @@ test("a market escrow that is not a positive amount is not started", async () =>
   await run();
   assert.equal(w.completions, 0);
   assert.equal(w.assignment.status, "in_progress");
+});
+
+test("the by-laws gate runs before the job and its transaction goes into the receipt's proof", async () => {
+  fresh(5);
+  await run();
+  assert.equal(w.gates, 1);
+  const proof = JSON.parse(w.calls.find((c) => c.method === "record_receipt").args.proof);
+  assert.deepEqual(proof.gate, { tx: "GateTx", by: dep.steward });
+  assert.ok(proof.model, "the model's proof is still there");
+});
+
+test("a by-laws gate that does not match: the job is not started and nothing is spent", async () => {
+  fresh(6, { gateFails: true });
+  await run();
+  assert.equal(w.completions, 0);
+  assert.equal(w.assignment.status, "in_progress");
+  assert.equal(w.calls.length, 0);
 });

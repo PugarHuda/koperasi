@@ -4,7 +4,7 @@ import test from "node:test";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { rawTx, recover, rlp, txHash } from "../../scripts/chainsig.mjs";
-import { refuseUnlessAsked } from "../../scripts/intents.mjs";
+import { CHAIN_USDC, policyFor, refuseUnlessAsked } from "../../scripts/intents.mjs";
 
 const hex = (b) => Buffer.from(b).toString("hex");
 /** The items of one RLP list (strings only, as in a signed transfer): enough to read a transaction back. */
@@ -81,4 +81,28 @@ test("an owner intent is signed only if it says exactly what was asked", () => {
   assert.doesNotThrow(() => refuseUnlessAsked(create(policy), "agent_create", { policy }, owner));
   assert.throws(() => refuseUnlessAsked(create({ ...policy, destinations: { mode: "any", list: [] } }), "agent_create", { policy }, owner), /policy/);
   assert.throws(() => refuseUnlessAsked(JSON.stringify({ domain: "tidepool-agent-api.v1", network: "testnet", type: "agent_create", owner }), "agent_create", { policy }, owner), /policy/);
+});
+
+test("the wallet's policy lists only the members, on NEAR or on the route each set, and a policy update must carry it unchanged", () => {
+  const members = ["alice.testnet", "bob.testnet"];
+  /** @type {[string, string, string][]} */
+  const routes = [["bob.testnet", "base", "0x00000000000000000000000000000000000000b0"], ["left.testnet", "arb", "0x00000000000000000000000000000000000000c0"]];
+  const p = policyFor(members, routes);
+  assert.deepEqual(p.destinations.list, [
+    { action: "transfer", address: "alice.testnet", confidential: false },
+    { action: "transfer", address: "bob.testnet", confidential: false },
+    { action: "withdraw", chain: "base", address: "0x00000000000000000000000000000000000000b0", memo: null },
+  ], "a former member's route is not listed");
+  assert.deepEqual(p.assets, [CHAIN_USDC.near, CHAIN_USDC.base]);
+  assert.ok(Object.values(p.limits.per_transaction).every((x) => x === "5000000"));
+
+  const owner = "0xb3dc0128b4a9804de94796480bef8ba014dfca7d";
+  const body = { agent_id: "agent_1", policy: p, expected_revision: 1 };
+  const text = (details) => JSON.stringify({ domain: "tidepool-agent-api.v1", network: "testnet", type: "policy_update", agent_id: "agent_1",
+    owner, nonce: "x", expires_at: "2026-11-13T00:00:00Z", details });
+  assert.doesNotThrow(() => refuseUnlessAsked(text({ expected_revision: 1, policy_hash: "h", policy: p }), "policy_update", body, owner));
+  const wider = { ...p, destinations: { mode: "any", list: [] } };
+  assert.throws(() => refuseUnlessAsked(text({ expected_revision: 1, policy_hash: "h", policy: wider }), "policy_update", body, owner), /policy/);
+  assert.throws(() => refuseUnlessAsked(text({ expected_revision: 2, policy_hash: "h", policy: p }), "policy_update", body, owner), /expected_revision/);
+  assert.throws(() => refuseUnlessAsked(text({ expected_revision: 1, policy: p, owner_approval: true }), "policy_update", body, owner), /unexpected details/);
 });

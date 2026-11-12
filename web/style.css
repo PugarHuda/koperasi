@@ -456,3 +456,4 @@ h2 .dim { color: var(--grey); }
 
 [hidden] { display: none !important; }
 .src-card pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-size: .78rem; }
+.cert-token { display: block; max-width: 100%; height: auto; margin-top: .6rem; border-radius: 6px; }

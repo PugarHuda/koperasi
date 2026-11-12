@@ -173,6 +173,15 @@ pub enum Event {
     /// The contract filed (and approved, as role `tasks`) the refund of an upheld case.
     #[event_version("1.0.0")]
     RefundFiled { id: u32, proposal_id: u64 },
+    /// The claimant took a dismissed case to the members: `proposal_id` is the refund, for every member to vote.
+    #[event_version("1.0.0")]
+    CaseAppealed { id: u32, proposal_id: u64, claimant: AccountId },
+    /// The members decided an appeal: upheld means they paid the refund.
+    #[event_version("1.0.0")]
+    AppealSettled { id: u32, upheld: bool },
+    /// Where a member wants the co-op's payouts (profit shares through the agent's Intents wallet) to land.
+    #[event_version("1.0.0")]
+    PayoutRouteSet { account_id: AccountId, chain: String, address: String },
     /// How long a steward serves before the role lapses unless the members re-appoint them (0: no limit).
     #[event_version("1.0.0")]
     StewardTermSet { days: u32 },

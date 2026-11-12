@@ -12,6 +12,7 @@ import fs from "node:fs";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { baseDecode } from "near-api-js";
+import { rawTx, txHash, txText } from "../web/eth.js";
 import { DEPLOYMENT, NETWORK, account, propose, txUrl, view, vote } from "./lib.mjs";
 
 export const SIGNER = NETWORK === "mainnet" ? "v1.signer" : "v1.signer-prod.testnet";
@@ -39,43 +40,31 @@ export const recover = (hash, sig) => {
 /** The address that signed `msg` (EIP-191). */
 export const signerOf = (msg, sig) => recover(eip191(msg), sig);
 
-// ---------- EIP-1559 transactions (type 2), RLP by hand: a few lines, no Ethereum library ----------
-const bytesOf = (v) => {
-  if (typeof v === "bigint") { const h = v === 0n ? "" : v.toString(16); return Buffer.from(h.length % 2 ? `0${h}` : h, "hex"); }
-  return Buffer.from(v.replace(/^0x/, ""), "hex");
-};
-export function rlp(x) {
-  const len = (n, base) => {
-    if (n < 56) return Buffer.from([base + n]);
-    const b = bytesOf(BigInt(n));
-    return Buffer.concat([Buffer.from([base + 55 + b.length]), b]);
-  };
-  if (Array.isArray(x)) { const body = Buffer.concat(x.map(rlp)); return Buffer.concat([len(body.length, 0xc0), body]); }
-  const b = Buffer.isBuffer(x) ? x : bytesOf(x);
-  return b.length === 1 && b[0] < 0x80 ? b : Buffer.concat([len(b.length, 0x80), b]);
-}
-const fields = (t) => [t.chainId, t.nonce, t.maxPriorityFeePerGas, t.maxFeePerGas, t.gas, t.to, t.value, "0x", []];
-/** The hash the key signs: keccak256(0x02 || rlp(fields)). */
-export const txHash = (t) => keccak_256(Buffer.concat([Buffer.from([2]), rlp(fields(t))]));
-const N = secp256k1.Point.CURVE().n;
-/** The signed raw transaction; s is normalized to the low half (EIP-2), flipping the parity with it. */
-export function rawTx(t, sig) {
-  let s = BigInt(`0x${sig.s.scalar}`), y = BigInt(sig.recovery_id);
-  if (s > N / 2n) { s = N - s; y ^= 1n; }
-  const r = BigInt(`0x${sig.big_r.affine_point.slice(2)}`);
-  return `0x02${hex(rlp([...fields(t), y, r, s]))}`;
-}
+// ---------- EIP-1559 transactions (type 2): RLP, the signed hash and the raw transaction live in web/eth.js ----------
+export { rawTx, rlp, txHash } from "../web/eth.js";
 const eth = async (method, params) => {
   const j = await (await fetch(SEPOLIA.rpc, { method: "POST", signal: AbortSignal.timeout(30_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json();
   if (j.error) throw new Error(`${method}: ${j.error.message}`);
   return j.result;
 };
 
-/** Members vote that the DAO asks the MPC network to sign `hash`; returns the proposal, the vote's tx and the signature. */
-export async function signByVote(hash, description) {
+/**
+ * Members vote that the DAO asks the MPC network to sign `hash`; returns the proposal, the vote's tx and the signature.
+ * `compiled` is a proposal Trezu built from a template ({ kind, description }); it must ask to sign this very hash.
+ */
+export async function signByVote(hash, description, compiled) {
   const args = { request: { payload_v2: { Ecdsa: hex(hash) }, path: PATH, domain_id: 0 } };
-  const kind = { FunctionCall: { receiver_id: SIGNER, actions: [{
+  let kind = { FunctionCall: { receiver_id: SIGNER, actions: [{
     method_name: "sign", args: Buffer.from(JSON.stringify(args)).toString("base64"), deposit: "1", gas: String(100n * 10n ** 12n) }] } };
+  if (compiled) {
+    const a = compiled.kind.FunctionCall;
+    const asked = JSON.parse(Buffer.from(a.actions[0].args, "base64").toString());
+    if (a.receiver_id !== SIGNER || a.actions[0].method_name !== "sign" || JSON.stringify(asked) !== JSON.stringify(args)) {
+      throw new Error("the compiled proposal does not ask the MPC signer to sign this hash");
+    }
+    kind = compiled.kind;
+    description = compiled.description;
+  }
   const members = ["kop-alice-mw4i3w8f.testnet", "kop-bob-mw4i3w8f.testnet", "kop-steward-mw4i2iwk.testnet", "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet"];
   const id = await propose(account(members[0]), dep.dao, description, kind);
   console.log("proposal", id);
@@ -126,7 +115,9 @@ if (main && process.argv.includes("--sign")) {
   const gas = (BigInt(await eth("eth_estimateGas", [{ from: address, to, value: `0x${value.toString(16)}` }])) * 12n) / 10n;
   const t = { chainId: SEPOLIA.chainId, nonce: BigInt(await eth("eth_getTransactionCount", [address, "latest"])),
     maxPriorityFeePerGas: 1_000_000_000n, maxFeePerGas: 5_000_000_000n, gas, to, value };
-  const what = `Pay ${amount} Sepolia ETH from the co-op's Ethereum address ${address} to ${to}${to === await daoAddress("kop-bob-mw4i3w8f.testnet") ? " (bob's own Chain Signatures address)" : ""}: sign the EIP-1559 transaction (nonce ${t.nonce}, NEAR Chain Signatures)`;
+  // the same proposal Trezu compiles from trezu/testnet/kop-pay-ethereum.json, with the transaction's fields, so every
+  // member (and the page) can rebuild the hash they are asked to sign
+  const what = `[trezu-tmpl:kop-pay-ethereum] Pay ${amount} Sepolia ETH from the co-op's Ethereum address ${address} to ${to}${to === await daoAddress("kop-bob-mw4i3w8f.testnet") ? " (bob's own Chain Signatures address)" : ""}: sign the EIP-1559 transaction (nonce ${t.nonce}, NEAR Chain Signatures) tx ${txText(t)}`;
   const { id, tx, sig } = await signByVote(txHash(t), what);
   const recovered = recover(txHash(t), sig);
   if (recovered !== address) throw new Error(`the signature recovers ${recovered}, not ${address}`);

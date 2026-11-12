@@ -2173,3 +2173,162 @@ fn the_dao_can_cancel_a_held_payout_and_only_the_dao_sets_the_window() {
     let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
     assert_eq!(k.get_tasks(None, None)[id as usize].status, TaskStatus::Paying, "no window: paid at once, as before");
 }
+
+// ---------- appeal to the members (0.2.7) ----------
+
+/// A case two jurors dismissed, opened by frank on day 2.
+fn dismissed() -> (Koperasi, u32) {
+    let mut k = court();
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
+    for j in k.get_cases(None, None)[0].jurors.clone().iter().take(2) {
+        at(j, 2 * DAY + 1);
+        k.rule_case(id, false);
+    }
+    (k, id)
+}
+
+fn appeal(k: &mut Koperasi, id: u32, who: &str, ns: u64) {
+    at_paying(&acc(who), ns, APPEAL_BOND);
+    let _ = k.appeal_case(id);
+}
+
+fn members_decide(k: &mut Koperasi, id: u32, status: &str) {
+    at(&me(), 7 * DAY);
+    k.on_appeal_read(id, Ok(json!({ "status": status })));
+}
+
+#[test]
+fn the_members_overturn_a_dismissed_case_on_appeal_and_the_bond_comes_back() {
+    let (mut k, id) = dismissed();
+    appeal(&mut k, id, "frank.testnet", 4 * DAY);
+    at(&me(), 4 * DAY + 1);
+    k.on_appeal_filed(id, Ok(81));
+    assert!(logs_have("\"case_appealed\"") && logs_have("\"proposal_id\":81"));
+    assert_eq!(k.get_appeal(id).unwrap().proposal, Some(81));
+    assert!(fails(|| { open(&mut k, "erin.testnet", 5 * DAY); }), "no second case while the members vote");
+    members_decide(&mut k, id, "Approved");
+    let a = k.get_appeal(id).unwrap();
+    assert_eq!(a.status, CaseStatus::Upheld);
+    assert!(logs_have("\"appeal_settled\"") && logs_have("\"upheld\":true"));
+    assert!(fails(|| { open(&mut k, "erin.testnet", 8 * DAY); }), "refunded once, by the members");
+    assert!(fails(|| members_decide(&mut k, id, "Approved")), "settled once");
+}
+
+#[test]
+fn the_members_confirm_the_jury_and_the_job_is_open_to_its_second_case() {
+    let (mut k, id) = dismissed();
+    appeal(&mut k, id, "frank.testnet", 4 * DAY);
+    at(&me(), 4 * DAY + 1);
+    k.on_appeal_filed(id, Ok(82));
+    at(&me(), 6 * DAY);
+    assert!(fails(|| k.on_appeal_read(id, Ok(json!({ "status": "InProgress" })))), "not decided yet");
+    members_decide(&mut k, id, "Rejected");
+    assert_eq!(k.get_appeal(id).unwrap().status, CaseStatus::Dismissed);
+    open(&mut k, "erin.testnet", 8 * DAY);
+}
+
+#[test]
+fn an_appeal_that_could_not_be_filed_returns_the_bond_and_frees_the_job() {
+    let (mut k, id) = dismissed();
+    appeal(&mut k, id, "frank.testnet", 4 * DAY);
+    at(&me(), 4 * DAY + 1);
+    k.on_appeal_filed(id, Err(PromiseError::Failed));
+    assert!(k.get_appeal(id).is_none());
+    appeal(&mut k, id, "frank.testnet", 5 * DAY);
+}
+
+#[test]
+fn only_the_claimant_appeals_only_a_ruled_dismissal_with_the_bond_within_7_days() {
+    let (mut k, id) = dismissed();
+    assert!(fails(|| appeal(&mut k, id, "erin.testnet", 4 * DAY)), "only the claimant");
+    assert!(fails(|| { at_paying(&acc("frank.testnet"), 4 * DAY, COURT_BOND); let _ = k.appeal_case(id); }), "the 1 NEAR bond");
+    assert!(fails(|| appeal(&mut k, id, "frank.testnet", 2 * DAY + 10 * DAY)), "7 days after the jury's 3");
+    appeal(&mut k, id, "frank.testnet", 11 * DAY);
+    assert!(fails(|| appeal(&mut k, id, "frank.testnet", 11 * DAY + 1)), "once");
+}
+
+#[test]
+fn a_case_nobody_ruled_on_is_not_appealed() {
+    let mut k = court();
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
+    at(&acc("anyone.testnet"), 5 * DAY);
+    k.close_case(id);
+    assert!(fails(|| appeal(&mut k, id, "frank.testnet", 6 * DAY)), "nobody ruled: the second case is the remedy");
+}
+
+#[test]
+#[should_panic(expected = "only a dismissed case")]
+fn an_upheld_case_is_not_appealed() {
+    let mut k = court();
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
+    for j in k.get_cases(None, None)[0].jurors.clone().iter().take(2) {
+        at(j, 2 * DAY + 1);
+        k.rule_case(id, true);
+    }
+    appeal(&mut k, id, "frank.testnet", 3 * DAY);
+}
+
+// ---------- payout routes and the work-record token (0.2.7) ----------
+
+#[test]
+fn a_member_routes_payouts_to_an_evm_address_and_back_to_near() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let addr = "0x00000000000000000000000000000000000000ab";
+    at(&acc("alice.testnet"), DAY);
+    k.set_payout_route("base".into(), Some(addr.into()));
+    assert!(logs_have("\"payout_route_set\""));
+    assert_eq!(k.get_payout_routes(), vec![(acc("alice.testnet"), "base".to_string(), addr.to_string())]);
+    k.set_payout_route("arb".into(), Some(addr.into()));
+    assert_eq!(k.get_payout_routes().len(), 1, "one route per member");
+    k.set_payout_route("near".into(), None);
+    assert!(k.get_payout_routes().is_empty());
+    assert!(fails(|| k.set_payout_route("sol".into(), Some(addr.into()))), "only chains the wallet can withdraw to");
+    assert!(fails(|| k.set_payout_route("base".into(), Some("0xABC".into()))), "a 0x address");
+    assert!(fails(|| k.set_payout_route("base".into(), Some(addr.to_uppercase().replace("0X", "0x")))), "lowercase");
+    assert!(fails(|| { at(&acc("stranger.testnet"), DAY); k.set_payout_route("base".into(), Some(addr.into())); }), "members only");
+    // a member who leaves has no route
+    at(&bob(), DAY);
+    k.set_payout_route("eth".into(), Some(addr.into()));
+    as_(&dao(), near(0));
+    k.apply_membership(bob(), false);
+    assert!(k.get_payout_routes().is_empty());
+}
+
+fn bob() -> AccountId {
+    acc("bob.testnet")
+}
+
+#[test]
+fn a_work_record_is_a_token_read_live_and_never_transferred() {
+    let mut k = court();
+    let (_, id) = (0, open(&mut k, "frank.testnet", 2 * DAY));
+    let jurors = k.get_cases(None, None)[0].jurors.clone();
+    for j in jurors.iter().take(2) {
+        at(j, 2 * DAY + 1);
+        k.rule_case(id, true);
+    }
+    let juror = jurors[0].clone();
+    assert!(fails(|| { at(&juror, 3 * DAY); k.mint_work_record(); }), "pays for its storage");
+    at_paying(&juror, 3 * DAY, commons::PLEDGE_FEE);
+    k.mint_work_record();
+    assert!(logs_have("\"standard\":\"nep171\"") && logs_have("\"nft_mint\""));
+    assert!(fails(|| { at_paying(&juror, 3 * DAY, commons::PLEDGE_FEE); k.mint_work_record(); }), "once");
+    assert!(fails(|| { at_paying(&acc("nobody.testnet"), 3 * DAY, commons::PLEDGE_FEE); k.mint_work_record(); }), "no record, no token");
+    let t = k.nft_token(juror.to_string()).unwrap();
+    assert_eq!(t["owner_id"], juror.to_string());
+    let extra: Value = near_sdk::serde_json::from_str(t["metadata"]["extra"].as_str().unwrap()).unwrap();
+    assert_eq!(extra["standing"]["juries_served"], 1);
+    assert!(t["metadata"]["media"].as_str().unwrap().starts_with("data:image/svg+xml;base64,"));
+    // live: a missed jury later shows on the same token
+    commons::mark(&juror, |s| s.juries_missed += 1);
+    let t = k.nft_token(juror.to_string()).unwrap();
+    assert!(t["metadata"]["description"].as_str().unwrap().contains("not in good standing"));
+    assert_eq!(k.nft_total_supply(), U128(1));
+    assert_eq!(k.nft_tokens_for_owner(juror.clone(), None, None).len(), 1);
+    assert_eq!(k.nft_supply_for_owner(acc("alice.testnet")).0 + k.nft_supply_for_owner(juror.clone()).0, 1 + (juror.as_str() == "alice.testnet") as u128);
+    assert!(fails(|| { at_paying(&juror, 4 * DAY, NearToken::from_yoctonear(1)); k.nft_transfer(acc("buyer.testnet"), juror.to_string(), None, None); }));
+    at(&juror, 4 * DAY);
+    k.burn_work_record();
+    assert!(logs_have("\"nft_burn\"") && k.nft_token(juror.to_string()).is_none());
+}

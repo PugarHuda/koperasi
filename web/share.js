@@ -76,7 +76,7 @@ export const EVENTS = ["join_requested", "join_cancelled", "member_added", "memb
   "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "veto_window_set", "task_held", "task_vetoed", "task_approved",
   "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited",
-  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "steward_term_set", "steward_term_ended"];
+  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "steward_term_set", "steward_term_ended"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
 /**
@@ -136,6 +136,9 @@ export function describeEvent({ event: e, data: d }) {
     case_voted: () => `A juror ${d.uphold ? "upheld" : "rejected"} case #${d.id}`,
     case_closed: () => `Court case #${d.id} was ${d.upheld ? "upheld: the buyer is refunded" : "not upheld"}`,
     refund_filed: () => `The contract filed DAO proposal #${d.proposal_id} to refund court case #${d.id}`,
+    case_appealed: () => `${short(d.claimant)} appealed court case #${d.id} to the members: DAO proposal #${d.proposal_id}`,
+    appeal_settled: () => `The members ${d.upheld ? "overturned the jury: the buyer of case #" + d.id + " is refunded" : "kept the jury's ruling on case #" + d.id}`,
+    payout_route_set: () => `${short(d.account_id)} wants payouts on ${d.chain === "near" ? "NEAR" : { base: "Base", arb: "Arbitrum", eth: "Ethereum" }[d.chain] ?? "?"}`,
     steward_term_set: () => `The members set the steward's term to ${d.days} days`,
     steward_term_ended: () => `The steward's term ended; the members appoint the next one`,
   }[e];
