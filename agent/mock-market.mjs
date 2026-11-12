@@ -39,7 +39,8 @@ export function startMockMarket({ port = 8787, acceptMs = 1500, jobs: seed = [] 
         slaSeconds: body.slaSeconds ?? 86400, status: "accepted", createdAt: now() };
       bids.set(bid.bidId, bid);
       job.status = "in_progress"; // mock buyer awards the first bid
-      const a = { assignmentId: crypto.randomUUID(), jobId: id, bidId: bid.bidId, status: "in_progress",
+      // "demo-": a receipt from this stand-in buyer always says so, on-chain
+      const a = { assignmentId: `demo-${crypto.randomUUID()}`, jobId: id, bidId: bid.bidId, status: "in_progress",
         escrowAmount: body.amount, escrowToken: "USDC", slaSeconds: bid.slaSeconds, startedAt: null,
         submittedAt: null, deliverableHash: null, createdAt: now() };
       assignments.set(a.assignmentId, a);

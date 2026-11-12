@@ -178,6 +178,21 @@ if (d.chainSignatures) {
   }
 }
 
+// the agent's NEAR Intents wallet (Tidepool's testnet Agent API): its owner is the DAO's Chain Signatures address, so
+// each owner intent was a sign request the members voted, naming the sha256 of the exact intent text
+if (d.intents) {
+  const i = d.intents;
+  const voted = [["create the wallet", i.created], ["issue the agent's grant", i.grant]].filter(([, x]) => x).map(([what, x]) => {
+    const p = proposals.find((q) => q.id === x.proposal);
+    const ok = p?.status === "Approved" && p.kind.FunctionCall?.receiver_id === SIGNER && p.kind.FunctionCall.actions[0]?.method_name === "sign"
+      && p.description.includes(x.intent_sha256);
+    return { ok, line: `${what}: proposal #${x.proposal} ${p?.status}` };
+  });
+  check(voted.length > 0 && voted.every((x) => x.ok) && i.owner === (await daoAddress(d.dao)),
+    "the agent's NEAR Intents wallet is owned by the DAO: every owner intent was signed only after a members' vote",
+    `${i.agent_id} on ${i.provider}, owner ${i.owner} (the DAO's Chain Signatures address); ${voted.map((x) => x.line).join("; ")}`);
+}
+
 // 6. profit shares: USDC left the treasury only by a members' vote, through the contract's split
 const shares = proposals.filter((p) => p.status === "Approved" && argsOf(p).some((a) => a.method === "ft_transfer_call" && a.args.receiver_id === d.contract && a.args.msg === "share"));
 check(shares.length > 0, "the members voted every profit share out of the treasury, split by the contract",
@@ -185,8 +200,10 @@ check(shares.length > 0, "the members voted every profit share out of the treasu
 
 // 7. what the README admits: no real jobs yet, audit red on purpose, treasury empty
 const receipts = await view(d.contract, "get_receipts", { from: 0, limit: 200 });
-const proven = (await Promise.all(receipts.map((x) => view(d.contract, "get_proof", { job_id: x.job_id })))).filter(Boolean).length;
-console.log(`INFO  receipts: ${receipts.length}, ${proven} with a TEE inference proof (0 = no real Agent Market job yet, as the README says)`);
+const proofs = await Promise.all(receipts.map((x) => view(d.contract, "get_proof", { job_id: x.job_id })));
+const proven = receipts.filter((x, i) => proofs[i]);
+const market = proven.filter((x) => !x.job_id.startsWith("demo-")).length;
+console.log(`INFO  receipts: ${receipts.length}, ${proven.length} with a TEE inference proof (${proven.length - market} for a demo buyer, ${market} from Agent Market: 0 = no real Agent Market job yet, as the README says)`);
 console.log(`INFO  audit: expected ${usd(audit.expected)} USDC, deposited ${usd(audit.deposited)}, owed ${usd(audit.owed)} (red on purpose: the demo's last step has the steward keep a payout)`);
 const usdc = await view(info.usdc_id, "ft_balance_of", { account_id: d.dao });
 console.log(`INFO  DAO treasury: ${usd(usdc)} USDC (${info.usdc_id.slice(0, 12)}…)`);

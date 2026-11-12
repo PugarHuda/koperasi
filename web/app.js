@@ -268,11 +268,12 @@ try {
     }
   };
 
-  const proofCell = (p) => {
+  const proofCell = (p, job) => {
     if (!p) return `<span class="muted" title="Recorded by npm run demo against a local stand-in for Agent Market; no model ran">Demo market, no model</span>`;
     try {
       const x = JSON.parse(p);
-      return `<span class="badge Paid" title="${esc(p)}">TEE-signed</span> <span class="muted">${esc(String(x.tee_signer ?? "").slice(0, 10))}…</span>`;
+      // a demo- job came from a stand-in buyer, but a real model in a verified TEE did it and signed the answer
+      return `<span class="badge Paid" title="${esc(p)}">TEE-signed</span> <span class="muted">${job.startsWith("demo-") ? "demo buyer, real model" : esc(String(x.tee_signer ?? "").slice(0, 10)) + "…"}</span>`;
     } catch { return `<span class="muted">${esc(p.slice(0, 16))}</span>`; }
   };
   rows($("receipts").tBodies[0], recent.map((r, i) => `<tr>
@@ -280,7 +281,7 @@ try {
       <td class="num" data-label="Price">${usdc(r.price)}</td>
       <td class="num" data-label="Inference">$${(Number(r.inference_cost) / 1e6).toFixed(4)}</td>
       <td data-label="By-laws">v${r.config_version} <span class="muted">${short(r.config_hash)}</span></td>
-      <td data-label="Proof">${proofCell(proofs[i])}</td>
+      <td data-label="Proof">${proofCell(proofs[i], r.job_id)}</td>
       <td data-label="Status"><span class="badge ${r.status}">${r.status}</span></td></tr>`).join(""));
 
   // audit: owed vs deposited, two bars on one scale
@@ -433,7 +434,8 @@ cargo near build reproducible-wasm
     $("multichain").innerHTML = `The co-op also holds an Ethereum address, <a href="https://sepolia.etherscan.io/address/${esc(c.address)}"><code>${esc(c.address)}</code></a>, with no private key anywhere:
       NEAR's MPC network (<a href="${explorer(c.signer)}">${esc(c.signer)}</a>) signs for it only when the DAO asks, by a members' vote.
       Proof: the statement signed by <a href="${txUrl(c.tx)}">vote #${esc(c.proposal)}</a> recovers to this address (<code>npm run chainsig</code>).${c.transfer ? `
-      And it pays on Ethereum by vote: <a href="${txUrl(c.transfer.tx)}">vote #${esc(c.transfer.proposal)}</a> had it sign a transfer of ${esc(c.transfer.eth)} Sepolia ETH to ${esc(c.transfer.to.slice(0, 10))}…${c.transfer.toNote ? `, ${esc(c.transfer.toNote)}` : ""} (<a href="https://sepolia.etherscan.io/tx/${esc(c.transfer.hash)}">the Ethereum transaction</a>${c.transfer.sent ? "" : ", sent once the address holds Sepolia ETH for gas"}).` : ""}`;
+      And it pays on Ethereum by vote: <a href="${txUrl(c.transfer.tx)}">vote #${esc(c.transfer.proposal)}</a> had it sign a transfer of ${esc(c.transfer.eth)} Sepolia ETH to ${esc(c.transfer.to.slice(0, 10))}…${c.transfer.toNote ? `, ${esc(c.transfer.toNote)}` : ""} (<a href="https://sepolia.etherscan.io/tx/${esc(c.transfer.hash)}">the Ethereum transaction</a>${c.transfer.sent ? "" : ", sent once the address holds Sepolia ETH for gas"}).` : ""}${dep.intents ? `
+      The same address owns the agent's NEAR Intents wallet (<code>${esc(dep.intents.agent_id)}</code>, on Tidepool's testnet mirror of the Intents Agent API): the DAO created it by <a href="${txUrl(dep.intents.created.tx)}">vote #${esc(dep.intents.created.proposal)}</a>${dep.intents.grant ? ` and let the agent act by <a href="${txUrl(dep.intents.grant.tx)}">vote #${esc(dep.intents.grant.proposal)}</a>` : ""}. Its policy pays only members, at most 5 USDC a payment and $10 a day, each payout held 10 minutes like the veto window; changing it takes another vote.` : ""}`;
   }
   rows($("periods").tBodies[0], [...periods].reverse().map((p) => `<tr>
       <td>Share ${p.id}</td><td data-label="Date">${date(p.ts)}</td>

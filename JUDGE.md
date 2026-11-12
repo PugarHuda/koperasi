@@ -28,6 +28,7 @@ on every push and every day (`.github/workflows/tests.yml`).
 | 10 | Work members owe each other | *Commons* → pledges | pledges kept, partly called in, and never called in |
 | 11 | A work record nobody can type in | `/cert.html?who=kop-alice-mw4i3w8f.testnet` | kept pledges and jury duty, each line read from the chain |
 | 12 | The co-op holds an Ethereum address with no private key | *Commons* → Chain Signatures | `0xb3dc…ca7d`; it signed a statement (proposal #57) and a Sepolia payment to a member (proposal #71), each by vote |
+| 13a | The agent's NEAR Intents wallet is the DAO's | *Commons* → Chain Signatures; `npm run verify` | created by vote #72, grant by vote #73, each a `sign` request naming the sha256 of the exact owner intent; owner `0xb3dc…ca7d` |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source
@@ -43,6 +44,7 @@ on every push and every day (`.github/workflows/tests.yml`).
 - The members are the builder's demo accounts (plus one who joined with a signed vouch). They show the mechanism works;
   they are not independent people.
 - The agent has done **no real paid job**: Agent Market has no testnet, so every receipt is from the demo market or a
-  `demo-` receipt. `npm run verify` prints "0 with a TEE inference proof".
+  `demo-` receipt. One of them was done by a real model on NEAR AI Cloud, with its TEE proof on-chain; `npm run verify`
+  prints "0 from Agent Market".
 - The audit is red on purpose (7.60 USDC, from before the current steward, so not slashable).
 - Testnet only. The path to mainnet is in the README, under *Sustainability and the path to mainnet*.

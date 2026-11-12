@@ -67,7 +67,11 @@ Live page: **https://koperasi-kohl.vercel.app** (static, reads the contract and 
 The accounts alice, bob, carol and the steward are the builder's demo members. They show that the mechanism works,
 but they are not independent people. The agent has done **no real paid job yet**: the first 4 receipts come from `npm run
 demo` against a local stand-in for Agent Market, which has no testnet. The co-op's NEAR AI credits are in place and the
-agent has bid on 9 real Agent Market jobs; none was awarded yet. The old audit shortfall (7.60 USDC) dates from before
+agent has bid on 9 real Agent Market jobs; none was awarded yet. One receipt shows the real path end to end: job
+`demo-72a0451c…` came from the same local stand-in buyer, but the agent did it on NEAR AI Cloud after checking the
+model's TEE attestation, checked that a TEE signing key signed the answer, and booked the billed cost ($0.002392) with
+the proof on-chain (`get_proof`); it stays *Submitted* (the stand-in buyer never accepts), so it adds nothing to the
+steward's audit. The old audit shortfall (7.60 USDC) dates from before
 the steward's appointment under 0.2.3, so it is not slashable; it stays red on purpose (the demo's last step). The court's
 job `demo-court-mwag2r51` is a demo receipt too (`node scripts/commons.mjs --court`); bob sent the steward the 0.95 USDC
 it earned after the market's fee, in testnet USDC, and the steward passed it on ([EH9Sz6Dz…](https://testnet.nearblocks.io/txns/EH9Sz6DzGeRbf4T6QZhN9VA3uUk28X3UaQj3CuazqW7U)), so a demo job does
@@ -145,6 +149,7 @@ Each one here is a contract rule or a vote you can read:
 | **NEP-366** | meta-transactions: members pay no gas for calls without a deposit |
 | **NEP-413** | signed messages: a member signs "I vouch for X joining this DAO" in their wallet (no transaction); X's membership request carries it, and the page checks the signature and that the key is the member's full-access key on-chain |
 | **Chain Signatures** | the DAO's own Ethereum address (`v1.signer-prod.testnet`, path `ethereum-1`), signing only when a vote makes the DAO call `sign` (`npm run chainsig`): a statement naming the address (#57), and a payment of 0.001 Sepolia ETH to bob's own Chain Signatures address (#71; the members voted the exact transaction, and anyone can send it once the address holds Sepolia ETH for gas) |
+| **NEAR Intents (Agent API, testnet)** | the agent's Intents wallet, owned by the DAO's Chain Signatures address: the members voted its creation (#72) and the agent's grant (#73), each an ERC-191 owner intent the MPC network signed. Its policy pays only members (transfers on NEAR, or bob on Base Sepolia), at most 5 USDC a payment and $10 a day, each payout held 10 minutes like the veto window; a payment to a non-member is refused (`node scripts/intents.mjs refused`). NEAR Intents has no testnet, so this runs on [Tidepool](https://www.usetidepool.tech), a community-built testnet mirror of the same API (not affiliated with NEAR) |
 | **Function-call access keys** | the agent's only key can call `record_receipt` / `update_receipt`, nothing else |
 | **Staking pools** | savings are NEAR staked in the pool the DAO chose, read on-chain (`sync_savings`); on mainnet the yield buys NEAR AI credits (Staking for Inference) |
 | **NEAR AI Cloud** | private inference in TEEs (Intel TDX + NVIDIA, also Chutes-served models), attestation, signed responses, billing per request |

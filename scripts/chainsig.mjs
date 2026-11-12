@@ -23,7 +23,7 @@ const hex = (b) => Buffer.from(b).toString("hex");
 const addressOf = (xy) => "0x" + hex(keccak_256(xy)).slice(24);
 export const statement = (dao, address) =>
   `Koperasi co-op ${dao} holds ${address} through NEAR Chain Signatures (path ${PATH}); it signs only by a members' vote.`;
-const eip191 = (msg) => keccak_256(Buffer.from(`\x19Ethereum Signed Message:\n${Buffer.byteLength(msg)}${msg}`));
+export const eip191 = (msg) => keccak_256(Buffer.from(`\x19Ethereum Signed Message:\n${Buffer.byteLength(msg)}${msg}`));
 
 export async function daoAddress(dao, path = PATH) {
   const pk = await view(SIGNER, "derived_public_key", { path, predecessor: dao, domain_id: 0 });
@@ -72,7 +72,7 @@ const eth = async (method, params) => {
 };
 
 /** Members vote that the DAO asks the MPC network to sign `hash`; returns the proposal, the vote's tx and the signature. */
-async function signByVote(hash, description) {
+export async function signByVote(hash, description) {
   const args = { request: { payload_v2: { Ecdsa: hex(hash) }, path: PATH, domain_id: 0 } };
   const kind = { FunctionCall: { receiver_id: SIGNER, actions: [{
     method_name: "sign", args: Buffer.from(JSON.stringify(args)).toString("base64"), deposit: "1", gas: String(100n * 10n ** 12n) }] } };
