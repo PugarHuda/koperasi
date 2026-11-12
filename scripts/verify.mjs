@@ -17,6 +17,28 @@ const argsOf = (p) => p.kind.FunctionCall?.actions.map((a) => ({ method: a.metho
 const near = (y) => Number(BigInt(y) / 10n ** 18n) / 1e6;
 const usd = (u) => (Number(u) / 1e6).toFixed(2);
 let failed = 0;
+/**
+ * A JSON-RPC call to another chain's (or NEAR's archival) RPC: 15 s timeout, tried on each URL twice. Public RPCs rate-limit
+ * in bursts, and a claim must not read FAIL because one answer was a 429.
+ * @param {string[]} urls @param {string} method @param {any} params
+ */
+async function rpcCall(urls, method, params) {
+  for (let k = 0; k < 2; k++) {
+    for (const url of urls) {
+      try {
+        const j = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(15_000),
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }).then((q) => q.json());
+        if (j.result !== undefined) return j.result;
+      } catch { /* the next URL, or the next round */ }
+    }
+    await new Promise((ok) => setTimeout(ok, 2000));
+  }
+  return null;
+}
+const SEPOLIA_RPCS = ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.gateway.tenderly.co"];
+const BASE_SEPOLIA_RPCS = ["https://base-sepolia-rpc.publicnode.com", "https://sepolia.base.org"];
+const NEAR_TX_RPCS = ["https://rpc.testnet.fastnear.com", "https://archival-rpc.testnet.fastnear.com", "https://rpc.testnet.near.org"];
+
 const check = (ok, claim, detail) => {
   if (!ok) failed++;
   console.log(`${ok ? "PASS" : "FAIL"}  ${claim}\n      ${detail}`);
@@ -168,8 +190,7 @@ if (d.chainSignatures) {
       gas: BigInt(x.gas), to: x.to, value: BigInt(Math.round(x.eth * 1e6)) * 10n ** 12n };
     const hash = Buffer.from(txHash(t)).toString("hex");
     let sent = "not broadcast yet: the DAO's address needs Sepolia ETH for it; anyone can send it (`npm run chainsig -- --broadcast`)";
-    const r = await fetch(SEPOLIA.rpc, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [x.hash] }) }).then((q) => q.json()).catch(() => null);
+    const r = { result: await rpcCall([SEPOLIA.rpc, ...SEPOLIA_RPCS], "eth_getTransactionReceipt", [x.hash]) };
     if (r?.result) sent = `on Sepolia, status ${r.result.status === "0x1" ? "success" : "failed"}: ${SEPOLIA.explorer}${x.hash}`;
     check(p?.status === "Approved" && p.kind.FunctionCall.receiver_id === SIGNER && asked === hash && recover(txHash(t), x.signature) === derived
       && rawTx(t, x.signature) === x.raw && (!r?.result || r.result.status === "0x1"),
@@ -193,12 +214,11 @@ if (d.intents) {
     let landed = p.status === "SUCCESS";
     let where = p.tx ? `NEAR tx ${p.tx}` : "";
     if (p.destination_chain === "base" && p.destination_tx) {
-      const r = await fetch("https://base-sepolia-rpc.publicnode.com", { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [p.destination_tx] }) }).then((q) => q.json()).catch(() => null);
+      const r = { result: await rpcCall(BASE_SEPOLIA_RPCS, "eth_getTransactionReceipt", [p.destination_tx]) };
       landed = landed && r?.result?.status === "0x1";
       where = `Base Sepolia tx ${p.destination_tx}, status ${r?.result?.status ?? "unread"}`;
     }
-    console.log(`${landed ? "INFO " : "WARN "} the agent paid ${p.amount} USDC to ${p.to} on ${p.chain === "base" ? "Base Sepolia" : "NEAR (Intents)"}: ${p.status}; ${where}`);
+    check(landed, `the agent paid ${p.amount} USDC to ${p.to} from the wallet, on ${p.chain === "base" ? "Base Sepolia (read on Base)" : "NEAR (Intents)"}`, `${p.status}; ${where}`);
   }
   check(voted.length > 0 && voted.every((x) => x.ok) && i.owner === (await daoAddress(d.dao)),
     "the agent's NEAR Intents wallet is owned by the DAO: every owner intent was signed only after a members' vote",
@@ -208,9 +228,7 @@ if (d.intents) {
 // the by-laws gate, run inside an Intel TDX enclave by OutLayer: the tx ran this repo's wasm, and resumed with a match
 if (d.outlayer) {
   const o = d.outlayer;
-  const t = await fetch("https://rpc.testnet.fastnear.com", { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "EXPERIMENTAL_tx_status", params: { tx_hash: o.tx, sender_account_id: o.sender, wait_until: "FINAL" } }) })
-    .then((r) => r.json()).then((j) => j.result).catch(() => null);
+  const t = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: o.tx, sender_account_id: o.sender, wait_until: "FINAL" });
   const action = t?.transaction.actions[0]?.FunctionCall;
   const args = action ? JSON.parse(Buffer.from(action.args, "base64").toString()) : {};
   const out = t?.status.SuccessValue ? JSON.parse(Buffer.from(t.status.SuccessValue, "base64").toString()) : {};

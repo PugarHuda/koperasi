@@ -33,15 +33,18 @@ const rows = (tbody, html) => { tbody.innerHTML = html || `<tr><td colspan="9" c
 // read with the rest, not after it: the board sits above the join panel, and filling it late would move the panel
 // under the reader's pointer
 // with the DAO proposal that paid each task (task payouts are Transfer proposals filed by the contract's `tasks` role)
-const trustBoard = Promise.all([view(dep.contract, "get_board"), all(dep.contract, "get_tasks"), view(dep.contract, "get_contributors")])
+// one read shared by the brief and the board; a failed read is forgotten, so whoever asks next reads again
+let board = null;
+const trustBoard = () => (board ??= Promise.all([view(dep.contract, "get_board"), all(dep.contract, "get_tasks"), view(dep.contract, "get_contributors")])
   .then(async ([b, tasks, recs]) => [b, tasks, recs, await Promise.all(tasks.map((t) =>
-    (t.status === "Paid" || t.status === "Paying" ? view(dep.contract, "get_payout_proposal", { id: t.id }) : null)))]);
-trustBoard.catch(() => {}); // handled where it is rendered
+    (t.status === "Paid" || t.status === "Paying" ? view(dep.contract, "get_payout_proposal", { id: t.id }) : null)))])
+  .catch((e) => { board = null; throw e; }));
+trustBoard().catch(() => {}); // started now, handled where it is rendered
 
 // the track's brief, each line read from the chain; the counts above it are the co-op's activity so far.
 // Public RPCs rate-limit in bursts: on a failure it tries again (3 times, 5 s apart) instead of staying empty.
 const brief = (tries = 3) => Promise.all([
-  view(dep.dao, "get_last_proposal_id"), view(dep.dao, "get_policy"), view(dep.contract, "get_info"), trustBoard,
+  view(dep.dao, "get_last_proposal_id"), view(dep.dao, "get_policy"), view(dep.contract, "get_info"), trustBoard(),
   all(dep.contract, "get_cases"), all(dep.contract, "get_pledges"), all(dep.contract, "get_pledge_claims"),
   view(dep.usdc, "ft_balance_of", { account_id: dep.dao }),
 ]).then(([proposals, policy, info, [board, tasks], cases, pledges, claims, treasury]) => {
@@ -68,7 +71,11 @@ const brief = (tries = 3) => Promise.all([
   const line = (id, ok, html) => { $(id).classList.add(ok ? "pass" : "fail"); $(id).querySelector(".ck-out").innerHTML = html; };
   line("br-own", members.length > 1 && policy.default_vote_policy.weight_kind === "RoleWeight",
     `${members.length} members hold the DAO's role <code>member</code>, one vote each: a decision needs ${needed} of ${members.length}. <a href="#members">Members</a>`);
-  line("br-budget", true,
+  // "only a vote spends it", checked: no role but the members' may do more than file proposals, except the contract's
+  // role `tasks`, which may file and approve transfers only (within the budget the members voted)
+  const onlyVotes = policy.roles.every((r) => r.name === "member" || r.permissions.every((p) => p.endsWith(":AddProposal")
+    || (r.name === "tasks" && p.startsWith("transfer:"))));
+  line("br-budget", onlyVotes && board.budget !== undefined,
     `The DAO treasury holds ${usdc(treasury)} USDC; only a vote spends it. The members let the contract pay ${nearAmt(board.budget)} NEAR more for tasks. <a href="#trust">Tasks</a>`);
   line("br-rewards", info.periods > 0,
     `${info.periods} profit shares, each voted and split by the contract (${info.share_rule.savings_bps / 100}% by savings, ${info.share_rule.points_bps / 100}% by contribution points); ${paid.length} tasks paid. <a href="#shares">Profit shares</a>`);
@@ -85,20 +92,32 @@ const brief = (tries = 3) => Promise.all([
 });
 brief();
 
+/** Public RPCs rate-limit in bursts: the page's first reads are tried 3 times, 4 s apart, before it says it failed. */
+async function retried(read, tries = 3) {
+  for (let k = 1; ; k++) {
+    try { return await read(); } catch (e) {
+      if (k >= tries || e.final) throw e; // the chain's own answer does not change on a second try
+      await new Promise((ok) => setTimeout(ok, 4000));
+    }
+  }
+}
+
 try {
-  const [info, members, versions, receipts, rekon, periods] = await Promise.all([
+  const [info, members, versions, receipts, rekon, periods] = await retried(() => Promise.all([
     view(dep.contract, "get_info"),
     view(dep.contract, "get_members", { from: 0, limit: 200 }), // ponytail: the passbook shows 200 (one claimable read each); page it past that
     view(dep.contract, "get_config_history", { from: 0, limit: 100 }),
     view(dep.contract, "get_receipts", { from: 0, limit: 500 }),
     view(dep.contract, "get_audit"),
     view(dep.contract, "get_periods"),
-  ]);
-  const claimable = await Promise.all(members.map(([a]) => view(dep.contract, "get_claimable", { account_id: a })));
+  ]));
+  const claimable = await retried(() => Promise.all(members.map(([a]) => view(dep.contract, "get_claimable", { account_id: a }))));
   // a receipt with an inference proof was done by a TEE-verified model; one without came from `npm run demo`, where a
   // local stand-in plays Agent Market (it has no testnet) and no model runs. The page says which is which.
   const checked = [...receipts].reverse().slice(0, 50);
-  const proofs = await Promise.all(checked.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch(() => null)));
+  // undefined: not read (RPC busy), shown as such; null: the chain says this job has no proof
+  const proofs = await Promise.all(checked.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch((e) => (e.final ? null : undefined))));
+  const unread = proofs.some((p) => p === undefined);
   const recent = checked.slice(0, 12);
   const proven = checked.filter((r, i) => proofs[i]).length;
 
@@ -253,7 +272,10 @@ try {
   box.querySelector("button").onclick = async () => {
     box.innerHTML = `<p class="hint">Hashing ${esc(current.uri)}…</p>`;
     try {
-      const raw = await (await fetch(byLawsUrl(current.uri), { cache: "no-store" })).arrayBuffer();
+      const res = await fetch(byLawsUrl(current.uri), { cache: "no-store" });
+      // a missing file is "could not download", never a mismatch: only the file itself is judged
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const raw = await res.arrayBuffer();
       const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", raw))].map((b) => b.toString(16).padStart(2, "0")).join("");
       const text = new TextDecoder().decode(raw);
       const pick = (re) => esc(text.match(re)?.[1]?.trim() ?? "not set");
@@ -277,6 +299,7 @@ try {
   };
 
   const proofCell = (p, job) => {
+    if (p === undefined) return `<span class="muted">Proof not read (NEAR RPC busy): reload to check</span>`;
     if (!p) return `<span class="muted" title="Recorded by npm run demo against a local stand-in for Agent Market; no model ran">Demo market, no model</span>`;
     try {
       const x = JSON.parse(p);
@@ -361,7 +384,7 @@ cargo near build reproducible-wasm
   $("status").innerHTML = [
     ["Agent", info.paused ? "Paused by vote" : "Allowed to work", info.paused ? "warn" : "ok"],
     ["Running by-laws", `v${info.config.version} <small>${short(info.config.hash)}</small>`, ""],
-    ["Jobs on-chain", `${receipts.length} <small>${paid} paid, ${proven} with TEE proof</small>`, ""],
+    ["Jobs on-chain", `${receipts.length} <small>${paid} paid, ${unread ? "TEE proofs not read yet" : `${proven} with TEE proof`}</small>`, ""],
     ["Audit", owed > 0n ? `Red <small>${usdc(owed)} USDC missing</small>` : "Green <small>all passed on</small>", owed > 0n ? "warn" : "ok"],
   ].map(([k, v, c]) => `<div><dt>${k}</dt><dd class="${c}">${v}</dd></div>`).join("");
 
@@ -381,10 +404,10 @@ cargo near build reproducible-wasm
       <td class="num" data-label="Left">${b.times}</td><td class="num" data-label="Taken">${taken[i]}</td></tr>`).join(""));
   }).catch(() => rows($("bounties").tBodies[0], ""));
   // tasks with earned trust: the members' rule, every task, and each contributor's record with its sources
-  trustBoard.then(([b, tasks, recs, payouts]) => {
+  trustBoard().then(([b, tasks, recs, payouts]) => {
     const rule = b.rule;
     $("trust-rule").innerHTML = rule
-      ? `The money stays in the DAO treasury: each payout is a Transfer proposal the contract files and approves with its own DAO role <code>tasks</code>, which can do nothing else. The members let it pay <strong>${nearAmt(b.budget)} NEAR</strong> more. A member who finishes a task earns ${rule.points} contribution points toward the profit share.`
+      ? `The money stays in the DAO treasury: each payout is a Transfer proposal the contract files and approves with its own DAO role <code>tasks</code>, which can do nothing else. The members let it pay <strong>${nearAmt(b.budget)} NEAR</strong> more. A member who finishes a task earns contribution points toward the profit share, in proportion to its pay: ${rule.points} for a task at the one-member limit (${nearAmt(rule.one_vote_max)} NEAR), fewer for a smaller one. A contributor who is not a member gets the pay, not the points.`
       : "The members have not voted a trust rule yet, so no task can be posted.";
     $("tiers").innerHTML = rule ? [
       ["Paid on acceptance", `up to ${nearAmt(rule.auto_max)} NEAR, for a contributor trusted by ${rule.trusted_after}+ different member${rule.trusted_after === 1 ? "" : "s"} (or a voted bounty). Each poster pays at most ${nearAmt(rule.poster_daily_auto)} NEAR a day this way. No vote.`],
