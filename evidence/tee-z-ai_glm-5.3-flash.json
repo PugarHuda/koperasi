@@ -1,15 +1,15 @@
 {
   "ok": true,
   "model": "z-ai/glm-5.3-flash",
-  "at": "2026-11-10T02:44:40.016Z",
-  "nonce": "2d4327f1d8b2f487f555fac0889a9e0e4de79269aebc6c830687065bb7284ee7",
+  "at": "2026-11-12T13:27:10.553Z",
+  "nonce": "73b2cbf5627fd1d99d03acd2db950ad6c2a9594769289a158e014d55b48b3461",
   "gateway": {
     "signing_address": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
     "signing_algo": "ecdsa",
     "tdx_status": "UpToDate",
     "binds_address": true,
     "binds_nonce": true,
-    "compose_sha256": "73dbb78cccfdfd6919aa4058de67ae0375d6f6c6f38eedfa78c609761c2d6db6",
+    "compose_sha256": "877959253d2406f05fa718840fd157b8e647547827e9524cb33081a2a8fcb78b",
     "compose_matches": true,
     "gpu": null,
     "ok": true
@@ -21,7 +21,7 @@
       "tdx_status": "UpToDate",
       "binds_address": true,
       "binds_nonce": true,
-      "compose_sha256": "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d",
+      "compose_sha256": "c900dc7304663b73b623cd5d941fbdab6f02858017b371ae28de445a16d2e2d0",
       "compose_matches": true,
       "gpu": {
         "ok": true,
