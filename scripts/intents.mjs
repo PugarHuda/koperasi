@@ -65,9 +65,17 @@ async function owner() {
 const same = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 const sorted = (x) => (Array.isArray(x) ? x.map(sorted) : x && typeof x === "object"
   ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sorted(x[k])])) : x);
+const TOP = new Set(["domain", "network", "type", "agent_id", "owner", "tenant_id", "expires_at", "nonce", "details"]);
+/** What each owner intent's details may carry (read from the Agent API's own previews, 12 Nov 2026). */
+const DETAILS = {
+  agent_create: new Set(["name", "policy", "policy_hash"]),
+  grant_issue: new Set(["label", "credential", "expires_at"]),
+  agent_freeze: new Set(["expected_revision", "policy_hash"]),
+  agent_unfreeze: new Set(["expected_revision", "policy_hash"]),
+};
 /**
  * Throws unless the intent text the API returned is the one asked for: its domain and network, the type, the DAO as
- * owner, the agent, and every field of the request that the text carries (policy, grant credential) unchanged.
+ * owner, the agent, and every field asked for present and unchanged, and nothing else.
  * @param {string} message @param {string} type @param {any} body @param {string} owner
  */
 export function refuseUnlessAsked(message, type, body, owner) {
@@ -78,9 +86,17 @@ export function refuseUnlessAsked(message, type, body, owner) {
   if (t.type !== type) bad.push(`type ${t.type}`);
   if (String(t.owner).toLowerCase() !== owner.toLowerCase()) bad.push(`owner ${t.owner}`);
   if (body.agent_id && t.agent_id !== body.agent_id) bad.push(`agent ${t.agent_id}`);
+  // nothing beyond what an intent of this type carries: an extra field could widen what the DAO grants
+  const extra = Object.keys(t).filter((k) => !TOP.has(k));
+  if (extra.length) bad.push(`unexpected fields ${extra.join(", ")}`);
   const d = t.details ?? {};
+  const allowed = DETAILS[type];
+  if (!allowed) bad.push(`no rule for a ${type} intent`);
+  const unknown = Object.keys(d).filter((k) => !allowed?.has(k));
+  if (unknown.length) bad.push(`unexpected details ${unknown.join(", ")}`);
+  // every field asked for must be there, unchanged: a missing expiry or credential is a different grant
   for (const k of ["policy", "credential", "expires_at", "label", "name"]) {
-    if (body[k] !== undefined && d[k] !== undefined && !same(body[k], d[k])) bad.push(`${k} differs`);
+    if (body[k] !== undefined && !same(body[k], d[k])) bad.push(d[k] === undefined ? `${k} missing` : `${k} differs`);
   }
   if (type === "agent_create" && !same(d.policy, body.policy)) bad.push("the policy is not the one asked for");
   if (type === "grant_issue" && d.credential !== body.credential) bad.push("the grant credential is not ours");

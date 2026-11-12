@@ -50,6 +50,13 @@ test("an owner intent is signed only if it says exactly what was asked", () => {
   assert.throws(() => refuseUnlessAsked(text({ network: "mainnet" }), "grant_issue", body, owner), /domain/);
   assert.throws(() => refuseUnlessAsked(text({ agent_id: "agent_2" }), "grant_issue", body, owner), /agent/);
   assert.throws(() => refuseUnlessAsked("not json", "grant_issue", body, owner), /not JSON/);
+  // what a hostile API could slip in: more than was asked, or less (a grant with no expiry)
+  assert.throws(() => refuseUnlessAsked(text({ scopes: ["*"] }), "grant_issue", body, owner), /unexpected fields scopes/);
+  assert.throws(() => refuseUnlessAsked(text({ details: { label: "runtime", credential: "a".repeat(64), allow_withdraw_any: true } }), "grant_issue", body, owner), /unexpected details allow_withdraw_any/);
+  const expiring = { ...body, expires_at: "2026-12-12T00:00:00.000Z" };
+  assert.throws(() => refuseUnlessAsked(text(), "grant_issue", expiring, owner), /expires_at missing/);
+  assert.doesNotThrow(() => refuseUnlessAsked(text({ details: { label: "runtime", credential: "a".repeat(64), expires_at: "2026-12-12T00:00:00.000Z" } }), "grant_issue", expiring, owner));
+  assert.throws(() => refuseUnlessAsked(text({ type: "grant_revoke" }), "grant_revoke", body, owner), /no rule/);
   const policy = { actions: ["transfer"], destinations: { mode: "only", list: [{ action: "transfer", address: "bob.testnet" }] } };
   const create = (p) => JSON.stringify({ domain: "tidepool-agent-api.v1", network: "testnet", type: "agent_create", owner, details: { policy: p } });
   assert.doesNotThrow(() => refuseUnlessAsked(create(policy), "agent_create", { policy }, owner));
