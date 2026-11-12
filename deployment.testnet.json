@@ -96,7 +96,29 @@
       "proposal": 73,
       "tx": "BojwWKdCwYsKBAbrTUpAAaRWADbubkPxcAP1Hsz5Vr3p",
       "intent_sha256": "8dffd5bb8210f6a9e4ee7aecdaa0f0528e5ff31c9e50030a373869f0571001fb"
-    }
+    },
+    "payouts": [
+      {
+        "to": "kop-bob-mw4i3w8f.testnet",
+        "amount": "2",
+        "chain": "near",
+        "status": "SUCCESS",
+        "tx": "4WHd8Wds8NAsN7g11MsEPrc87PJtx1NC6zeFKJ7TRQDD",
+        "destination_chain": null,
+        "destination_tx": null,
+        "at": "2026-11-12T03:14:46.183Z"
+      },
+      {
+        "to": "kop-bob-mw4i3w8f.testnet",
+        "amount": "3",
+        "chain": "base",
+        "status": "SUCCESS",
+        "tx": "AUqgNpNUbGfvV1NzFkyS7H7w3RdHN1gqzVpeFnTJWSWK",
+        "destination_chain": "base",
+        "destination_tx": "0xba7491b252fe172bcc30b75647bfed5d7baddfc87cdfb107ca3e0a3c2ac763d8",
+        "at": "2026-11-12T03:35:07.373Z"
+      }
+    ]
   },
   "outlayer": {
     "provider": "OutLayer (Intel TDX), outlayer.testnet",

@@ -26,7 +26,13 @@ const BASE = "https://www.usetidepool.tech/v1";
 const KEY = process.env.TIDEPOOL_KEY;
 const GRANT_FILE = path.join(ROOT, ".keys", "tidepool-grant.json"); // the agent's grant token (.keys/ is not committed)
 const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
-const save = () => fs.writeFileSync(DEPLOYMENT, JSON.stringify(dep, null, 2) + "\n");
+// only the intents part, over the files as they are now: a long payout must not undo what other scripts saved meanwhile
+const save = () => {
+  for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) {
+    const now = JSON.parse(fs.readFileSync(f, "utf8"));
+    fs.writeFileSync(f, JSON.stringify({ ...now, intents: dep.intents }, null, 2) + "\n");
+  }
+};
 const USDC = "nep141:usdc.tidepool-sandbox.testnet";
 const BASE_USDC = "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet";
 const BOB = "kop-bob-mw4i3w8f.testnet";
