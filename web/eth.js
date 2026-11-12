@@ -50,14 +50,20 @@ export const rawHash = (raw) => `0x${toHex(keccak_256(fromHex(raw)))}`;
  * @param {{ chainId: bigint, nonce: bigint, maxPriorityFeePerGas: bigint, maxFeePerGas: bigint, gas: bigint, to: string, value: bigint }} t
  */
 export const txText = (t) => JSON.stringify(Object.fromEntries(Object.entries(t).map(([k, v]) => [k, String(v)])));
-/** The fields back from a proposal's description (`tx {…}`), or null. */
+/** The fields back from a proposal's description (`tx {…}`), or null; only a Sepolia transaction (chain id 11155111). */
 export function txFromText(description) {
-  const m = /tx (\{"chainId":"\d+","nonce":"\d+","maxPriorityFeePerGas":"\d+","maxFeePerGas":"\d+","gas":"\d+","to":"0x[0-9a-f]{40}","value":"\d+"\})/.exec(String(description));
+  const m = /tx (\{"chainId":"11155111","nonce":"\d+","maxPriorityFeePerGas":"\d+","maxFeePerGas":"\d+","gas":"\d+","to":"0x[0-9a-f]{40}","value":"\d+"\})/.exec(String(description));
   if (!m) return null;
   const j = JSON.parse(m[1]);
   return { chainId: BigInt(j.chainId), nonce: BigInt(j.nonce), maxPriorityFeePerGas: BigInt(j.maxPriorityFeePerGas),
     maxFeePerGas: BigInt(j.maxFeePerGas), gas: BigInt(j.gas), to: j.to, value: BigInt(j.value) };
 }
+
+/** The most a payment may offer for gas, in wei: the fees `transfer` sets (5 gwei max, 1 gwei tip) and 100 000 gas. */
+export const MAX_FEE_WEI = 5_000_000_000n * 100_000n;
+/** A transaction the page shows as a plain payment: Sepolia, no fee above what `transfer` sets. */
+export const plainPayment = (t) => t.chainId === SEPOLIA.chainId && t.maxPriorityFeePerGas <= t.maxFeePerGas
+  && t.maxFeePerGas <= 5_000_000_000n && t.gas * t.maxFeePerGas <= MAX_FEE_WEI;
 
 /** A JSON-RPC call to Sepolia, on each RPC in turn. */
 export async function eth(method, params) {

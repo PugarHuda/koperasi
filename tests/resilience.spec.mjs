@@ -137,18 +137,22 @@ test("a vote to sign for the co-op's Ethereum address shows the payment, and war
   const sign = (payload) => ({ FunctionCall: { receiver_id: "v1.signer-prod.testnet", actions: [{ method_name: "sign", deposit: "1", gas: "100000000000000",
     args: Buffer.from(JSON.stringify({ request: { payload_v2: { Ecdsa: payload }, path: "ethereum-1", domain_id: 0 } })).toString("base64") }] } });
   await answerViews(page, {
-    get_last_proposal_id: 2,
+    get_last_proposal_id: 3,
     get_proposals: [
       { id: 0, proposer: "x.testnet", description: `[trezu-tmpl:kop-pay-ethereum] sign ${good} for tx ${tx}`, status: "InProgress", votes: {}, submission_time: "0", vote_counts: {}, kind: sign(good) },
       { id: 1, proposer: "x.testnet", description: `[trezu-tmpl:kop-pay-ethereum] sign for tx ${tx}`, status: "InProgress", votes: {}, submission_time: "0", vote_counts: {}, kind: sign("ab".repeat(32)) },
+      // the same payment on Ethereum mainnet (chain 1): never shown as a payment, whatever its hash
+      { id: 2, proposer: "x.testnet", description: `[trezu-tmpl:kop-pay-ethereum] sign for tx ${tx.replace("11155111", "1")}`, status: "InProgress", votes: {}, submission_time: "0", vote_counts: {}, kind: sign(good) },
     ],
   });
   await page.goto("/?as=kop-bob-mw4i3w8f.testnet");
   const items = page.locator("#joinapp .props:not(.tasks) > li");
-  await expect(items).toHaveCount(2);
-  await expect(items.nth(1).locator("pre.does")).toContainText("Pay 0.001 Sepolia ETH from the co-op's Ethereum address to 0x89b70a44dc6ebf5f9015de6f7077561a0d927138 (nonce 3");
-  await expect(items.nth(1).locator("pre.does")).toContainText("is this transaction's");
-  await expect(items.nth(0).locator("pre.does")).toContainText("WARNING: the transaction in the description does not make this hash");
+  await expect(items).toHaveCount(3);
+  await expect(items.nth(0).locator("pre.does")).toContainText("WARNING");
+  await expect(items.nth(0).locator("pre.does")).not.toContainText("Pay 0.001");
+  await expect(items.nth(2).locator("pre.does")).toContainText("Pay 0.001 Sepolia ETH from the co-op's Ethereum address to 0x89b70a44dc6ebf5f9015de6f7077561a0d927138 (Sepolia, nonce 3, fee at most 0.000126 ETH");
+  await expect(items.nth(2).locator("pre.does")).toContainText("is this transaction's");
+  await expect(items.nth(1).locator("pre.does")).toContainText("WARNING: the transaction in the description does not make this hash");
 });
 
 test("a member sets where payouts land, sees the work-record token and the Ethereum payment form", async ({ page }, testInfo) => {

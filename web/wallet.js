@@ -1,7 +1,7 @@
 // Join the co-op from the page with a testnet wallet: pay the deposit, ask the members (a DAO proposal from your own
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
-import { SEPOLIA, eth, rawHash, rawTx, toHex, transfer, txFromText, txHash, txText } from "./eth.js";
+import { SEPOLIA, eth, plainPayment, rawHash, rawTx, toHex, transfer, txFromText, txHash, txText } from "./eth.js";
 import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
 import { affordable, checkVouch, inviteOf, inviteParam, joinText, vouchParam, vouchSuffix, vouchText, nearUnits, oneLine, payPath, plainCall, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
@@ -104,9 +104,12 @@ const describe = (p, s) => {
   if (k === "Transfer") return `Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${oneLine(p.kind.Transfer.receiver_id)}`;
   const pay = ethPayment(p);
   if (pay) return pay.ok
-    ? `Pay ${ethAmt(pay.t.value)} Sepolia ETH from the co-op's Ethereum address to ${pay.t.to} (nonce ${pay.t.nonce}, gas up to ${pay.t.gas}): NEAR's MPC network signs it for the DAO.
+    ? `Pay ${ethAmt(pay.t.value)} Sepolia ETH from the co-op's Ethereum address to ${pay.t.to} (Sepolia, nonce ${pay.t.nonce}, fee at most ${ethAmt(pay.t.gas * pay.t.maxFeePerGas)} ETH): NEAR's MPC network signs it for the DAO.
 Checked here: the hash to sign, ${pay.asked.slice(0, 16)}…, is this transaction's.`
-    : `Sign ${pay.asked} with the co-op's Ethereum address.
+    : pay.matches
+      ? `Sign a transaction from the co-op's Ethereum address that is not a plain Sepolia payment (chain ${pay.t.chainId}, fee up to ${ethAmt(pay.t.gas * pay.t.maxFeePerGas)} ETH).
+WARNING: do not approve unless the members agreed to exactly this.`
+      : `Sign ${pay.asked} with the co-op's Ethereum address.
 WARNING: the transaction in the description does not make this hash. Do not approve: you would sign something else.`;
   if (k === "FunctionCall") {
     const f = p.kind.FunctionCall;
@@ -128,7 +131,9 @@ function ethPayment(p) {
   try { asked = JSON.parse(atob(a[0].args)).request.payload_v2.Ecdsa; } catch { return null; }
   if (!/^[0-9a-f]{64}$/.test(String(asked))) return null;
   const t = txFromText(p.description);
-  return { asked, t, ok: !!t && toHex(txHash(t)) === asked };
+  // the hash must be this transaction's, and the transaction a plain Sepolia payment (no other chain, no outsized fee)
+  const matches = !!t && toHex(txHash(t)) === asked;
+  return { asked, t, matches, ok: matches && plainPayment(t) };
 }
 
 // proposals are anyone's on-chain data: one malformed proposal must not take the panel down for every member
