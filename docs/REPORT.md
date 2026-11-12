@@ -15,7 +15,7 @@ Our own estimate on the rubric (technical, design, impact, originality, sustaina
 
 | Criterion | 8 Nov | 12 Nov | What moved it |
 |---|---|---|---|
-| Technical | 8 | 9–10 | 0.2.6 with round-7 fixes; the DAO pays on Ethereum by vote; the agent's Intents wallet is the DAO's; the by-laws gate ran in a TDX enclave; a real TEE-proven job; 133 contract + 35 unit tests; byte-for-byte rebuild in CI |
+| Technical | 8 | 9–10 | 0.2.7 (appeals, payout routes, work-record tokens) after round-7 fixes; the DAO pays on Ethereum by vote; the agent's Intents wallet is the DAO's; the by-laws gate ran in a TDX enclave; a real TEE-proven job; 141 contract + 38 unit tests; byte-for-byte rebuild in CI |
 | Design | 8 | 8.5–9 | live proof on the first screen; Lighthouse 100 on accessibility, best practices, SEO; LCP 1.7 s on a slow phone, CLS 0 |
 | Impact | 5 | 6 | testnet money landed on NEAR, Ethereum and Base by member votes; still demo members and no Agent Market job |
 | Originality | 9 | 9 | a co-op's whole life on chain, not only "an agent bound by a DAO" |
@@ -51,12 +51,12 @@ Scanners: `npm audit` 0 high/critical at the root (2 low); no secrets in the rep
 | | Before | After (✓ = on a public chain, read back by `npm run verify`) |
 |---|---|---|
 | Sputnik DAO | deep | ✓ every task, pledge and case state on the showcase; a rejected and an open proposal |
-| Chain Signatures | a signed statement (#57) | ✓ a payment on Ethereum Sepolia by vote (#74) |
-| NEAR Intents | none (no testnet) | ✓ the agent's wallet owned by the DAO (Tidepool's testnet Agent API, #72/#73), members-only policy, payouts on NEAR and Base Sepolia |
-| OutLayer | none | ✓ the by-laws gate inside an Intel TDX enclave, on-chain |
+| Chain Signatures | a signed statement (#57) | ✓ a payment on Ethereum Sepolia by vote (#74); ✓ one filed from the Trezu template `kop-pay-ethereum` (#81), whose hash the page rebuilds before members vote |
+| NEAR Intents | none (no testnet) | ✓ the agent's wallet owned by the DAO (Tidepool's testnet Agent API, #72/#73), members-only policy, payouts on NEAR and Base Sepolia; ✓ each member's payout route set on the contract, the policy changed to list exactly those routes by vote #80 |
+| OutLayer | none | ✓ the by-laws gate inside an Intel TDX enclave, on-chain, before every job the agent starts; the receipt names the transaction |
 | NEAR AI Cloud | attestation, no job | ✓ one job by a TEE-verified model, billed cost and proof on-chain |
-| Global contracts | upgrades by vote | ✓ #75 (0.2.6), rebuilt byte for byte by CI from the commit the chain names |
-| Trezu | forms, #51 | unchanged: trezu.app indexes mainnet only |
+| Global contracts | upgrades by vote | ✓ #76 (0.2.7), rebuilt byte for byte by CI from the commit the chain names |
+| Trezu | forms, #51 | ✓ a seventh template, `kop-pay-ethereum`, compiled by Trezu's own engine into #81 |
 
 ## 4. Competitors and positioning
 
@@ -88,9 +88,9 @@ whole life on chain with an agent whose wallet and cross-chain payments answer t
 
 | Suite | Result |
 |---|---|
-| Contract (`cargo test --lib`) | **133 passed** |
+| Contract (`cargo test --lib`) | **141 passed** |
 | Sandbox against the real Sputnik DAO wasm | green on CI (Linux) |
-| Unit (`npm run test:unit`) | **35 pass**; the Ethereum-signature test 10 runs in a row (3 000 signatures) |
+| Unit (`npm run test:unit`) | **38 pass**; the Ethereum-signature test 10 runs in a row (3 000 signatures) |
 | Lint, typecheck | clean |
 | `npm run verify` | **every claim checks out** |
 | Playwright, locally, desktop + mobile | 42 passed, 1 flaky (passed on retry), 0 failed; axe clean; visual snapshots for 6 profiles |
@@ -101,7 +101,7 @@ whole life on chain with an agent whose wallet and cross-chain payments answer t
 | | |
 |---|---|
 | Live page | https://koperasi-kohl.vercel.app |
-| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet), 0.2.6, global code `EG9keYhs…`, sha256 `c50989e8…`, proposal #75, 0 full-access keys |
+| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet), 0.2.7, global code `95HEy3tP…`, sha256 `77f62ea3…`, proposal #76, 0 full-access keys |
 | DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet) |
 | The DAO's Ethereum address | `0xb3dc0128b4a9804de94796480bef8ba014dfca7d` (Chain Signatures) |
 | The agent's Intents wallet | `agent_7faa1d7f6f2be9e778c9fd18` (Tidepool testnet), owner: the address above |

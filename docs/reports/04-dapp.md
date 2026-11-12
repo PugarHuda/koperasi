@@ -170,3 +170,19 @@ a 900 px laptop); proposals to the co-op's own contract read in one plain senten
 **Resilience** (QA audit): first reads and the shared task board retried; an unread proof shown as unread, never as
 "no proof"; a missing by-laws file reported as missing; timeouts on the relayer calls and on Intel's collateral; the
 brief's budget line checks the DAO policy.
+
+## Pass 13 Nov: from one-off demos to routine
+
+| Integration | 12 Nov | 13 Nov |
+|---|---|---|
+| OutLayer | the by-laws gate ran once, by hand | the agent runs it **before every job** (`agent/gate.mjs`) and names the transaction in the receipt; `npm run verify` checks each one; no job starts without a match |
+| NEAR Intents | the agent paid bob twice, by hand | **profit shares by rule**: each member sets a route on the contract; a vote updates the wallet's policy to list exactly those routes (#80); `intents.mjs share` splits by the contract's voted rule and pays each part on its route |
+| Chain Signatures | a script signed a Sepolia payment | **a Trezu template** (`kop-pay-ethereum`, #81) and **a page form**: the description carries the transaction, the page rebuilds the hash before members vote and sends the signed transaction after the deciding vote (`web/eth.js`, RLP and keccak-256, shared with the scripts) |
+| Co-op court | 3 cases, juries only | **appeal to the members** (#77 overturned, #78 kept) and a fourth case (#79) |
+| Work record | a page (`/cert.html`) | **a NEP-171 token** any wallet or explorer reads, live and non-transferable; the page shows its image and a mint button |
+
+The page: *Where your payouts land*, *Your work record, as a token* and *Pay from the co-op's Ethereum address* in the
+wallet panel; the commons table shows each appeal and its DAO proposal. Two Playwright cases cover the new panel and a
+`sign` proposal whose hash does not match its transaction (the page warns not to approve).
+
+Inference on NEAR AI Cloud now may take 300 s: GLM 5.3 Flash, a reasoning model, took 134 s for five bullet points.

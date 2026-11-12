@@ -170,3 +170,29 @@ wasm, green on CI (Linux).
 | #72 | the DAO creates the agent's NEAR Intents wallet (Tidepool's testnet Agent API) with a members-only policy | wallet `agent_7faa1d7f6f2be9e778c9fd18`, owner = the DAO's address |
 | #73 | the DAO issues the agent its grant (30 days) | the agent then paid bob 2 USDC on NEAR and 3 USDC on Base Sepolia ([0xba7491b2…](https://sepolia.basescan.org/tx/0xba7491b252fe172bcc30b75647bfed5d7baddfc87cdfb107ca3e0a3c2ac763d8)), each held 10 minutes |
 | — | (not a vote) the by-laws gate run inside an Intel TDX enclave through OutLayer | `match: true` resumed into alice's transaction ([4EShvWPa…](https://testnet.nearblocks.io/txns/4EShvWPavQuFDZtNMfyEBgVGMuA7J2oy8h9VxgCsqFma)) |
+
+## Pass 13 Nov: 0.2.7, the co-op's reach beyond itself
+
+| What | Contract | Tests |
+|---|---|---|
+| Appeal to the members | `appeal_case` (claimant of a dismissed case a juror ruled on, 1 NEAR bond, 7 days after the jury's 3): the contract files the refund as a DAO proposal and does not vote; `settle_appeal` reads the DAO's decision (attach 300 Tgas) | 6 |
+| Payout routes | `set_payout_route(chain, address)`: NEAR (default), Base, Arbitrum or Ethereum; `get_payout_routes` lists current members' | 1 |
+| Work record as a token | NEP-171 (`nft_token`, `nft_tokens`, `nft_tokens_for_owner`, `nft_metadata`, …), minted once by its owner for 0.01 NEAR, metadata and SVG image read live from the record and the standing; `nft_transfer` refused; `burn_work_record` | 1 |
+
+New storage under its own keys (`appeal:`, `payout_routes`, `work_tokens`), so no migration. 141 contract tests.
+
+**Deployed** by the same path: reproducible build in Docker (`build_info` names commit `e259ef8`), global contract
+`95HEy3tPjHLg9rz6cT5vGKeDWsodw7PtxbM1yaw2i3QU` (467 678 bytes, sha256 `77f62ea3…`) published by
+`kop-publisher-mw5tkpfo.testnet`, then DAO proposal **#76**; 5 members, 11 receipts and by-laws v4 intact, 0 full-access keys.
+
+**On-chain after the upgrade**
+
+| Proposal / tx | What |
+|---|---|
+| [FaPdB1rb…](https://testnet.nearblocks.io/txns/FaPdB1rb95hDHsu3WZ8shPNGYg3vTeS96bB6QFcuCBLY), [GWdATfiC…](https://testnet.nearblocks.io/txns/GWdATfiCcRzyNUqs1yhDr9GEG9YoYV1SJJBMkjmqPfMc) | bob routes payouts to Base, alice to Arbitrum, each to their own Chain Signatures address |
+| [Df6tf6Z1…](https://testnet.nearblocks.io/txns/Df6tf6Z1Gy4uTWcoS4WgfQRfsTGN4t6oMs8xDSNTLmiB) and two more | alice, bob and the steward mint their work records |
+| #77 | case #2 appealed by bob; the members approved the refund; `settle_appeal` ([DXtFJS9D…](https://testnet.nearblocks.io/txns/DXtFJS9DAkNw4YFGkFSQScvzQ9GHyGSHhrPH5DWnbJvS)): Upheld, bond back |
+| #78 | case #1 appealed by alice; the members rejected it; the jury's ruling stands, the bond went to the DAO |
+| #79 | case #3, a new dispute: drawn jurors upheld it, the contract filed and approved the refund |
+| #80 | the agent's Intents wallet policy lists exactly the members' routes (`policy_update`, signed by the DAO's MPC address after the vote) |
+| #81 | a Sepolia payment from the co-op's Ethereum address, compiled from the Trezu template `kop-pay-ethereum`: [0x8cbfea39…](https://sepolia.etherscan.io/tx/0x8cbfea39832739c8ef053c8c567ddce05c97dd5e9f0a6a8945a52fd288fbb740) |

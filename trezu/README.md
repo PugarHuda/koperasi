@@ -12,6 +12,7 @@ These manifests make the co-op's own decisions available as Trezu forms. Trezu n
 | `kop-award-points` | contribution points for a member | `award_points` |
 | `kop-slash-steward` | move the steward's bond to the treasury after a red audit | `slash_steward` |
 | `kop-pause` | stop the agent (kill switch) | `pause` |
+| `kop-pay-ethereum` | pay from the co-op's Ethereum address (NEAR Chain Signatures) | `sign` on `v1.signer-prod.testnet`, with the transaction's fields in the description |
 
 Each one is a normal DAO proposal voted by the members. The manifests in `testnet/` name the showcase contract and
 Circle's testnet USDC. For mainnet, change `receiver_id` to the mainnet contract and USDC.
@@ -34,7 +35,15 @@ git clone --depth 1 https://github.com/NEAR-DevHub/trezu trezu/.trezu-src
 npm i --no-save zod@4 clsx date-fns tailwind-merge big.js tsx
 npx tsx --tsconfig trezu/tsconfig.json trezu/check.mjs            # one ✓ line per template
 npx tsx --tsconfig trezu/tsconfig.json trezu/check.mjs --submit   # file + approve on testnet
+npx tsx --tsconfig trezu/tsconfig.json trezu/check.mjs --submit-eth [0x… ETH]   # pay on Sepolia by vote
 ```
+
+`kop-pay-ethereum` asks NEAR's MPC network to sign a 32-byte hash, which a member cannot read. So its two fields come
+from the page's *Pay from the co-op's Ethereum address* form: the transaction's fields (nonce and gas read from Sepolia)
+and the hash they make. They go into the proposal's description, and the page rebuilds the hash from them before
+anyone votes: a mismatch shows a warning not to approve. `check.mjs` checks the same on the description Trezu compiles.
+With `--submit-eth`, it fills the form from Sepolia, has the demo members approve it, and sends the transaction the
+deciding vote signed: proposal **#81** on 13 Nov 2026, [0x8cbfea39…](https://sepolia.etherscan.io/tx/0x8cbfea39832739c8ef053c8c567ddce05c97dd5e9f0a6a8945a52fd288fbb740).
 
 Done on testnet (10 Nov 2026). Trezu compiled the `kop-profit-share` form into DAO proposal **#51**, with the
 `[trezu-tmpl:kop-profit-share]` tag in its description. Bob ([5ZJtXu1D…](https://testnet.nearblocks.io/txns/5ZJtXu1DsMkaVFrDskUhExNmf7CGkoxdTV83cmaH1Txx)),
