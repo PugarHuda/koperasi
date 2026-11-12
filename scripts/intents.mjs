@@ -40,7 +40,7 @@ const BOB = "kop-bob-mw4i3w8f.testnet";
 /** @param {string} method @param {string} p @param {{ body?: any, grant?: string }} [opts] */
 async function api(method, p, { body, grant } = {}) {
   if (!KEY) throw new Error("set TIDEPOOL_KEY (free: POST https://www.usetidepool.tech/v1/keys)");
-  const res = await fetch(BASE + p, { method, headers: { "content-type": "application/json", authorization: `Bearer ${KEY}`,
+  const res = await fetch(BASE + p, { method, signal: AbortSignal.timeout(60_000), headers: { "content-type": "application/json", authorization: `Bearer ${KEY}`,
     ...(grant ? { "x-grant-token": grant } : {}), ...(method === "POST" ? { "idempotency-key": `kop-${crypto.randomUUID()}` } : {}) },
     body: body ? JSON.stringify(body) : undefined });
   return { status: res.status, json: await res.json().catch(() => ({})) };
@@ -50,6 +50,8 @@ const status = async (id) => (await api("GET", `/status?correlation_id=${id}&wai
 async function done(id, what) {
   for (let i = 0; i < 40; i++) {
     const st = await status(id);
+    // an unreadable answer is not a result: it must not be booked as a payout
+    if (typeof st.status !== "string") throw new Error(`${what}: the Agent API gave no status (${JSON.stringify(st).slice(0, 200)})`);
     if (!["QUEUED", "PROCESSING", "PENDING", "PENDING_APPROVAL"].includes(st.status)) return st;
     if (i % 4 === 0) console.log(`${what}: ${st.status}${st.details?.execute_after ? ` until ${st.details.execute_after}` : ""}`);
   }
@@ -186,6 +188,7 @@ if (cmd === "create") {
     const sw = await api("POST", `/agents/${w.agent_id}/swap`, { body: { origin_asset: USDC, destination_asset: BASE_USDC, amount: units }, grant: token });
     if (!sw.json.correlation_id) throw new Error(`swap: HTTP ${sw.status} ${JSON.stringify(sw.json).slice(0, 300)}`);
     const s1 = await done(sw.json.correlation_id, "swap to Base Sepolia USDC");
+    if (s1.status !== "SUCCESS" || !/^d+$/.test(String(s1.details?.amount_out))) throw new Error(`swap: ${s1.status} ${s1.failure_code ?? ""}: nothing to withdraw`);
     console.log("swap to Base Sepolia USDC:", s1.status, s1.details?.amount_out ?? s1.failure_code);
     r = await api("POST", `/agents/${w.agent_id}/withdraw`, { body: { asset: BASE_USDC, amount: s1.details.amount_out, chain: "base", recipient: to.startsWith("0x") ? to : await daoAddress(to) }, grant: token });
   } else {

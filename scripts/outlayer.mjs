@@ -17,7 +17,9 @@ const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 
 const hash = sha256(fs.readFileSync(WASM));
 const url = `${PAGE}/outlayer/bylaws-check.wasm?v=${hash.slice(0, 12)}`; // past a stale edge cache; the hash pins the bytes
-const served = sha256(Buffer.from(await (await fetch(url)).arrayBuffer()));
+const page = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+if (!page.ok) throw new Error(`${url}: HTTP ${page.status}`);
+const served = sha256(Buffer.from(await page.arrayBuffer()));
 if (served !== hash) throw new Error(`the page serves ${served.slice(0, 12)}…, not this build ${hash.slice(0, 12)}…: deploy first`);
 
 const limits = { max_instructions: 10_000_000_000, max_memory_mb: 128, max_execution_seconds: 30 };

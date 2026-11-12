@@ -2,6 +2,7 @@
 export function market(baseUrl, token) {
   async function req(method, path, body) {
     const res = await fetch(new URL(path, baseUrl), {
+      signal: AbortSignal.timeout(60_000), // a hung market must not stop a --loop agent forever
       method,
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,

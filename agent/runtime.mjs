@@ -41,7 +41,7 @@ export const isLocal = (url) => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.t
  * (USD, amount × 10^-scale) give the worst case of a job before it is sent.
  */
 export async function modelCard(model) {
-  const r = await fetch(`${NEARAI}/model/list`);
+  const r = await fetch(`${NEARAI}/model/list`, { signal: AbortSignal.timeout(30_000) });
   if (!r.ok) throw new NotVerified(`model list: HTTP ${r.status}`);
   const card = (await r.json()).models?.find((m) => m.modelId === model);
   if (!card) throw new NotVerified(`${model} is not served by NEAR AI Cloud`);
@@ -63,6 +63,7 @@ async function billedMicroUsd(inferenceId, key, tries = 5) {
   for (let i = 0; i < tries; i++) {
     const c = await fetch(`${NEARAI}/billing/costs`, {
       method: "POST",
+      signal: AbortSignal.timeout(30_000),
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({ requestIds: [inferenceId] }),
     }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -80,6 +81,7 @@ async function billedMicroUsd(inferenceId, key, tries = 5) {
 export async function canPay(model, key = process.env.NEARAI_API_KEY) {
   const r = await fetch(`${NEARAI}/chat/completions`, {
     method: "POST",
+    signal: AbortSignal.timeout(30_000),
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({ model, messages: [{ role: "user", content: "ok" }], max_tokens: 1 }),
   });
@@ -137,6 +139,7 @@ export async function infer(config, job, capMicroUsd, { local = false } = {}) {
   try {
     const res = await fetch(`${NEARAI}/chat/completions`, {
       method: "POST",
+      signal: AbortSignal.timeout(180_000), // a reasoning model writing a long answer; the per-job cap still bounds the cost
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "accept-encoding": "identity" },
       body,
     });
@@ -171,6 +174,7 @@ export async function infer(config, job, capMicroUsd, { local = false } = {}) {
 async function checkSignature(chatId, model, reqBody, respBody, tee, key) {
   const s = await fetch(`${NEARAI}/signature/${encodeURIComponent(chatId)}?model=${encodeURIComponent(model)}&signing_algo=ecdsa`, {
     headers: { authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(30_000),
   }).then((r) => (r.ok ? r.json() : Promise.reject(new NotVerified(`signature for ${chatId}: HTTP ${r.status}`))));
   const hashes = `${sha256(Buffer.from(reqBody))}:${sha256(Buffer.from(respBody))}`;
   const signer = recoverPersonal(s.text, s.signature).toLowerCase();

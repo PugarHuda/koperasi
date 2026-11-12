@@ -77,6 +77,7 @@ export async function faucetAccount(accountId) {
   if (NETWORK !== "testnet") throw new Error(`no faucet on ${NETWORK}: create and fund ${accountId} yourself`);
   const kp = KeyPair.fromRandom("ed25519");
   const res = await fetch("https://helper.nearprotocol.com/account", {
+    signal: AbortSignal.timeout(30_000),
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ newAccountId: accountId, newAccountPublicKey: kp.getPublicKey().toString() }),

@@ -30,7 +30,9 @@ async function bindsAddressAndNonce(att, reportData, nonce) {
 
 async function checkOne(att, nonce, gpu, q) {
   const quote = bytes(att.intel_quote);
-  const collateral = await q.getCollateral(q.PHALA_PCCS_URL, quote);
+  // Intel's collateral through Phala's PCCS: bounded, so the TEE button cannot spin forever
+  const collateral = await Promise.race([q.getCollateral(q.PHALA_PCCS_URL, quote),
+    new Promise((_, no) => setTimeout(() => no(new Error("Intel collateral (Phala PCCS) did not answer in 30 s")), 30_000))]);
   const v = q.verify(quote, collateral, Math.floor(Date.now() / 1000));
   const td = v.report.asTd10?.() ?? v.report.asTd15?.()?.base ?? v.report.asTd15Ex?.()?.base;
   if (!td) return { ok: false, reason: "not a TDX quote" };

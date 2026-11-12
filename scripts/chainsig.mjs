@@ -66,7 +66,7 @@ export function rawTx(t, sig) {
   return `0x02${hex(rlp([...fields(t), y, r, s]))}`;
 }
 const eth = async (method, params) => {
-  const j = await (await fetch(SEPOLIA.rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json();
+  const j = await (await fetch(SEPOLIA.rpc, { method: "POST", signal: AbortSignal.timeout(30_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json();
   if (j.error) throw new Error(`${method}: ${j.error.message}`);
   return j.result;
 };
@@ -88,7 +88,7 @@ export async function signByVote(hash, description) {
     if (!r?.transaction) continue;
     tx = r.transaction.hash;
     // the MPC network answers the DAO's call within the vote's transaction (yield/resume)
-    const full = await (await fetch("https://rpc.testnet.fastnear.com", { method: "POST", headers: { "content-type": "application/json" },
+    const full = await (await fetch("https://rpc.testnet.fastnear.com", { method: "POST", signal: AbortSignal.timeout(60_000), headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "EXPERIMENTAL_tx_status", params: { tx_hash: tx, sender_account_id: m, wait_until: "FINAL" } }) })).json().then((j) => j.result);
     for (const o of full?.receipts_outcome ?? []) {
       const v = o.outcome.status?.SuccessValue;

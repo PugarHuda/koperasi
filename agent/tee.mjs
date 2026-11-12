@@ -27,7 +27,7 @@ const TDX_OK = new Set(["UpToDate", "OutOfDate"]);
 
 async function getJson(url, init = {}, tries = 4) {
   for (let i = 0; ; i++) {
-    const r = await fetch(url, init);
+    const r = await fetch(url, { signal: AbortSignal.timeout(30_000), ...init });
     if (r.status === 429 && i < tries) { await new Promise((ok) => setTimeout(ok, 1500 * (i + 1))); continue; }
     const text = await r.text();
     if (!r.ok) throw new Error(`${url.split("?")[0]} ${r.status}: ${text.slice(0, 200)}`);

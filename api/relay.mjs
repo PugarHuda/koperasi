@@ -21,7 +21,7 @@ const seen = new Map();
 
 const provider = new JsonRpcProvider({ url: RPC });
 const view = (contractId, method, args = {}) => provider.callFunction({ contractId, method, args, blockQuery: { finality: "final" } });
-const rpc = (method, params) => fetch(RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })
+const rpc = (method, params) => fetch(RPC, { method: "POST", signal: AbortSignal.timeout(10_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })
   .then((r) => r.json());
 /** The chain's view of a delegate: the signing key's nonce (null: not a key of the sender) and the block height. */
 async function onChain(senderId, publicKey) {

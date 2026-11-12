@@ -35,7 +35,7 @@ const notSent = (msg) => Object.assign(new Error(msg), { notSent: true });
 // gasless (NEP-366): wallets that sign delegate actions send co-op calls through the co-op's relayer (api/relay.mjs),
 // which pays the gas. Only calls with no deposit: under NEP-366 the relayer would pay a deposit, so the relayer refuses
 // those and they go from the member's wallet. Off when the relayer is off (e.g. on localhost).
-const relay = fetch("/api/relay").then((r) => r.ok && r.json()).then((j) => !!j?.on, () => false);
+const relay = fetch("/api/relay", { signal: AbortSignal.timeout(8_000) }).then((r) => r.ok && r.json()).then((j) => !!j?.on, () => false);
 let gasless = false;
 
 async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } = {}) {
@@ -48,7 +48,7 @@ async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } =
   let out;
   if (gasless) {
     const { signedDelegateActions: [signedDelegate] } = await wallet.signDelegateActions({ delegateActions: [{ receiverId, actions: [action] }] });
-    const r = await fetch("/api/relay", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ signedDelegate }) });
+    const r = await fetch("/api/relay", { method: "POST", signal: AbortSignal.timeout(90_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ signedDelegate }) });
     const body = await r.json().catch(() => ({}));
     if (r.status === 429 || r.status === 503) gasless = false; // relayer busy or off: the member pays the gas instead
     else if (!r.ok) throw Object.assign(new Error(`the co-op's relayer: ${body.error ?? r.status}`), { hash: body.hash });
