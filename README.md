@@ -149,6 +149,7 @@ Each one here is a contract rule or a vote you can read:
 | **NEP-366** | meta-transactions: members pay no gas for calls without a deposit |
 | **NEP-413** | signed messages: a member signs "I vouch for X joining this DAO" in their wallet (no transaction); X's membership request carries it, and the page checks the signature and that the key is the member's full-access key on-chain |
 | **Chain Signatures** | the DAO's own Ethereum address (`v1.signer-prod.testnet`, path `ethereum-1`), signing only when a vote makes the DAO call `sign` (`npm run chainsig`): a statement naming the address (#57), and a payment of 0.001 Sepolia ETH to bob's own Chain Signatures address (#71; the members voted the exact transaction, and anyone can send it once the address holds Sepolia ETH for gas) |
+| **OutLayer** | the by-laws gate in an Intel TDX enclave, on-chain: a member calls `outlayer.testnet` `request_execution` with this repo's WASI program (`outlayer/bylaws-check`, served by sha256 at `/outlayer/`); the enclave reads the voted hash from NEAR's RPC, hashes the by-laws file and answers `match: true` into the member's transaction |
 | **NEAR Intents (Agent API, testnet)** | the agent's Intents wallet, owned by the DAO's Chain Signatures address: the members voted its creation (#72) and the agent's grant (#73), each an ERC-191 owner intent the MPC network signed. Its policy pays only members (transfers on NEAR, or bob on Base Sepolia), at most 5 USDC a payment and $10 a day, each payout held 10 minutes like the veto window; a payment to a non-member is refused (`node scripts/intents.mjs refused`). NEAR Intents has no testnet, so this runs on [Tidepool](https://www.usetidepool.tech), a community-built testnet mirror of the same API (not affiliated with NEAR) |
 | **Function-call access keys** | the agent's only key can call `record_receipt` / `update_receipt`, nothing else |
 | **Staking pools** | savings are NEAR staked in the pool the DAO chose, read on-chain (`sync_savings`); on mainnet the yield buys NEAR AI credits (Staking for Inference) |
@@ -251,7 +252,10 @@ person is why the steward exists. Both are listed under *Trust assumptions*.
 2. **The runtime.** The config check runs in the runtime the steward operates. The contract refuses receipts under
    any other hash, so a runtime that lies must also lie in public receipts; it cannot quietly run unapproved by-laws
    and still record work. The *inference* is provable (TEE attestation and signed responses, see [`docs/DETAILS.md`](docs/DETAILS.md)); the runtime
-   itself is not in a TEE. OutLayer runs WASI WASM in Intel TDX, which would need the runtime rewritten for WASI.
+   itself is not in a TEE. Its first step, the by-laws gate, is also run inside an Intel TDX enclave through OutLayer:
+   `outlayer/bylaws-check` (WASI) reads the voted hash from NEAR's RPC, downloads the by-laws and compares them, and
+   OutLayer returns the enclave's answer on-chain (`node scripts/outlayer.mjs`; `npm run verify` reads the tx). The
+   whole runtime in a TEE would need it rewritten for WASI.
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.

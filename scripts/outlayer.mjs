@@ -16,13 +16,14 @@ const member = process.argv[2] ?? "kop-alice-mw4i3w8f.testnet";
 const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 
 const hash = sha256(fs.readFileSync(WASM));
-const served = sha256(Buffer.from(await (await fetch(`${PAGE}/outlayer/bylaws-check.wasm`)).arrayBuffer()));
+const url = `${PAGE}/outlayer/bylaws-check.wasm?v=${hash.slice(0, 12)}`; // past a stale edge cache; the hash pins the bytes
+const served = sha256(Buffer.from(await (await fetch(url)).arrayBuffer()));
 if (served !== hash) throw new Error(`the page serves ${served.slice(0, 12)}…, not this build ${hash.slice(0, 12)}…: deploy first`);
 
 const limits = { max_instructions: 10_000_000_000, max_memory_mb: 128, max_execution_seconds: 30 };
 const input = JSON.stringify({ contract: dep.contract, rpc: "https://rpc.testnet.fastnear.com", page: PAGE });
 const cost = BigInt(String(await view(OUTLAYER, "estimate_execution_cost", { resource_limits: limits, input_size: input.length })).replace(/"/g, ""));
-const source = { WasmUrl: { url: `${PAGE}/outlayer/bylaws-check.wasm`, hash, build_target: "wasm32-wasip2" } };
+const source = { WasmUrl: { url, hash, build_target: "wasm32-wasip2" } };
 const r = await callRaw(account(member), OUTLAYER, "request_execution",
   { source, resource_limits: limits, input_data: input, secrets_ref: null, response_format: "Json", payer_account_id: null, params: null },
   { deposit: cost * 2n, tgas: 300 }); // unused deposit is refunded

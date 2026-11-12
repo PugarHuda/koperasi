@@ -67,5 +67,14 @@
       "tx": "BojwWKdCwYsKBAbrTUpAAaRWADbubkPxcAP1Hsz5Vr3p",
       "intent_sha256": "8dffd5bb8210f6a9e4ee7aecdaa0f0528e5ff31c9e50030a373869f0571001fb"
     }
+  },
+  "outlayer": {
+    "provider": "OutLayer (Intel TDX), outlayer.testnet",
+    "program": "outlayer/bylaws-check",
+    "wasm": "https://koperasi-kohl.vercel.app/outlayer/bylaws-check.wasm?v=725254a197b4",
+    "wasm_sha256": "725254a197b432cdb366ee6f3e4086d9ff9099ed350d114fcf6fb87d2e984fa0",
+    "tx": "4EShvWPavQuFDZtNMfyEBgVGMuA7J2oy8h9VxgCsqFma",
+    "sender": "kop-alice-mw4i3w8f.testnet",
+    "version": 4
   }
 }

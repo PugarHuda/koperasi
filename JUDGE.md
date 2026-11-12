@@ -28,6 +28,7 @@ on every push and every day (`.github/workflows/tests.yml`).
 | 10 | Work members owe each other | *Commons* → pledges | pledges kept, partly called in, and never called in |
 | 11 | A work record nobody can type in | `/cert.html?who=kop-alice-mw4i3w8f.testnet` | kept pledges and jury duty, each line read from the chain |
 | 12 | The co-op holds an Ethereum address with no private key | *Commons* → Chain Signatures | `0xb3dc…ca7d`; it signed a statement (proposal #57) and a Sepolia payment to a member (proposal #71), each by vote |
+| 13b | The by-laws checked inside an Intel TDX enclave | `npm run verify` (the OutLayer line), or the tx in `deployment.testnet.json` → `outlayer` | `outlayer.testnet` ran `web/outlayer/bylaws-check.wasm` (same sha256 as the repo) and answered `match: true` for v4 |
 | 13a | The agent's NEAR Intents wallet is the DAO's | *Commons* → Chain Signatures; `npm run verify` | created by vote #72, grant by vote #73, each a `sign` request naming the sha256 of the exact owner intent; owner `0xb3dc…ca7d` |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 

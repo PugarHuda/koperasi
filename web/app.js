@@ -146,7 +146,7 @@ try {
   fetch(byLawsUrl(info.config.uri)).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`)))).then(async (raw) => {
     const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", raw))].map((b) => b.toString(16).padStart(2, "0")).join("");
     verdict("ck-bylaws", hex === info.config.hash, hex === info.config.hash
-      ? `Your browser hashed <code>${esc(info.config.uri)}</code>: <code>${short(hex)}</code>, the hash the members voted for v${v}. The contract refuses receipts under any other.`
+      ? `Your browser hashed <code>${esc(info.config.uri)}</code>: <code>${short(hex)}</code>, the hash the members voted for v${v}. The contract refuses receipts under any other.${dep.outlayer ? ` An Intel TDX enclave checked the same on-chain, through OutLayer (<a href="${txUrl(dep.outlayer.tx)}">the transaction</a>).` : ""}`
       : `The published file hashes to <code>${short(hex)}</code>, not the approved <code>${short(info.config.hash)}</code>.`);
     if (hex !== info.config.hash) return; // only show terms from the exact file the members approved
     const text = new TextDecoder().decode(raw);

@@ -193,6 +193,23 @@ if (d.intents) {
     `${i.agent_id} on ${i.provider}, owner ${i.owner} (the DAO's Chain Signatures address); ${voted.map((x) => x.line).join("; ")}`);
 }
 
+// the by-laws gate, run inside an Intel TDX enclave by OutLayer: the tx ran this repo's wasm, and resumed with a match
+if (d.outlayer) {
+  const o = d.outlayer;
+  const t = await fetch("https://rpc.testnet.fastnear.com", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "EXPERIMENTAL_tx_status", params: { tx_hash: o.tx, sender_account_id: o.sender, wait_until: "FINAL" } }) })
+    .then((r) => r.json()).then((j) => j.result).catch(() => null);
+  const action = t?.transaction.actions[0]?.FunctionCall;
+  const args = action ? JSON.parse(Buffer.from(action.args, "base64").toString()) : {};
+  const out = t?.status.SuccessValue ? JSON.parse(Buffer.from(t.status.SuccessValue, "base64").toString()) : {};
+  const local = sha256(fs.readFileSync(path.join(ROOT, "web/outlayer/bylaws-check.wasm")));
+  check(t?.transaction.receiver_id === "outlayer.testnet" && action?.method_name === "request_execution" && args.source?.WasmUrl?.hash === local
+    && out.match === true && out.voted_sha256 === d.configHash && out.file_sha256 === d.configHash
+    && ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org"].includes(out.rpc),
+    "the by-laws were also checked inside an Intel TDX enclave (OutLayer), by this repo's program, on-chain",
+    `tx ${o.tx} by ${o.sender}: wasm ${local.slice(0, 12)}… (web/outlayer/bylaws-check.wasm, source outlayer/bylaws-check) read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}… = voted ${String(out.voted_sha256).slice(0, 12)}…`);
+}
+
 // 6. profit shares: USDC left the treasury only by a members' vote, through the contract's split
 const shares = proposals.filter((p) => p.status === "Approved" && argsOf(p).some((a) => a.method === "ft_transfer_call" && a.args.receiver_id === d.contract && a.args.msg === "share"));
 check(shares.length > 0, "the members voted every profit share out of the treasury, split by the contract",
