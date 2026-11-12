@@ -101,6 +101,7 @@ try {
     `<a href="${explorer(dep.contract)}">Contract on NEAR</a>`,
     `<a href="${explorer(dep.dao)}">The co-op's DAO</a>`,
     `<a href="https://github.com/PugarHuda/koperasi">Source and demo</a>`,
+    `<a href="/coops.html">Every co-op on this code</a>`,
   ].join("");
   $("contract-link").href = explorer(dep.contract);
   $("pb-id").textContent = dep.contract;

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Co-ops · Koperasi</title>
+  <meta name="description" content="Every Koperasi co-op deployed on NEAR testnet, read live from the chain: members, jobs, profit shares, by-laws, and who can change its code." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Koperasi</a>
+  </header>
+  <main class="cert">
+    <section class="block dark">
+      <h1>Co-ops on this code</h1>
+      <p class="sub">Each row is a separate co-op (its own Sputnik DAO, contract and agent account), read from NEAR testnet now, in your browser.
+        Running npm run deploy founds another one. Only the showcase co-op is shown on the main page; the others are the builder's test co-ops,
+        listed as they are.</p>
+      <table class="grid on-dark" id="coops">
+        <caption>Co-ops <span class="muted">(a co-op whose contract still has a full-access key can have its code changed without a vote)</span></caption>
+        <thead><tr><th scope="col">Co-op</th><th scope="col" class="num">Members</th><th scope="col" class="num">Jobs</th><th scope="col" class="num">Profit shares</th>
+          <th scope="col">By-laws</th><th scope="col">Code changes by</th></tr></thead>
+        <tbody><tr><td colspan="6" class="muted">Reading NEAR…</td></tr></tbody>
+      </table>
+    </section>
+  </main>
+  <script type="module">
+    import { view, query, explorer, esc } from "/near.js";
+    // ponytail: a fixed list of the co-ops deployed with this code; a factory contract would list them on-chain
+    const COOPS = ["mw4i2iwk", "mw57ou3m", "mw4geird", "mw78bioc", "mw7zrvx4", "mw80aczw"].map((t) => `koperasi-${t}.testnet`);
+    const row = async (c) => {
+      try {
+        const [i, keys] = await Promise.all([view(c, "get_info"), query({ request_type: "view_access_key_list", account_id: c })]);
+        const full = keys.keys.filter((k) => k.access_key.permission === "FullAccess").length;
+        return `<tr><td><a href="${explorer(c)}">${esc(c)}</a>${c === "koperasi-mw4i2iwk.testnet" ? ' <span class="badge Paid">showcase</span>' : ""}<br><a class="muted" href="${explorer(i.dao_id)}">${esc(i.dao_id)}</a></td>
+          <td class="num" data-label="Members">${Number(i.members)}</td><td class="num" data-label="Jobs">${Number(i.receipts)}</td><td class="num" data-label="Profit shares">${Number(i.periods)}</td>
+          <td data-label="By-laws">v${Number(i.config?.version ?? 0)} <span class="muted">${esc(String(i.config?.hash ?? "").slice(0, 10))}…</span></td>
+          <td data-label="Code changes by">${full === 0 ? "<strong>a members' vote only</strong>" : `<span class="muted">${full} full-access key${full > 1 ? "s" : ""} (test co-op)</span>`}</td></tr>`;
+      } catch (e) {
+        return `<tr><td>${esc(c)}</td><td colspan="5" class="muted">Could not read it now (${esc(e.message.slice(0, 80))}).</td></tr>`;
+      }
+    };
+    document.querySelector("#coops tbody").innerHTML = (await Promise.all(COOPS.map(row))).join("");
+  </script>
+</body>
+</html>
