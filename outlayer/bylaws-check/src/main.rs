@@ -1,4 +1,6 @@
-// Runs inside an OutLayer worker (Intel TDX). Input: {"contract", "rpc", "page"}. It reads the by-laws the members voted
+// Runs inside an OutLayer worker (Intel TDX). Input: {"contract", "rpc", "page"}; the RPC must be one of NEAR's own
+// (a caller-chosen RPC could claim any hash and get a signed "match"); the page may be anything, since the file is
+// judged only against the hash from the chain, and both are named in the signed output. It reads the by-laws the members voted
 // (`get_config` on the contract: version, sha256, uri), downloads that file from the page, hashes it and says whether
 // they match. The worker signs the output, and OutLayer returns it on-chain to the caller's transaction.
 use serde::Deserialize;
@@ -18,10 +20,16 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+/// NEAR RPCs the program trusts to report the voted hash (testnet and mainnet).
+const RPCS: [&str; 4] = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://rpc.mainnet.fastnear.com", "https://rpc.mainnet.near.org"];
+
 fn run() -> Result<Value, String> {
     let mut raw = String::new();
     io::stdin().read_to_string(&mut raw).map_err(|e| e.to_string())?;
     let input: Input = serde_json::from_str(&raw).map_err(|e| format!("input: {e}"))?;
+    if !RPCS.contains(&input.rpc.as_str()) {
+        return Err(format!("untrusted rpc {}: use one of {}", input.rpc, RPCS.join(", ")));
+    }
     let client = Client::new();
 
     // what the members voted, straight from the chain ({} as base64 is "e30=")
@@ -48,7 +56,7 @@ fn run() -> Result<Value, String> {
     }
     let got = hex(&Sha256::digest(res.body().map_err(|e| format!("by-laws: {e}"))?));
     Ok(json!({
-        "contract": input.contract, "version": config["version"], "uri": uri, "url": url,
+        "contract": input.contract, "rpc": input.rpc, "page": input.page, "version": config["version"], "uri": uri, "url": url,
         "voted_sha256": voted, "file_sha256": got, "match": got == voted,
     }))
 }
