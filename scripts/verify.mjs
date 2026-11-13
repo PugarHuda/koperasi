@@ -273,16 +273,23 @@ if (d.intents) {
 
 // the by-laws gate, run inside an Intel TDX enclave by OutLayer: the tx ran this repo's wasm, and resumed with a match
 const GATE_WASM = sha256(fs.readFileSync(path.join(ROOT, "web/outlayer/bylaws-check.wasm")));
-/** Reads an OutLayer gate transaction: this repo's program, a NEAR RPC, and a match with `voted`. */
-async function gate(tx, sender, voted) {
+// earlier builds of the same program (git history of web/outlayer/bylaws-check.wasm): gates already on-chain ran them
+const GATE_WASMS = [GATE_WASM, "725254a197b432cdb366ee6f3e4086d9ff9099ed350d114fcf6fb87d2e984fa0"];
+/**
+ * Reads an OutLayer gate transaction: this repo's program, a NEAR RPC, and a match with `voted`. With `jobId`, the
+ * enclave must also have judged that job allowed by the by-laws, when it ran a build that judges jobs.
+ */
+async function gate(tx, sender, voted, jobId) {
   const t = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: tx, sender_account_id: sender, wait_until: "FINAL" });
   const action = t?.transaction.actions[0]?.FunctionCall;
   const args = action ? JSON.parse(Buffer.from(action.args, "base64").toString()) : {};
   const out = t?.status.SuccessValue ? JSON.parse(Buffer.from(t.status.SuccessValue, "base64").toString()) : {};
-  const ok = t?.transaction.receiver_id === "outlayer.testnet" && action?.method_name === "request_execution" && args.source?.WasmUrl?.hash === GATE_WASM
-    && out.match === true && out.voted_sha256 === voted && out.file_sha256 === voted && out.contract === d.contract
+  const judged = out.job === undefined || out.job === null || (out.job.allowed === true && out.job.id === jobId);
+  const ok = t?.transaction.receiver_id === "outlayer.testnet" && action?.method_name === "request_execution" && GATE_WASMS.includes(args.source?.WasmUrl?.hash)
+    && judged && out.match === true && out.voted_sha256 === voted && out.file_sha256 === voted && out.contract === d.contract
     && ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org"].includes(out.rpc);
-  return { ok, out, line: `tx ${tx} by ${sender}: read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}… = voted ${String(out.voted_sha256).slice(0, 12)}…` };
+  const job = out.job ? `; job ${String(out.job.id).slice(0, 14)}… ${out.job.allowed ? "allowed" : "REFUSED"} by the by-laws (${out.job.reason})` : "";
+  return { ok, out, line: `tx ${tx} by ${sender}: read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}… = voted ${String(out.voted_sha256).slice(0, 12)}…${job}` };
 }
 if (d.outlayer) {
   const o = d.outlayer;
@@ -304,7 +311,7 @@ const proven = receipts.filter((x, i) => parsedProofs[i]?.model);
 // every job since the agent runs the gate: its by-laws were checked in the enclave, on-chain, before it started
 const gated = receipts.map((x, i) => [x, parsedProofs[i]?.gate]).filter(([, g]) => g?.tx);
 if (gated.length) {
-  const res = await Promise.all(gated.map(([x, g]) => gate(g.tx, g.by, x.config_hash)));
+  const res = await Promise.all(gated.map(([x, g]) => gate(g.tx, g.by, x.config_hash, x.job_id)));
   check(res.every((r) => r.ok), "every job that names a by-laws gate had its by-laws checked inside an Intel TDX enclave first, against the hash its receipt carries",
     gated.map(([x], i) => `${x.job_id.slice(0, 14)}…: ${res[i].ok ? "match" : "FAILED"} (${res[i].line})`).join("; "));
 }

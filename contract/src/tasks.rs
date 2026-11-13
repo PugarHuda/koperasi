@@ -295,7 +295,9 @@ impl Koperasi {
         let rule: TrustRule = load(KEY_TRUST).unwrap_or_else(|| env::panic_str("no trust rule"));
         let who = t.contributor.clone().unwrap();
         // trust from members other than this poster: one member alone cannot vouch for and pay the same contributor
-        let trusted = load::<Record>(&record_key(&who)).map_or(0, |r| sources_besides(&r, Some(&t.poster))) >= rule.trusted_after;
+        // a sister co-op's stamp in the contributor's passport (reach.rs) counts as one more source, once per co-op
+        let trusted = load::<Record>(&record_key(&who)).map_or(0, |r| sources_besides(&r, Some(&t.poster)))
+            + crate::reach::passport_sources(&who) >= rule.trusted_after;
         let today = format!("auto:{}:{}", t.poster, env::block_timestamp() / DAY_NS);
         let spent = read_u128(today.as_bytes()).unwrap_or(0) + t.amount.0;
         if t.amount.0 <= rule.auto_max.0 && trusted && spent <= rule.poster_daily_auto.0 {
@@ -598,7 +600,7 @@ impl Koperasi {
 
     /// How many different sources trust this account (what `trusted_after` counts).
     pub fn get_trust_sources(&self, account_id: AccountId) -> u32 {
-        load::<Record>(&record_key(&account_id)).map_or(0, |r| sources(&r))
+        load::<Record>(&record_key(&account_id)).map_or(0, |r| sources(&r)) + crate::reach::passport_sources(&account_id)
     }
 
     /// The DAO proposal that paid (or is paying) a task.

@@ -12,6 +12,9 @@
 //!   to court once: a bogus case (wrong receiver, token amount) cannot block the real one, and a lost case costs a bond. Not upheld: the bond goes to the DAO, unless no juror ruled at all. Jurors earn points only when the jury reached a verdict; jurors who let the
 //!   deadline pass are marked. The market names buyers by its own ids, not NEAR accounts, so the contract cannot
 //!   check that `refund_to` is the buyer: the jurors do, from the market's job page (trust assumptions in the README).
+//!   Both sides are heard: while the case is open the claimant and the steward (who runs the agent and answers for its
+//!   work) each file up to three pieces of evidence (`add_evidence`: a link or a hash with a line on what it shows), read
+//!   by the jurors and kept with the case for an appeal.
 //! - **Standing** (after Hats Protocol): each account's kept and broken pledges, juries served and missed, and slashes,
 //!   all written by the contract. Anyone not in good standing is not drawn as a juror.
 //! - **The steward's term** (also after Hats): the members vote how many days a steward serves; once it runs out anyone
@@ -27,6 +30,8 @@ const KEY_CLAIMS: &[u8] = b"pledge_claim_count";
 const KEY_CASES: &[u8] = b"case_count";
 const KEY_STEWARD_TERM: &[u8] = b"steward_term_days";
 const MAX_WHAT: usize = 280;
+/// Pieces of evidence each side may file in one case.
+const MAX_EVIDENCE: usize = 3;
 const MAX_UNITS: u32 = 20;
 /// Storage for a pledge or a claim, paid by whoever makes it (as `TASK_FEE` for a task): otherwise one member could fill
 /// the contract's storage for free and leave it unable to write state or refund deposits.
@@ -304,6 +309,29 @@ impl Koperasi {
             opened: U64(env::block_timestamp()), status: CaseStatus::Open, refund_proposal: None,
         });
         id
+    }
+
+    /// The claimant or the steward, while the case is open: a piece of evidence (a link or a hash and what it shows),
+    /// at most 3 each. Attach `PLEDGE_FEE` (0.01 NEAR) for its storage.
+    #[payable]
+    pub fn add_evidence(&mut self, id: u32, what: String) {
+        let c = case(id);
+        let who = env::predecessor_account_id();
+        require!(c.status == CaseStatus::Open, "the case is closed");
+        require!(who == c.claimant || Some(&who) == self.steward.as_ref(), "only the claimant or the steward");
+        require!(env::attached_deposit() >= PLEDGE_FEE, "attach 0.01 NEAR for the evidence's storage");
+        require!(!what.trim().is_empty() && what.len() <= MAX_WHAT, "evidence: 1 to 280 characters");
+        let key = format!("evidence:{id}").into_bytes();
+        let mut all: Vec<(AccountId, String, U64)> = load(&key).unwrap_or_default();
+        require!(all.iter().filter(|(a, _, _)| *a == who).count() < MAX_EVIDENCE, "at most 3 pieces of evidence each");
+        all.push((who.clone(), what, U64(env::block_timestamp())));
+        save(&key, &all);
+        Event::EvidenceFiled { id, by: who }.emit();
+    }
+
+    /// What each side filed in a case: (who, what, when).
+    pub fn get_evidence(&self, id: u32) -> Vec<(AccountId, String, U64)> {
+        load(&format!("evidence:{id}").into_bytes()).unwrap_or_default()
     }
 
     /// A juror rules once; two matching rulings close the case.

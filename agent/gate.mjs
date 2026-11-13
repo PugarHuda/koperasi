@@ -26,13 +26,14 @@ export async function program() {
 }
 
 /**
- * Runs the gate on-chain, paid by `payer`. Returns the enclave's output and the transaction.
- * @param {string} payer @param {string} contract
+ * Runs the gate on-chain, paid by `payer`. Returns the enclave's output and the transaction. With `job`
+ * ({id, tags, price_usdc}) the enclave also judges the job by the matched by-laws' job_filter (`out.job.allowed`).
+ * @param {string} payer @param {string} contract @param {{ id: string, tags: string[], price_usdc: number }} [job]
  * @returns {Promise<{ tx: string, sender: string, wasm: string, wasm_sha256: string, out: any }>}
  */
-export async function bylawsGate(payer, contract) {
+export async function bylawsGate(payer, contract, job) {
   const { url, hash } = await program();
-  const input = JSON.stringify({ contract, rpc: GATE_RPC, page: PAGE });
+  const input = JSON.stringify({ contract, rpc: GATE_RPC, page: PAGE, ...(job ? { job } : {}) });
   const cost = BigInt(String(await view(OUTLAYER, "estimate_execution_cost", { resource_limits: LIMITS, input_size: input.length })).replace(/"/g, ""));
   const r = await callRaw(account(payer), OUTLAYER, "request_execution",
     { source: { WasmUrl: { url, hash, build_target: "wasm32-wasip2" } }, resource_limits: LIMITS, input_data: input,

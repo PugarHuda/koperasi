@@ -165,24 +165,35 @@ async function byVote(type, body, why) {
  * `address`. The policy refuses anything the members did not list. Returns what landed.
  * @param {bigint} units @param {string} chain @param {string} address
  */
-async function payout(units, chain, address) {
+/**
+ * Pays `units` of USDC on `chain`. `step` records each request the moment the Agent API takes it (`swap`, `payout`:
+ * correlation ids) and `saved` persists it, so a run cut short resumes by waiting on what was sent instead of sending again.
+ */
+async function payout(units, chain, address, step = {}, saved = () => {}) {
   const { token } = JSON.parse(fs.readFileSync(GRANT_FILE, "utf8"));
+  const sent = (key, id) => { step[key] = id; saved(); return id; };
   let r;
   if (chain !== "near") {
     const asset = CHAIN_USDC[chain];
     if (!asset) throw new Error(`no USDC on ${chain}`);
-    const sw = await api("POST", `/agents/${w.agent_id}/swap`, { body: { origin_asset: USDC, destination_asset: asset, amount: String(units) }, grant: token });
-    if (!sw.json.correlation_id) throw new Error(`swap: HTTP ${sw.status} ${JSON.stringify(sw.json).slice(0, 300)}`);
-    const s1 = await done(sw.json.correlation_id, `swap to ${chain} USDC`);
+    if (!step.swap) {
+      const sw = await api("POST", `/agents/${w.agent_id}/swap`, { body: { origin_asset: USDC, destination_asset: asset, amount: String(units) }, grant: token });
+      if (!sw.json.correlation_id) throw new Error(`swap: HTTP ${sw.status} ${JSON.stringify(sw.json).slice(0, 300)}`);
+      sent("swap", sw.json.correlation_id);
+    }
+    const s1 = await done(step.swap, `swap to ${chain} USDC`);
     if (s1.status !== "SUCCESS" || !/^\d+$/.test(String(s1.details?.amount_out))) throw new Error(`swap: ${s1.status} ${s1.failure_code ?? ""}: nothing to withdraw`);
     console.log(`swap to ${chain} USDC:`, s1.status, s1.details.amount_out);
-    r = await api("POST", `/agents/${w.agent_id}/withdraw`, { body: { asset, amount: s1.details.amount_out, chain, recipient: address }, grant: token });
-  } else {
+    if (!step.payout) r = await api("POST", `/agents/${w.agent_id}/withdraw`, { body: { asset, amount: s1.details.amount_out, chain, recipient: address }, grant: token });
+  } else if (!step.payout) {
     r = await api("POST", `/agents/${w.agent_id}/transfer`, { body: { asset: USDC, amount: String(units), recipient: address }, grant: token });
   }
-  console.log(`payout on ${chain} to ${address}: HTTP ${r.status}`, JSON.stringify(r.json).slice(0, 300));
-  if (!r.json.correlation_id) throw new Error(`payout: HTTP ${r.status} ${JSON.stringify(r.json.errors ?? r.json).slice(0, 200)}`);
-  const st = await done(r.json.correlation_id, "payout");
+  if (r) {
+    console.log(`payout on ${chain} to ${address}: HTTP ${r.status}`, JSON.stringify(r.json).slice(0, 300));
+    if (!r.json.correlation_id) throw new Error(`payout: HTTP ${r.status} ${JSON.stringify(r.json.errors ?? r.json).slice(0, 200)}`);
+    sent("payout", r.json.correlation_id);
+  }
+  const st = await done(step.payout, "payout");
   console.log("payout:", st.status, JSON.stringify(st.details ?? {}).slice(0, 400));
   return { address, amount: Number(units) / 1e6, chain, status: st.status, tx: st.details?.tx_hash ?? null,
     destination_chain: st.details?.destination_chain ?? null, destination_tx: st.details?.destination_tx_hash ?? null, at: new Date().toISOString() };
@@ -261,17 +272,29 @@ if (cmd === "create") {
   const routes = await view(dep.contract, "get_payout_routes");
   const { shares, reserve } = splitShare(units, info.share_rule, roster);
   console.log(`share ${process.argv[3]} USDC by the voted rule (${JSON.stringify(info.share_rule)}); ${Number(reserve) / 1e6} USDC stays in the wallet as the reserve`);
-  const payouts = [];
+  // a share cut short (a timeout, a crash) is resumed by running the same command: what landed is not paid again
+  w.shares ??= [];
+  let entry = w.shares.find((x) => x.pending);
+  if (entry && entry.amount !== Number(units) / 1e6) throw new Error(`a share of ${entry.amount} USDC is unfinished: run share ${entry.amount} to finish it`);
+  if (!entry) {
+    entry = { amount: Number(units) / 1e6, rule: info.share_rule, reserve: Number(reserve) / 1e6, payouts: [], at: new Date().toISOString(), pending: true };
+    w.shares.push(entry);
+    save();
+  }
   for (const { account, share } of shares.filter((x) => x.share > 0n)) {
     const [, chain = "near", address = account] = routes.find(([a]) => a === account) ?? [];
+    let p = entry.payouts.find((x) => x.to === account);
+    if (p?.status === "SUCCESS") continue;
+    if (!p) entry.payouts.push((p = { to: account, address, amount: Number(share) / 1e6, chain }));
     try {
-      payouts.push({ ...(await payout(share, chain, address)), to: account });
+      Object.assign(p, await payout(share, chain, address, p, save), { error: undefined });
     } catch (e) {
       console.error(`${account}: ${e.message}`);
-      payouts.push({ to: account, address, amount: Number(share) / 1e6, chain, status: "NOT_SENT", error: e.message.slice(0, 200), at: new Date().toISOString() });
+      Object.assign(p, { status: "NOT_SENT", error: e.message.slice(0, 200), at: new Date().toISOString() });
     }
+    save();
   }
-  (w.shares ??= []).push({ amount: Number(units) / 1e6, rule: info.share_rule, reserve: Number(reserve) / 1e6, payouts, at: new Date().toISOString() });
+  if (entry.payouts.every((x) => x.status === "SUCCESS")) delete entry.pending;
   save();
 } else if (cmd !== "imported") {
   console.log(fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(0, 16).join("\n"));

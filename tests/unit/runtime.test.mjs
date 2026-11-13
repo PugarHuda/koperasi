@@ -45,8 +45,9 @@ mock.module(pathToFileURL(path.join(ROOT, "agent/tee.mjs")).href, { namedExports
 } });
 // the OutLayer gate: matches the voted hash unless a test says otherwise
 mock.module(pathToFileURL(path.join(ROOT, "agent/gate.mjs")).href, { namedExports: {
-  bylawsGate: async () => { w.gates = (w.gates ?? 0) + 1; return { tx: "GateTx", sender: dep.steward,
-    out: { match: !w.gateFails, voted_sha256: sha256(fs.readFileSync(path.join(ROOT, dep.configUri))) } }; },
+  bylawsGate: async () => { w.gates = (w.gates ?? 0) + 1; if (w.gateSilent > 0) { w.gateSilent--; return { tx: "Silent", sender: dep.steward, out: null }; }
+    return { tx: "GateTx", sender: dep.steward,
+    out: { match: !w.gateFails, job: { id: w.assignment.assignmentId, allowed: !w.jobRefused, reason: "test" }, voted_sha256: sha256(fs.readFileSync(path.join(ROOT, dep.configUri))) } }; },
 } });
 const market = {
   platformConfig: async () => ({ platform_fee_bps: 500 }),
@@ -90,7 +91,7 @@ const { runOnce } = await import("../../agent/runtime.mjs");
 
 const fresh = (t, setup = {}) => {
   fs.rmSync(process.env.KOP_STATE, { force: true });
-  Object.assign(w, { receipts: [], calls: [], completions: 0, signatureStatus: 200, submitFails: 0, receiptFails: 0, gateFails: false, gates: 0,
+  Object.assign(w, { receipts: [], calls: [], completions: 0, signatureStatus: 200, submitFails: 0, receiptFails: 0, gateFails: false, gates: 0, gateSilent: 0, jobRefused: false,
     assignment: { assignmentId: `a-${t}`, status: "in_progress", escrowAmount: "6" } }, setup);
 };
 const state = () => JSON.parse(fs.readFileSync(process.env.KOP_STATE, "utf8"));
@@ -146,6 +147,25 @@ test("the by-laws gate runs before the job and its transaction goes into the rec
   const proof = JSON.parse(w.calls.find((c) => c.method === "record_receipt").args.proof);
   assert.deepEqual(proof.gate, { tx: "GateTx", by: dep.steward });
   assert.ok(proof.model, "the model's proof is still there");
+});
+
+test("a gate that gives no answer is asked once more; two silences in a row and the job is not started", async () => {
+  fresh(7, { gateSilent: 1 });
+  await run();
+  assert.equal(w.gates, 2);
+  assert.equal(JSON.parse(w.calls.find((c) => c.method === "record_receipt").args.proof).gate.tx, "GateTx");
+  fresh(8, { gateSilent: 2 });
+  await run();
+  assert.equal(w.gates, 2);
+  assert.equal(w.completions, 0);
+  assert.equal(w.calls.length, 0);
+});
+
+test("the enclave judges the job by the voted by-laws: a job it refuses is not started", async () => {
+  fresh(9, { jobRefused: true });
+  await run();
+  assert.equal(w.completions, 0);
+  assert.equal(w.calls.length, 0);
 });
 
 test("a by-laws gate that does not match: the job is not started and nothing is spent", async () => {

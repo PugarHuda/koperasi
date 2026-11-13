@@ -305,8 +305,17 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
       // the by-laws gate: an enclave reads the voted hash from the chain and hashes the file, on-chain, before each job
       let gate;
       try {
-        const g = await bylawsGate(process.env.KOP_GATE_PAYER ?? dep.steward, dep.contract);
+        const payer = process.env.KOP_GATE_PAYER ?? dep.steward;
+        // the enclave also judges this job by the by-laws it matched: the receipt's job id, its tags and what it pays
+        const judged = { id: a.assignmentId, tags: job.tags ?? [], price_usdc: Number(a.escrowAmount) };
+        let g = await bylawsGate(payer, dep.contract, judged);
+        // no answer at all (the enclave's resume came back empty, seen once on testnet) is asked once more; a mismatch is not
+        if (g.out === null || g.out === undefined) {
+          log(`the by-laws gate gave no answer (tx ${g.tx}); asking once more`);
+          g = await bylawsGate(payer, dep.contract, judged);
+        }
         if (!g.out?.match || g.out.voted_sha256 !== hash) throw new Error(`no match (${JSON.stringify(g.out).slice(0, 160)})`);
+        if (!g.out.job?.allowed || g.out.job.id !== judged.id) throw new Error(`the job is not one the by-laws allow (${g.out.job?.reason ?? "not judged"})`);
         gate = { tx: g.tx, by: g.sender };
         log(`by-laws v${version} checked inside an Intel TDX enclave (OutLayer): tx ${g.tx}`);
       } catch (e) {

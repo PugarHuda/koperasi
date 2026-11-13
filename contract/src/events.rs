@@ -188,4 +188,13 @@ pub enum Event {
     /// The steward's term ran out: the role is empty until the members appoint one.
     #[event_version("1.0.0")]
     StewardTermEnded { steward: AccountId },
+    /// The claimant or the steward filed a piece of evidence in a court case.
+    #[event_version("1.0.0")]
+    EvidenceFiled { id: u32, by: AccountId },
+    /// The members voted which other co-ops' work records count here (the passport).
+    #[event_version("1.0.0")]
+    SisterCoopsSet { coops: Vec<AccountId> },
+    /// A sister co-op's work record was read and stamped into an account's passport (`kept` false: the stamp removed).
+    #[event_version("1.0.0")]
+    PassportStamped { account_id: AccountId, coop: AccountId, done: u32, kept: bool },
 }

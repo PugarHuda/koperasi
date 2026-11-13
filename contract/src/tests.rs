@@ -2332,3 +2332,71 @@ fn a_work_record_is_a_token_read_live_and_never_transferred() {
     k.burn_work_record();
     assert!(logs_have("\"nft_burn\"") && k.nft_token(juror.to_string()).is_none());
 }
+
+/// The passport: a sister co-op's work record, read by a cross-contract call, counts as one more trust source here.
+#[test]
+fn a_sister_coops_work_record_counts_as_one_trust_source_and_a_stale_one_is_removed() {
+    let mut k = setup();
+    let sister = acc("koperasi-sister.testnet");
+    let frank = acc("frank.testnet");
+    let token = |owner: &str, done: u32, good: bool| Some(near_sdk::serde_json::json!({ "owner_id": owner, "metadata": {
+        "extra": near_sdk::serde_json::json!({ "done": done, "earned": "5", "good_standing": good }).to_string() } }));
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_sister_coops(vec![sister.clone()]); }), "only the DAO");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_sister_coops(vec![me()]); }), "not itself");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone()]);
+    assert!(logs_have("sister_coops_set"));
+    at_paying(&acc("anyone.testnet"), DAY, commons::PLEDGE_FEE);
+    assert!(fails(|| { let _ = k.stamp_passport(frank.clone(), acc("koperasi-fake.testnet")); }), "only a recognised co-op");
+    let _ = k.stamp_passport(frank.clone(), sister.clone());
+    as_(&me(), near(0));
+    // someone else's token, no finished work, or out of good standing: no stamp
+    assert!(!k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(token("mallory.testnet", 3, true))));
+    assert!(!k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(token("frank.testnet", 0, true))));
+    assert!(!k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(token("frank.testnet", 3, false))));
+    assert_eq!(k.get_trust_sources(frank.clone()), 0);
+    assert!(k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(token("frank.testnet", 3, true))));
+    assert!(logs_have("passport_stamped"));
+    assert_eq!(k.get_trust_sources(frank.clone()), 1);
+    // read again: still one stamp per co-op
+    assert!(k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(token("frank.testnet", 4, true))));
+    assert_eq!(k.get_passport(frank.clone()).len(), 1);
+    assert_eq!(k.get_passport(frank.clone())[0].done, 4);
+    // a failed read changes nothing; a read that no longer holds removes the stamp
+    assert!(!k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Err(near_sdk::PromiseError::Failed)));
+    assert_eq!(k.get_trust_sources(frank.clone()), 1);
+    assert!(!k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(None)));
+    assert_eq!(k.get_trust_sources(frank.clone()), 0);
+    // a co-op the members drop stops counting
+    assert!(k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(token("frank.testnet", 4, true))));
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![]);
+    assert_eq!(k.get_trust_sources(frank.clone()), 0);
+    assert_eq!(k.get_passport(frank).len(), 1, "kept, but it does not count");
+}
+
+/// Both sides are heard: the claimant and the steward file evidence while the case is open, three pieces each.
+#[test]
+fn the_claimant_and_the_steward_file_evidence_while_the_case_is_open() {
+    let mut k = court();
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
+    let frank = acc("frank.testnet");
+    assert!(fails(|| { at(&frank, 2 * DAY); k.add_evidence(id, "brief vs report".into()); }), "pays for its storage");
+    assert!(fails(|| { at_paying(&acc("alice.testnet"), 2 * DAY, commons::PLEDGE_FEE); k.add_evidence(id, "x".into()); }), "a third party");
+    assert!(fails(|| { at_paying(&frank, 2 * DAY, commons::PLEDGE_FEE); k.add_evidence(id, " ".into()); }), "empty");
+    for n in 0..3 {
+        at_paying(&frank, 2 * DAY, commons::PLEDGE_FEE);
+        k.add_evidence(id, format!("sha256 of the brief and the report, part {n}"));
+    }
+    assert!(logs_have("evidence_filed"));
+    assert!(fails(|| { at_paying(&frank, 2 * DAY, commons::PLEDGE_FEE); k.add_evidence(id, "a fourth".into()); }), "three each");
+    at_paying(&steward(), 2 * DAY, commons::PLEDGE_FEE);
+    k.add_evidence(id, "the market's own ruling: https://market.near.ai/jobs/job-1".into());
+    let e = k.get_evidence(id);
+    assert_eq!(e.len(), 4);
+    assert_eq!(e[3].0, steward());
+    // closed: nothing more
+    at(&acc("anyone.testnet"), 2 * DAY + 3 * DAY);
+    k.close_case(id);
+    assert!(fails(|| { at_paying(&steward(), 6 * DAY, commons::PLEDGE_FEE); k.add_evidence(id, "late".into()); }));
+}
