@@ -312,7 +312,9 @@ impl Koperasi {
     }
 
     fn assert_agent(&self) {
-        require!(env::predecessor_account_id() == self.agent_id, "only the agent");
+        let who = env::predecessor_account_id();
+        // 0.3.1: or a further agent the members voted (lending.rs `set_agents`)
+        require!(who == self.agent_id || crate::lending::more_agents().iter().any(|a| a.account == who), "only the agent");
     }
 
     // ---------- membership: Sputnik role `member` is the source of truth ----------
@@ -682,6 +684,9 @@ impl Koperasi {
             env::storage_write(&proof_key(&job_id), p.as_bytes());
         }
         Event::ReceiptRecorded { job_id: job_id.clone(), price, inference_cost, config_version: self.config.version }.emit();
+        if env::predecessor_account_id() != self.agent_id {
+            env::storage_write(&crate::lending::receipt_agent_key(&job_id), env::predecessor_account_id().as_bytes());
+        }
         self.receipt_index.insert(job_id.clone(), self.receipts.len());
         self.receipts.push(Receipt {
             job_id,
@@ -699,6 +704,7 @@ impl Koperasi {
     pub fn update_receipt(&mut self, job_id: String, status: ReceiptStatus) {
         self.assert_agent();
         let i = *self.receipt_index.get(&job_id).unwrap_or_else(|| env::panic_str("no receipt"));
+        require!(self.get_receipt_agent(job_id.clone()) == env::predecessor_account_id(), "only the agent that recorded it");
         let r = self.receipts.get_mut(i).unwrap();
         use ReceiptStatus::*;
         let ok = matches!((r.status, status), (Submitted, Paid | Refunded | Disputed) | (Disputed, Paid | Refunded));

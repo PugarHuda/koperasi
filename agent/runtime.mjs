@@ -223,13 +223,17 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
       return;
     }
   }
-  const agent = account(dep.agent);
+  // KOP_AGENT: run as one of the further agents the members voted (contract 0.3.1); it takes only its voted tags
+  const me = process.env.KOP_AGENT ?? dep.agent;
+  const agent = account(me);
+  const voted = (await view(dep.contract, "get_agents").catch(() => null))?.find((a) => a.account === me);
+  if (me !== dep.agent && !voted) throw new Error(`${me} is not an agent the members voted`);
 
   // bid
   const { bids = [] } = (await m.myBids()) ?? {};
   const bidOn = new Set(bids.map((b) => b.jobId));
   const { jobs = [] } = await m.board();
-  const want = new Set(config.job_filter.tags_any.map((t) => t.toLowerCase()));
+  const want = new Set(config.job_filter.tags_any.map((t) => t.toLowerCase()).filter((t) => !voted?.tags.length || voted.tags.includes(t)));
   for (const job of jobs) {
     if (bidOn.has(job.jobId)) continue;
     const tagged = (job.tags ?? []).some((t) => want.has(t.toLowerCase()));

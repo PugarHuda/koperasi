@@ -14,6 +14,10 @@
 //!   principal back to the fund, so the fund revolves. A loan unpaid 7 days after its term can be called late by anyone:
 //!   the borrower, and so their guarantors, lose good standing.
 //!
+//! - **More than one agent** (0.3.1): besides the agent the co-op was founded with, the members vote further agents and
+//!   the job tags each one takes (`set_agents`). Any of them records receipts under the same by-laws and court; a receipt
+//!   names the agent that did the job, and only that agent updates it. Each agent's runtime takes only its voted tags.
+//!
 //! State lives under its own storage keys, so the upgrade needs no state migration.
 
 use crate::tasks::{ext_dao_proposals, load, save, DAY_NS, GAS_ACT, GAS_PROPOSE, PAYOUT_BOND};
@@ -22,6 +26,23 @@ use crate::*;
 const KEY_FUNDS: &[u8] = b"share_funds";
 const KEY_LOAN_RULE: &[u8] = b"loan_rule";
 const KEY_LOAN_FUND: &[u8] = b"loan_fund";
+const KEY_AGENTS: &[u8] = b"more_agents";
+const MAX_AGENTS: usize = 5;
+
+/// A further agent the members voted, and the job tags it takes.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct AgentSkill {
+    pub account: AccountId,
+    pub tags: Vec<String>,
+}
+
+pub(crate) fn more_agents() -> Vec<AgentSkill> {
+    load(KEY_AGENTS).unwrap_or_default()
+}
+pub(crate) fn receipt_agent_key(job: &str) -> Vec<u8> {
+    format!("receipt_agent:{job}").into_bytes()
+}
 const MAX_FUNDS: usize = 3;
 const MAX_GUARANTORS: usize = 3;
 const LATE_GRACE_DAYS: u64 = 7;
@@ -118,6 +139,34 @@ impl Koperasi {
 
 #[near]
 impl Koperasi {
+    // ---------- more than one agent ----------
+
+    /// DAO only: further agents (at most 5, not the founding agent) and the job tags each takes (1 to 8, lowercase).
+    pub fn set_agents(&mut self, agents: Vec<AgentSkill>) {
+        self.assert_dao();
+        require!(agents.len() <= MAX_AGENTS, "at most 5 further agents");
+        for a in &agents {
+            require!(a.account != self.agent_id, "the founding agent is already the agent");
+            require!(!a.tags.is_empty() && a.tags.len() <= 8 && a.tags.iter().all(|t| !t.is_empty() && t.len() <= 32 && *t == t.to_lowercase()),
+                "tags: 1 to 8, lowercase, up to 32 characters");
+        }
+        Event::AgentsSet { agents: agents.iter().map(|a| a.account.clone()).collect() }.emit();
+        save(KEY_AGENTS, &agents);
+    }
+
+    /// The founding agent (empty tags: every tag the by-laws allow) and the further agents with their tags.
+    pub fn get_agents(&self) -> Vec<AgentSkill> {
+        let mut all = vec![AgentSkill { account: self.agent_id.clone(), tags: vec![] }];
+        all.extend(more_agents());
+        all
+    }
+
+    /// The agent that recorded a receipt (the founding agent when none is named).
+    pub fn get_receipt_agent(&self, job_id: String) -> AccountId {
+        env::storage_read(&receipt_agent_key(&job_id)).and_then(|b| String::from_utf8(b).ok()).and_then(|s| s.parse().ok())
+            .unwrap_or_else(|| self.agent_id.clone())
+    }
+
     // ---------- funds from the surplus ----------
 
     /// DAO only: up to 3 funds paid from every profit share's reserve part; together at most the rule's reserve.

@@ -76,7 +76,7 @@ export const EVENTS = ["join_requested", "join_cancelled", "member_added", "memb
   "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "veto_window_set", "task_held", "task_vetoed", "task_approved",
   "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited",
-  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "share_funds_set", "fund_paid", "guaranteed", "guarantee_withdrawn", "guarantee_called", "guarantee_cleared", "loan_rule_set", "loan_requested", "loan_filed", "loan_repaid", "loan_late", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
+  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "agents_set", "share_funds_set", "fund_paid", "guaranteed", "guarantee_withdrawn", "guarantee_called", "guarantee_cleared", "loan_rule_set", "loan_requested", "loan_filed", "loan_repaid", "loan_late", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
 /**
@@ -139,6 +139,7 @@ export function describeEvent({ event: e, data: d }) {
     case_appealed: () => `${short(d.claimant)} appealed court case #${d.id} to the members: DAO proposal #${d.proposal_id}`,
     appeal_settled: () => `The members ${d.upheld ? "overturned the jury: the buyer of case #" + d.id + " is refunded" : "kept the jury's ruling on case #" + d.id}`,
     payout_route_set: () => `${short(d.account_id)} wants payouts on ${d.chain === "near" ? "NEAR" : { base: "Base", arb: "Arbitrum", eth: "Ethereum" }[d.chain] ?? "?"}`,
+    agents_set: () => `The members voted ${d.agents?.length ?? 0} further agent(s), each with the jobs it takes`,
     share_funds_set: () => `The members set ${d.funds} fund(s) paid from every profit share's reserve`,
     fund_paid: () => `The ${d.name} fund got ${usdcOf(d.amount)} from a profit share`,
     guaranteed: () => `${short(d.guarantor)} stands surety for ${short(d.account_id)}`,

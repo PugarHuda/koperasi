@@ -2583,3 +2583,31 @@ fn a_member_borrows_from_the_voted_fund_repays_with_interest_and_a_late_loan_mar
     // a filed loan that the DAO did not take is undone
     at(&me(), 50 * DAY);
 }
+
+/// 0.3.1: the members vote a further agent and its tags; it records receipts under the same rules, and only the agent
+/// that recorded a receipt updates it.
+#[test]
+fn a_further_agent_the_members_voted_records_its_own_receipts() {
+    let mut k = setup();
+    let tr = acc("translator.testnet");
+    let skill = |a: &AccountId, tags: &[&str]| lending::AgentSkill { account: a.clone(), tags: tags.iter().map(|t| t.to_string()).collect() };
+    assert!(fails(|| { as_(&tr, near(0)); k.record_receipt("t-1".into(), U128(1), U128(0), H1.into(), "00".into(), None); }), "not voted yet");
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_agents(vec![skill(&tr, &["translation"])]); }), "only the DAO");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_agents(vec![skill(&tr, &["Translation"])]); }), "lowercase tags");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_agents(vec![skill(&agent(), &["translation"])]); }), "not the founding agent");
+    as_(&dao(), near(0));
+    k.set_agents(vec![skill(&tr, &["translation", "localization"])]);
+    assert_eq!(k.get_agents().len(), 2);
+    as_(&tr, near(0));
+    k.record_receipt("t-1".into(), U128(1), U128(0), H1.into(), "00".into(), None);
+    assert_eq!(k.get_receipt_agent("t-1".into()), tr);
+    receipt(&mut k, "j-1", 1, H1);
+    assert_eq!(k.get_receipt_agent("j-1".into()), agent());
+    assert!(fails(|| { as_(&agent(), near(0)); k.update_receipt("t-1".into(), ReceiptStatus::Paid); }), "another agent's receipt");
+    as_(&tr, near(0));
+    k.update_receipt("t-1".into(), ReceiptStatus::Paid);
+    // voted out: it records no more
+    as_(&dao(), near(0));
+    k.set_agents(vec![]);
+    assert!(fails(|| { as_(&tr, near(0)); k.record_receipt("t-2".into(), U128(1), U128(0), H1.into(), "00".into(), None); }));
+}

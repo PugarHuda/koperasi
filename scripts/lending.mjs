@@ -59,7 +59,7 @@ if (run("loans")) {
     }
   }
   const loans = [];
-  for (const [who, amount, repay] of [[B, 3n * NEAR / 10n, true], [G, 2n * NEAR / 10n, false]]) {
+  for (const [who, amount, repay] of /** @type {[string, bigint, boolean][]} */ ([[B, 3n * NEAR / 10n, true], [G, 2n * NEAR / 10n, false]])) {
     const r = await callRaw(account(who), K, "request_loan", { amount: String(amount) }, { tgas: 250 });
     say(`${who.split("-")[1]} borrowed ${Number(amount / 10n ** 21n) / 1000} NEAR`, r);
     await new Promise((ok) => setTimeout(ok, 4000));

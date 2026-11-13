@@ -188,6 +188,9 @@ pub enum Event {
     /// The steward's term ran out: the role is empty until the members appoint one.
     #[event_version("1.0.0")]
     StewardTermEnded { steward: AccountId },
+    /// The members voted further agents and the job tags each takes.
+    #[event_version("1.0.0")]
+    AgentsSet { agents: Vec<AccountId> },
     /// The members voted the funds paid from every profit share's reserve (education, social…).
     #[event_version("1.0.0")]
     ShareFundsSet { funds: u32 },
