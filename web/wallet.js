@@ -187,7 +187,9 @@ async function load() {
     .map(async (c) => [c.id, await view(dep.contract, "get_appeal", { id: c.id }).catch(() => null)])));
   const [routes, token] = await Promise.all([view(dep.contract, "get_payout_routes"), view(dep.contract, "nft_token", { token_id: me })]
     .map((x) => x.catch(() => undefined)));
-  return { appeals, routes, token, onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
+  // contract 0.2.9: the dues the members voted and where this member stands on them (null on older code or no dues)
+  const duesStatus = member ? await view(dep.contract, "get_dues_status", { account_id: me }).catch(() => null) : null;
+  return { duesStatus, appeals, routes, token, onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
     board, tasks, dues, records: Object.fromEntries(recs), pledges, pclaims, cases, standing, receipts };
 }
 
@@ -269,6 +271,49 @@ const COURT_BOND = 5n * 10n ** 23n; // 0.5 NEAR (COURT_BOND)
 const APPEAL_BOND = 10n ** 24n; // 1 NEAR (APPEAL_BOND)
 const DAY_MS = 86_400_000;
 const nsMs = (ns) => Number(BigInt(ns) / 1_000_000n);
+/**
+ * What needs this member now, in one list at the top of the panel: proposals they have not voted on, court cases where
+ * they are a juror and have not ruled, pledges they called in and must confirm, dues coming due. With the browser's
+ * permission, a notification when something new appears (remembered per account in this browser only).
+ */
+export function inboxItems(s, now = Date.now()) {
+  const items = [];
+  for (const p of s.proposals) {
+    if (p.status === "InProgress" && !p.votes?.[me]) items.push({ key: `p${p.id}`, text: `Vote on DAO proposal #${p.id}: ${oneLine(p.description).slice(0, 90)}` });
+  }
+  for (const c of s.cases ?? []) {
+    if (c.status === "Open" && c.jurors.includes(me) && !c.votes.some(([j]) => j === me)) {
+      items.push({ key: `c${c.id}`, text: `You are a juror on court case #${c.id}: rule by ${new Date(nsMs(c.opened) + 3 * DAY_MS).toLocaleDateString()}` });
+    }
+  }
+  for (const c of s.pclaims ?? []) {
+    if (c.holder === me && c.status === "Open") items.push({ key: `k${c.id}`, text: `Say whether pledge #${c.pledge}, which you called in, was kept` });
+  }
+  if (s.duesStatus) {
+    const [until, ok] = s.duesStatus;
+    const left = nsMs(until) - now;
+    if (!ok) items.push({ key: "dues-late", text: "Your dues are more than 7 days late: you are out of good standing until you pay" });
+    else if (left < 7 * DAY_MS) items.push({ key: `dues${until}`, text: `Your dues fall due on ${new Date(nsMs(until)).toLocaleDateString()}` });
+  }
+  return items;
+}
+
+function inboxPanel(s) {
+  const items = inboxItems(s);
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(`kop-seen:${me}`) ?? "[]"); } catch { /* private mode */ }
+  const fresh = items.filter((i) => !seen.includes(i.key));
+  if (fresh.length && typeof Notification !== "undefined" && Notification.permission === "granted") {
+    try { new Notification("Koperasi: something needs you", { body: fresh.map((i) => i.text).join("\n").slice(0, 300) }); } catch { /* not allowed here */ }
+  }
+  try { localStorage.setItem(`kop-seen:${me}`, JSON.stringify(items.map((i) => i.key))); } catch { /* private mode */ }
+  const ask = typeof Notification !== "undefined" && Notification.permission === "default"
+    ? ' <button type="button" class="linkish" id="w-notify">Tell me in this browser when something new needs me</button>' : "";
+  return `<div class="inbox" id="w-inbox"><h3 class="jh">Needs you${items.length ? ` (${items.length})` : ""}</h3>${items.length
+    ? `<ul>${items.map((i) => `<li>${fresh.includes(i) ? "<strong>new</strong> " : ""}${esc(i.text)}</li>`).join("")}</ul>`
+    : `<p class="small">Nothing waits for you: no vote, no jury, no pledge to confirm, no dues due this week.</p>`}<p class="small">${ask}</p></div>`;
+}
+
 function commonsPanel(s) {
   if (!s.member || !s.pledges || !s.pclaims || !s.cases) return "";
   const [st, good] = s.standing ?? [{}, true];
@@ -516,6 +561,7 @@ async function render() {
     if (s.pending && !s.inRole) html += `<p class="small"><button type="button" class="linkish" id="w-cancel">Cancel and take my ${nearAmt(deposit)} NEAR back</button></p>`;
   } else {
     const open = s.proposals.filter((p) => p.status === "InProgress").reverse();
+    html += inboxPanel(s);
     html += `<div class="me-card">
         <div><span>Your vote</span><strong>1 of ${s.members}</strong></div>
         <div><span>Contribution points</span><strong>${s.member.points}</strong></div>
@@ -656,6 +702,8 @@ async function render() {
     }
     act(`Stake ${n} NEAR`, () => send(s.pool, "deposit_and_stake", {}, { deposit: BigInt(n) * 10n ** 24n, tgas: 100 }));
   };
+  const notify = $("w-notify");
+  if (notify) notify.onclick = () => Notification.requestPermission().then(() => render());
   on("w-sync-sav", "Savings sync", () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
   on("w-claim", "Claim", () => send(dep.contract, "claim_share", {}, { tgas: 60 }), async () =>
     (BigInt(await view(dep.contract, "get_claimable", { account_id: me })) > 0n ? null : "Nothing to claim any more: it was claimed already."));

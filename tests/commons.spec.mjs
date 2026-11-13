@@ -59,6 +59,18 @@ test("the agent's job won on a third-party testnet market is shown with its revi
   await expect(page.locator("#p-agent")).toContainText(/On Taskbond, another team's testnet market, it won a job its reviewer AI scored \d+\/100/);
 });
 
+test("the inbox lists what needs the member: a case where they are a juror, a pledge to confirm, dues falling due", async ({ page }, testInfo) => {
+  onlyLocal(testInfo);
+  await answerViews(page, { get_cases: [kase()], get_standing: good,
+    get_pledges: [pledge(0, BOB)], get_pledge_claims: [{ id: 3, pledge: 0, holder: ALICE, status: "Open", ts: String(now()) }],
+    get_dues_status: [String(now() + 3n * DAY), true] });
+  await page.goto(`/?as=${ALICE}`);
+  const inbox = page.locator("#w-inbox");
+  await expect(inbox).toContainText("You are a juror on court case #0");
+  await expect(inbox).toContainText("Say whether pledge #0, which you called in, was kept");
+  await expect(inbox).toContainText("Your dues fall due on");
+});
+
 test("a juror is offered uphold and reject; someone else is not", async ({ page }, testInfo) => {
   onlyLocal(testInfo);
   await answerViews(page, { get_pledges: [], get_pledge_claims: [], get_cases: [kase()], get_standing: good });
