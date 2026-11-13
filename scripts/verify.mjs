@@ -483,6 +483,19 @@ if (d.lending?.loans) {
     "savings and loans: members with a guarantor borrowed from the fund the members voted, and repaid into the treasury", res.map((r) => r.line).join("; "));
 }
 
+// 0.3.1: a second agent the members voted, with its tags, holding only a function-call key; its receipt names it
+if (d.agents?.translator) {
+  const t = d.agents.translator;
+  const [agents, keys, who, proof] = await Promise.all([view(d.contract, "get_agents"), rawQuery({ request_type: "view_access_key_list", account_id: t }),
+    view(d.contract, "get_receipt_agent", { job_id: d.agents.receipt }), view(d.contract, "get_proof", { job_id: d.agents.receipt })]);
+  const mine = agents.find((a) => a.account === t);
+  const fcOnly = keys.keys.every((k) => k.access_key.permission !== "FullAccess"
+    && k.access_key.permission.FunctionCall?.receiver_id === d.contract);
+  const ok = Boolean(mine?.tags.length) && fcOnly && who === t && Boolean(JSON.parse(proof ?? "{}").model);
+  check(ok, "a second agent the members voted takes only its jobs (translation, localization), holds only a function-call key, and its receipt names it",
+    `${t}: tags ${mine?.tags.join(", ")} by #${d.agents.vote}; keys: ${keys.keys.length} function-call only; receipt ${d.agents.receipt.slice(0, 14)}… recorded by it, TEE proof ${JSON.parse(proof ?? "{}").model}`);
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {

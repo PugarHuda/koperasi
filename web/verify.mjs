@@ -12627,6 +12627,23 @@ var init_verify = __esm({
         res.map((r2) => r2.line).join("; ")
       );
     }
+    if (d2.agents?.translator) {
+      const t2 = d2.agents.translator;
+      const [agents, keys2, who, proof] = await Promise.all([
+        view2(d2.contract, "get_agents"),
+        rawQuery({ request_type: "view_access_key_list", account_id: t2 }),
+        view2(d2.contract, "get_receipt_agent", { job_id: d2.agents.receipt }),
+        view2(d2.contract, "get_proof", { job_id: d2.agents.receipt })
+      ]);
+      const mine = agents.find((a) => a.account === t2);
+      const fcOnly = keys2.keys.every((k2) => k2.access_key.permission !== "FullAccess" && k2.access_key.permission.FunctionCall?.receiver_id === d2.contract);
+      const ok = Boolean(mine?.tags.length) && fcOnly && who === t2 && Boolean(JSON.parse(proof ?? "{}").model);
+      check(
+        ok,
+        "a second agent the members voted takes only its jobs (translation, localization), holds only a function-call key, and its receipt names it",
+        `${t2}: tags ${mine?.tags.join(", ")} by #${d2.agents.vote}; keys: ${keys2.keys.length} function-call only; receipt ${d2.agents.receipt.slice(0, 14)}\u2026 recorded by it, TEE proof ${JSON.parse(proof ?? "{}").model}`
+      );
+    }
     if (d2.redteam?.length) {
       const res = await Promise.all(d2.redteam.map(async (r2) => {
         const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.tx, sender_account_id: r2.by, wait_until: "FINAL" });

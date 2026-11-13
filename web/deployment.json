@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "4d379b1acffd931d87d428a889cd74ebbfd50e29cb8637ac544c6d40b0a17347",
   "configUri": "config/config.v6.yaml",
-  "codeSha256": "fb807cd76d0b2dedadf1af09b30335ce13af158cec615ef909921a9739d7c51d",
+  "codeSha256": "cd7d70d2fc8abff164fd6d2c0775166c1b84f9edf187007dc486d40ec15b28ca",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -614,5 +614,10 @@
         }
       ]
     }
+  },
+  "agents": {
+    "translator": "kop-translator-mwepareu.testnet",
+    "vote": 110,
+    "receipt": "demo-105eb63b-176b-47c3-a585-8c5f4e3ae0f7"
   }
 }

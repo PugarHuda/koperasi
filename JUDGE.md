@@ -50,8 +50,8 @@ every day (`.github/workflows/tests.yml`).
 
 | # | Check | Command | You should see |
 |---|---|---|---|
-| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `fb807cd76d0b2dedadf1af09b30335ce13af158cec615ef909921a9739d7c51d`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
-| 15 | The tests | `npm test` | lint, typecheck, unit tests and 149 contract tests (unit, fuzz, invariant) pass |
+| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `cd7d70d2fc8abff164fd6d2c0775166c1b84f9edf187007dc486d40ec15b28ca`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
+| 15 | The tests | `npm test` | lint, typecheck, unit tests and 150 contract tests (unit, fuzz, invariant) pass |
 | 16 | Against the real Sputnik DAO code, not a mock | `cd contract && cargo test --test sputnik_sandbox` (Linux/macOS) | a task paid out of the treasury of a local DAO running the showcase DAO's own wasm |
 
 ## What is not real yet (said plainly)
