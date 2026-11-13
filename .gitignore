@@ -29,3 +29,4 @@ video/src/timeline.json
 
 # OutLayer WASI builds (the published .wasm is web/outlayer/)
 outlayer/*/target/
+agent/.share.log

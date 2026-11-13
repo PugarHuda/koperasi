@@ -87,6 +87,7 @@ globalThis.fetch = async (url, init = {}) => {
 
 process.env.NEARAI_API_KEY = "sk-test";
 process.env.KOP_MARKET_URL = "https://market.example";
+process.env.KOP_NO_SHARE = "1"; // the runtime would start the scheduled Intents share
 process.env.KOP_STATE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "kop-")), "state.json"); // read once, at import
 const { runOnce } = await import("../../agent/runtime.mjs");
 

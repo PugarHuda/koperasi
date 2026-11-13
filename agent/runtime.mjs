@@ -9,6 +9,7 @@
 // env: KOP_MARKET_URL (default https://market.near.ai), KOP_MARKET_TOKEN (aat_…), NEARAI_API_KEY (sk-…).
 // Without NEARAI_API_KEY the agent takes no work on the real market. Only against the local stand-in
 // (agent/mock-market.mjs, used by `npm run demo`) does it deliver a draft that says plainly no model wrote it.
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
@@ -372,6 +373,12 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         log(`"${job.title}": ${r.status} → ${next}`);
       }
     }
+  }
+  // profit shares on the by-laws' schedule (v5 `profit_share`): `intents.mjs share auto` decides whether one is due and
+  // holds a lock, so starting it on every pass is safe; it runs on its own (the wallet's timelocks take minutes a payout)
+  if (config.profit_share && dep.intents?.agent_id && !process.env.KOP_NO_SHARE) {
+    const out = fs.openSync(path.join(ROOT, "agent", ".share.log"), "a");
+    spawn(process.execPath, [path.join(ROOT, "scripts", "intents.mjs"), "share", "auto"], { detached: true, stdio: ["ignore", out, out] }).unref();
   }
 }
 

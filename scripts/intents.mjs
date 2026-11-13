@@ -12,6 +12,8 @@
 //                                            (set on the contract with set_payout_route: NEAR, Base, Arbitrum or Ethereum)
 //   node scripts/intents.mjs share <USDC>    the agent shares USDC from its wallet with the members, split by the
 //                                            contract's voted share rule, each part paid on the member's own route
+//   node scripts/intents.mjs share auto      the same on the by-laws' schedule (v5 `profit_share`): does nothing until
+//                                            one is due; the agent's runtime starts it on every pass
 //
 // The owner is the DAO's Ethereum address from NEAR Chain Signatures: it has no private key, so every owner intent
 // (create, grant, policy, freeze) is an ERC-191 message the MPC network signs only when the DAO calls it, by a members'
@@ -24,6 +26,7 @@ import path from "node:path";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { baseDecode } from "near-api-js";
 import { splitShare } from "../web/share.js";
+import { loadApprovedConfig } from "../agent/runtime.mjs";
 import { DEPLOYMENT, ROOT, view } from "./lib.mjs";
 import { PATH, SIGNER, daoAddress, eip191, recover, signByVote } from "./chainsig.mjs";
 
@@ -265,13 +268,42 @@ if (cmd === "create") {
   w.policy = { proposal: r.proposal, tx: r.tx, intent_sha256: r.digest, revision: cur.revision + 1, routes };
   save();
 } else if (cmd === "share") {
-  const units = BigInt(Math.round(Number(process.argv[3]) * 1e6));
+  // one share at a time: a second run while one waits out the wallet's timelocks could send a payout twice
+  const LOCK = path.join(ROOT, ".keys", "share.lock");
+  try { fs.writeFileSync(LOCK, String(process.pid), { flag: "wx" }); } catch {
+    if (Date.now() - fs.statSync(LOCK).mtimeMs < 3 * 3600_000) { console.log("a share is already running (.keys/share.lock)"); process.exit(0); }
+    fs.writeFileSync(LOCK, String(process.pid)); // older than any share takes: a run that died
+  }
+  process.on("exit", () => { try { fs.rmSync(LOCK); } catch { /* gone */ } });
+  let amount = process.argv[3];
+  if (amount === "auto") {
+    // the schedule the members voted in the by-laws (v5 `profit_share`): due `every_days` after the last share; it shares
+    // the wallet's USDC above `keep_usdc`, if that is at least `min_usdc`. A share cut short is finished first.
+    const { config } = await loadApprovedConfig(dep);
+    const ps = config.profit_share;
+    const open = w.shares?.find((x) => x.pending);
+    if (open) amount = String(open.amount);
+    else if (!ps) { console.log("the voted by-laws set no profit-share schedule"); process.exit(0); }
+    else {
+      const last = Math.max(0, ...(w.shares ?? []).map((x) => Date.parse(x.at)));
+      if (Date.now() - last < ps.every_days * 86_400_000) {
+        console.log(`not due: the last share was ${new Date(last).toISOString()}; the by-laws say every ${ps.every_days} days`);
+        process.exit(0);
+      }
+      const bal = (await api("GET", `/agents/${w.agent_id}/balances`)).json.balances?.find((b) => b.asset_id === USDC);
+      const spare = Math.floor((Number(bal?.available_raw ?? 0) - ps.keep_usdc * 1e6) / 1e4) / 100; // whole cents
+      if (!(spare >= ps.min_usdc)) { console.log(`due, but ${spare} USDC above the ${ps.keep_usdc} kept is under the ${ps.min_usdc} minimum`); process.exit(0); }
+      amount = String(spare);
+      console.log(`due by the by-laws (every ${ps.every_days} days): sharing ${amount} USDC, keeping ${ps.keep_usdc}`);
+    }
+  }
+  const units = BigInt(Math.round(Number(amount) * 1e6));
   if (!(units > 0n)) throw new Error("share <USDC>: a positive amount");
   const info = await view(dep.contract, "get_info");
   const roster = await view(dep.contract, "get_members", { from: 0, limit: 100 });
   const routes = await view(dep.contract, "get_payout_routes");
   const { shares, reserve } = splitShare(units, info.share_rule, roster);
-  console.log(`share ${process.argv[3]} USDC by the voted rule (${JSON.stringify(info.share_rule)}); ${Number(reserve) / 1e6} USDC stays in the wallet as the reserve`);
+  console.log(`share ${amount} USDC by the voted rule (${JSON.stringify(info.share_rule)}); ${Number(reserve) / 1e6} USDC stays in the wallet as the reserve`);
   // a share cut short (a timeout, a crash) is resumed by running the same command: what landed is not paid again
   w.shares ??= [];
   let entry = w.shares.find((x) => x.pending);
