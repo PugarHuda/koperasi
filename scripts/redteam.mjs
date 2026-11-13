@@ -3,7 +3,8 @@
 // Each line is something an outsider, a member, the steward or the agent's own key might try: vote themselves points,
 // rewrite the by-laws, take the treasury's rule, sell a work record, stamp a passport by hand. Every one is sent to
 // testnet and must fail on-chain with the contract's (or the DAO's) own refusal. The transactions and refusals are saved
-// in the deployment files; `npm run verify` reads each one back and checks it failed with that refusal.
+// in the deployment files; `npm run verify` reads each one back and checks it failed with that refusal. Every week CI
+// sends the outsiders' attacks again (`--outsiders --check`, .github/workflows/redteam.yml): they must still fail.
 import fs from "node:fs";
 import path from "node:path";
 import { DEPLOYMENT, ROOT, account, callRaw, txUrl, view } from "./lib.mjs";
@@ -42,8 +43,12 @@ const ATTACKS = [
   ["an outsider votes on the members' wallet policy in the DAO", OUTSIDER, dep.dao, "act_proposal", { id: 80, action: "VoteApprove", proposal: (await view(dep.dao, "get_proposal", { id: 80 })).kind }],
 ];
 
+// --outsiders: only the attacks by accounts that hold no role here (the weekly CI run, with only their keys); --check:
+// report, do not save (the saved list is the one `npm run verify` and the page read back)
+const outsiders = process.argv.includes("--outsiders");
+const checkOnly = process.argv.includes("--check");
 const results = [];
-for (const [what, who, contract, method, args, deposit = 0n] of ATTACKS) {
+for (const [what, who, contract, method, args, deposit = 0n] of ATTACKS.filter(([, who]) => !outsiders || who === OUTSIDER || who === NO_WORK)) {
   let tx = null, error = null;
   try {
     const r = await callRaw(account(who), contract, method, args, { deposit, tgas: 50 });
@@ -56,7 +61,7 @@ for (const [what, who, contract, method, args, deposit = 0n] of ATTACKS) {
   results.push({ what, by: who, contract, method, tx, error, at: new Date().toISOString() });
 }
 const accepted = results.filter((r) => !r.error);
-for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) {
+if (!checkOnly) for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) {
   const d = JSON.parse(fs.readFileSync(f, "utf8"));
   fs.writeFileSync(f, JSON.stringify({ ...d, redteam: results.filter((r) => r.tx) }, null, 2) + "\n");
 }

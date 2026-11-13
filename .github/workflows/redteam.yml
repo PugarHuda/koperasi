@@ -1,0 +1,26 @@
+# Every week: the attacks an outsider can try on the live co-op (scripts/redteam.mjs --outsiders) are sent again as real
+# testnet transactions, and each must still fail on-chain with the contract's or the DAO's own refusal. The keys are two
+# testnet accounts that hold no role in the co-op (an outsider, and an account with no work here), in the repository
+# secret REDTEAM_KEYS as a JSON list of {account_id, private_key}. Without the secret the run says so and stops.
+name: redteam
+on:
+  schedule: [{ cron: "17 5 * * 1" }]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  attacks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Keys of the two outside accounts
+        env: { REDTEAM_KEYS: "${{ secrets.REDTEAM_KEYS }}" }
+        run: |
+          if [ -z "$REDTEAM_KEYS" ]; then echo "::notice::REDTEAM_KEYS is not set: no attack sent"; echo "SKIP=1" >> "$GITHUB_ENV"; exit 0; fi
+          mkdir -p .keys
+          node -e 'for (const k of JSON.parse(process.env.REDTEAM_KEYS)) require("fs").writeFileSync(`.keys/${k.account_id}.json`, JSON.stringify(k))'
+      - if: env.SKIP != '1'
+        run: node scripts/redteam.mjs --outsiders --check
