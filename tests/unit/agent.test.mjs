@@ -317,3 +317,19 @@ test("signed vouch (NEP-413): signed by near-api-js's own signer, checked by the
   assert.deepEqual(inviteOf(p, ["alice.testnet"]), { by: "alice.testnet", vouched: false, signed: v });
   assert.equal(inviteOf({ ...p, description: `${p.description} extra` }, ["alice.testnet"]), null, "free text after it does not parse");
 });
+
+test("the page's TEE check reads a Chutes attestation as the agent does: the nonce and the certificate bound, the measurements pinned the same", async () => {
+  const fx = (await import("./chutes-attestation.json", { with: { type: "json" } })).default;
+  // a computed specifier: the typecheck stays out of web/ and its vendored verifier
+  const web = await import(String(new URL("../../web/tee.js", import.meta.url)));
+  const rd = Uint8Array.from(Buffer.from(fx.report_data, "hex"));
+  assert.deepEqual(await web.chutesBinds(fx, rd, fx.nonce), { nonce: true, cert: true });
+  assert.equal((await web.chutesBinds(fx, rd, crypto.randomBytes(32).toString("hex"))).nonce, false, "a replayed quote fails");
+  // the DER walk finds the same SubjectPublicKeyInfo as Node's X.509 parser
+  const cert = Buffer.from(fx.certificate_b64, "base64");
+  const spki = new crypto.X509Certificate(cert).publicKey.export({ type: "spki", format: "der" });
+  assert.equal(Buffer.from(web.spkiOf(Uint8Array.from(cert))).toString("hex"), spki.toString("hex"));
+  const fs = await import("node:fs");
+  assert.equal(fs.readFileSync(new URL("../../web/chutes-measurements.json", import.meta.url), "utf8"),
+    fs.readFileSync(new URL("../../agent/chutes-measurements.json", import.meta.url), "utf8"), "the page pins what the agent pins");
+});
