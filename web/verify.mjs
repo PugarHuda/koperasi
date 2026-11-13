@@ -12811,8 +12811,7 @@ var init_verify = __esm({
         `facts sha256 ${p2.factsSha.slice(0, 12)}\u2026 (as published), inference ${p2.inference.slice(0, 13)}\u2026: "${p2.evaluation}"; ${Object.keys(p2.changes).length ? `proposed ${JSON.stringify(p2.changes)} (#${p2.proposal})` : "it proposed nothing: the facts did not support a change"}`
       );
     }
-    if (d2.federation?.trade) {
-      const t2 = d2.federation.trade;
+    for (const t2 of d2.federation?.trades ?? (d2.federation?.trade ? [d2.federation.trade] : [])) {
       const [res, proof, prop] = await Promise.all([
         view2(d2.federation.dao, "get_proposal", { id: t2.resolution }),
         view2(t2.coop, "get_proof", { job_id: t2.job }),

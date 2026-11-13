@@ -582,21 +582,38 @@
         ]
       }
     ],
-    "trade": {
-      "resolution": 3,
-      "coop": "koperasi-mw80aczw.testnet",
-      "job": "demo-b3f5d590-f77f-4822-8d49-b53d692799f6",
-      "referred_by": "koperasi-mw4i2iwk.testnet",
-      "gate": "HqjgNhBPXnYrUoa8YjYTq362v6ko1spbYZSE9jEBKmi5",
-      "model": "deepseek/deepseek-v3.2",
-      "token": "usdc.fakes.testnet",
-      "net": "3800000",
-      "share": "1140000",
-      "paid": "2F8oXUnVqVf778Goa2n4U3t7HLJ9DACWHJfEBHVsARLX",
-      "deposited": "28zXs8DYR9rCPteoCgdczitux4sgoQYQydYah36hqTzv",
-      "proposal": 21,
-      "dao": "koperasi-mw80aczw.sputnik-v2.testnet"
-    }
+    "trades": [
+      {
+        "resolution": 3,
+        "coop": "koperasi-mw80aczw.testnet",
+        "job": "demo-b3f5d590-f77f-4822-8d49-b53d692799f6",
+        "referred_by": "koperasi-mw4i2iwk.testnet",
+        "gate": "HqjgNhBPXnYrUoa8YjYTq362v6ko1spbYZSE9jEBKmi5",
+        "model": "deepseek/deepseek-v3.2",
+        "token": "usdc.fakes.testnet",
+        "net": "3800000",
+        "share": "1140000",
+        "paid": "2F8oXUnVqVf778Goa2n4U3t7HLJ9DACWHJfEBHVsARLX",
+        "deposited": "28zXs8DYR9rCPteoCgdczitux4sgoQYQydYah36hqTzv",
+        "proposal": 21,
+        "dao": "koperasi-mw80aczw.sputnik-v2.testnet"
+      },
+      {
+        "resolution": 3,
+        "coop": "koperasi-mw80aczw.testnet",
+        "job": "demo-c7a66c9f-f86c-42a0-a523-bad931297a23",
+        "referred_by": "koperasi-mw4i2iwk.testnet",
+        "gate": "vzBpmmyCxdAJPdXC6eTEAU9VVr5c4aqCDi5hRLfS5Sf",
+        "model": "deepseek/deepseek-v3.2",
+        "token": "usdc.fakes.testnet",
+        "net": "3800000",
+        "share": "1140000",
+        "paid": "HgGL3zUAKq3XfaCvAhAtymT8phJRpCpUsxQ8sKu5jhRr",
+        "deposited": "711FsxDUx9St55WDtVSZYF5XGxqcnDvDbwJN7QrSvu7w",
+        "proposal": 27,
+        "dao": "koperasi-mw80aczw.sputnik-v2.testnet"
+      }
+    ]
   },
   "taskbond": [
     {

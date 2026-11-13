@@ -583,8 +583,7 @@ if (d.v033?.propose) {
     "the agent judged its last proposal and wrote its next by-laws itself, with the voted model in a TEE, from facts read from the chain",
     `facts sha256 ${p.factsSha.slice(0, 12)}… (as published), inference ${p.inference.slice(0, 13)}…: "${p.evaluation}"; ${Object.keys(p.changes).length ? `proposed ${JSON.stringify(p.changes)} (#${p.proposal})` : "it proposed nothing: the facts did not support a change"}`);
 }
-if (d.federation?.trade) {
-  const t = d.federation.trade;
+for (const t of d.federation?.trades ?? (d.federation?.trade ? [d.federation.trade] : [])) {
   const [res, proof, prop] = await Promise.all([view(d.federation.dao, "get_proposal", { id: t.resolution }), view(t.coop, "get_proof", { job_id: t.job }),
     view(t.dao, "get_proposal", { id: t.proposal })]);
   const pr = JSON.parse(proof ?? "{}");

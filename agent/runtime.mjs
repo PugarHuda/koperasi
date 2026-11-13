@@ -113,14 +113,15 @@ export async function loadApprovedConfig(dep, file = dep.configUri, agentId = nu
   if (local !== onchain.hash) {
     throw new ConfigMismatch(`config_mismatch: local ${local.slice(0, 12)}… ≠ approved v${onchain.version} ${onchain.hash.slice(0, 12)}…`);
   }
-  return { config: YAML.parse(raw.toString()), hash: local, version: onchain.version };
+  return { config: YAML.parse(raw.toString()), hash: local, version: onchain.version, text: raw.toString() };
 }
 
 function loadState() {
   const today = new Date().toISOString().slice(0, 10);
   const s = fs.existsSync(STATE) ? JSON.parse(fs.readFileSync(STATE, "utf8")) : {};
   // pending: work already paid for but not yet delivered or receipted; it survives the daily reset
-  return s.day === today ? { pending: {}, ...s } : { day: today, spentMicroUsd: 0, pending: s.pending ?? {} };
+  // pending and the agent's last look at its by-laws survive the daily reset
+  return s.day === today ? { pending: {}, ...s } : { day: today, spentMicroUsd: 0, pending: s.pending ?? {}, lastPropose: s.lastPropose, passed: s.passed };
 }
 const saveState = (s) => fs.writeFileSync(STATE, JSON.stringify(s));
 
@@ -238,9 +239,25 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
   const bidOn = new Set(bids.map((b) => b.jobId));
   const { jobs = [] } = await m.board();
   const want = new Set(config.job_filter.tags_any.map((t) => t.toLowerCase()).filter((t) => !voted?.tags.length || voted.tags.includes(t)));
+  const passed = new Set(loadState().passed ?? []);
   for (const job of jobs) {
-    if (bidOn.has(job.jobId)) continue;
+    if (bidOn.has(job.jobId) || passed.has(job.jobId)) continue;
     const tagged = (job.tags ?? []).some((t) => want.has(t.toLowerCase()));
+    // federation resolution 3: a job our members' price does not fit may fit a sister co-op's; the agent passes it on
+    // (agent/route.mjs) instead of leaving it. A job another co-op passed here is never passed on again.
+    if (tagged && !job.referredBy && Number(job.budgetAmount) < config.bid.price_usdc && me === dep.agent) {
+      try {
+        const { sisterFor, passOn } = await import("./route.mjs");
+        const to = await sisterFor(dep, job);
+        if (to && (await passOn(dep, job, to, log))) {
+          const st = loadState();
+          saveState({ ...st, passed: [...(st.passed ?? []), job.jobId].slice(-200) });
+        }
+      } catch (e) {
+        log(`passing "${job.title}" on failed: ${String(e?.message).slice(0, 160)}`);
+      }
+      continue;
+    }
     if (!tagged || Number(job.budgetAmount) < config.job_filter.min_price_usdc) continue;
     await m.bid(job.jobId, {
       amount: String(config.bid.price_usdc),
@@ -389,6 +406,16 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         await call(agent, dep.contract, "update_receipt", { job_id: a.assignmentId, status: next });
         log(`"${job.title}": ${r.status} → ${next}`);
       }
+    }
+  }
+  // 0.3.3: the agent thinks about its own by-laws when the members' interval has passed and jobs settled since; it may
+  // propose nothing (agent/propose.mjs). Only the founding agent proposes the co-op's by-laws.
+  if (me === dep.agent && !process.env.KOP_NO_PROPOSE) {
+    try {
+      const { maybePropose } = await import("./propose.mjs");
+      await maybePropose({ dep, log, state: loadState(), save: saveState });
+    } catch (e) {
+      log(`the by-laws proposal step failed: ${String(e?.message).slice(0, 200)}`); // never stops the agent's work
     }
   }
   // profit shares on the by-laws' schedule (v5 `profit_share`): `intents.mjs share auto` decides whether one is due and

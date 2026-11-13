@@ -20,11 +20,12 @@ const usd = (x) => Number(x) / 1e6;
 const receipts = await all(sis.contract, "get_receipts");
 const proofOf = async (r) => JSON.parse((await view(sis.contract, "get_proof", { job_id: r.job_id })) ?? "{}");
 let job = process.argv[2] ? receipts.find((r) => r.job_id === process.argv[2]) : null;
+const done = new Set((dep.federation.trades ?? [dep.federation.trade]).filter(Boolean).map((x) => x.job));
 for (const r of [...receipts].reverse()) {
   if (job) break;
-  if (r.status === "Paid" && (await proofOf(r)).referred_by === dep.contract) job = r;
+  if (r.status === "Paid" && !done.has(r.job_id) && (await proofOf(r)).referred_by === dep.contract) job = r;
 }
-if (!job) throw new Error("no paid job of the sister co-op names the showcase as the co-op that brought it");
+if (!job) throw new Error("no paid job of the sister co-op, not yet settled, names the showcase as the co-op that brought it");
 const proof = await proofOf(job);
 const net = BigInt(job.price) * 95n / 100n, share = net * 30n / 100n;
 if (BigInt(await view(T, "ft_balance_of", { account_id: BUYER })) < net) {
@@ -46,6 +47,9 @@ const trade = { resolution: 3, coop: sis.contract, job: job.job_id, referred_by:
   token: T, net: String(net), share: String(share), paid: paid.transaction.hash, deposited: earned.transaction.hash, proposal: id, dao: sis.dao };
 for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) {
   const d = JSON.parse(fs.readFileSync(f, "utf8"));
-  d.federation = { ...d.federation, trade };
+  // a list: each job passed between the co-ops (the first was passed by hand, later ones by the agent itself)
+  const trades = [...(d.federation.trades ?? (d.federation.trade ? [d.federation.trade] : [])).filter((x) => x.job !== trade.job), trade];
+  d.federation = { ...d.federation, trades };
+  delete d.federation.trade;
   fs.writeFileSync(f, JSON.stringify(d, null, 2) + "\n");
 }
