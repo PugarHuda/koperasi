@@ -12600,6 +12600,33 @@ var init_verify = __esm({
         `${r2.paid_in.map((x2, i) => `${x2.dao.split(".")[0]} paid ${x2.near} NEAR by #${x2.proposal} (${ins[i].status})`).join("; ")}; grant #${r2.grant.id} of ${r2.grant.near} NEAR to ${r2.grant.to.split(".")[0]}: ${g2.status}`
       );
     }
+    if (d2.lending?.funds) {
+      const f = d2.lending.funds;
+      const [onChain, got] = await Promise.all([view2(d2.contract, "get_share_funds"), Promise.all(f.funds.map((x2) => view2(d2.usdc, "ft_balance_of", { account_id: x2.to })))]);
+      const ok = f.funds.every((x2, i) => onChain.some((y2) => y2.to === x2.to && y2.bps === x2.bps) && BigInt(got[i]) > 0n) && Boolean(approvedCall("set_share_funds", (a) => a.funds?.length === f.funds.length));
+      check(
+        ok,
+        "funds from the surplus (education, social) were voted and are paid from a profit share's reserve",
+        f.funds.map((x2, i) => `${x2.name} ${x2.bps / 100}% to ${x2.to}: holds ${usd(got[i])} USDC`).join("; ") + `; voted by #${f.set}, first paid by the share #${f.share}`
+      );
+    }
+    if (d2.lending?.loans) {
+      const l2 = d2.lending.loans;
+      const res = await Promise.all(l2.loans.map(async (x2) => {
+        const [loan, p2, gs] = await Promise.all([
+          view2(d2.contract, "get_loan", { account_id: x2.who }),
+          view2(d2.dao, "get_proposal", { id: x2.proposal }),
+          view2(d2.contract, "get_guarantors", { account_id: x2.who })
+        ]);
+        const ok = p2.status === "Approved" && p2.kind.Transfer?.receiver_id === x2.who && p2.proposer === d2.contract && gs.includes(l2.guarantor) && (x2.repaid ? loan.status === "Repaid" : loan.status !== "Repaid");
+        return { ok, line: `${x2.who.split(".")[0]} ${x2.near} NEAR by #${x2.proposal} (filed and approved by the contract), guaranteed by ${l2.guarantor.split(".")[0]}: ${loan.status}` };
+      }));
+      check(
+        res.every((r2) => r2.ok) && Boolean(approvedCall("set_loan_rule", () => true)),
+        "savings and loans: members with a guarantor borrowed from the fund the members voted, and repaid into the treasury",
+        res.map((r2) => r2.line).join("; ")
+      );
+    }
     if (d2.redteam?.length) {
       const res = await Promise.all(d2.redteam.map(async (r2) => {
         const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.tx, sender_account_id: r2.by, wait_until: "FINAL" });

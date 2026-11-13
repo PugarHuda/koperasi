@@ -461,6 +461,28 @@ if (d.federation?.reserve) {
     `${r.paid_in.map((x, i) => `${x.dao.split(".")[0]} paid ${x.near} NEAR by #${x.proposal} (${ins[i].status})`).join("; ")}; grant #${r.grant.id} of ${r.grant.near} NEAR to ${r.grant.to.split(".")[0]}: ${g.status}`);
 }
 
+// 0.3.0 (scripts/lending.mjs): funds paid from a profit share's reserve, and loans the contract filed under the voted rule
+if (d.lending?.funds) {
+  const f = d.lending.funds;
+  const [onChain, got] = await Promise.all([view(d.contract, "get_share_funds"), Promise.all(f.funds.map((x) => view(d.usdc, "ft_balance_of", { account_id: x.to })))]);
+  const ok = f.funds.every((x, i) => onChain.some((y) => y.to === x.to && y.bps === x.bps) && BigInt(got[i]) > 0n)
+    && Boolean(approvedCall("set_share_funds", (a) => a.funds?.length === f.funds.length));
+  check(ok, "funds from the surplus (education, social) were voted and are paid from a profit share's reserve",
+    f.funds.map((x, i) => `${x.name} ${x.bps / 100}% to ${x.to}: holds ${usd(got[i])} USDC`).join("; ") + `; voted by #${f.set}, first paid by the share #${f.share}`);
+}
+if (d.lending?.loans) {
+  const l = d.lending.loans;
+  const res = await Promise.all(l.loans.map(async (x) => {
+    const [loan, p, gs] = await Promise.all([view(d.contract, "get_loan", { account_id: x.who }), view(d.dao, "get_proposal", { id: x.proposal }),
+      view(d.contract, "get_guarantors", { account_id: x.who })]);
+    const ok = p.status === "Approved" && p.kind.Transfer?.receiver_id === x.who && p.proposer === d.contract && gs.includes(l.guarantor)
+      && (x.repaid ? loan.status === "Repaid" : loan.status !== "Repaid");
+    return { ok, line: `${x.who.split(".")[0]} ${x.near} NEAR by #${x.proposal} (filed and approved by the contract), guaranteed by ${l.guarantor.split(".")[0]}: ${loan.status}` };
+  }));
+  check(res.every((r) => r.ok) && Boolean(approvedCall("set_loan_rule", () => true)),
+    "savings and loans: members with a guarantor borrowed from the fund the members voted, and repaid into the treasury", res.map((r) => r.line).join("; "));
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {

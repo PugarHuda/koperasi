@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "4d379b1acffd931d87d428a889cd74ebbfd50e29cb8637ac544c6d40b0a17347",
   "configUri": "config/config.v6.yaml",
-  "codeSha256": "6119a73a4c36849bae148cd1dae81117bdcc205290ddf3d728f6688fb8746933",
+  "codeSha256": "fb807cd76d0b2dedadf1af09b30335ce13af158cec615ef909921a9739d7c51d",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -574,5 +574,45 @@
     "approved": 13,
     "report": "rat/koperasi-mw80aczw.testnet/2026.md",
     "rejected_report": "rat/koperasi-mw80aczw.testnet/2026.rejected-12.md"
+  },
+  "lending": {
+    "funds": {
+      "set": 104,
+      "share": 105,
+      "funds": [
+        {
+          "name": "education",
+          "bps": 500,
+          "to": "kop-education-mwep1rnb.testnet",
+          "received": "100000"
+        },
+        {
+          "name": "social",
+          "bps": 250,
+          "to": "kop-social-mwep1rnb.testnet",
+          "received": "50000"
+        }
+      ]
+    },
+    "loans": {
+      "set": 106,
+      "guarantor": "kop-alice-mw4i3w8f.testnet",
+      "loans": [
+        {
+          "who": "kop-bob-mw4i3w8f.testnet",
+          "near": 0.3,
+          "proposal": 107,
+          "borrowed": "DoGpLMY7T62GJJNPGoyGj916D9RMVXZLCXBNPrFmcSpv",
+          "repaid": "4pRGFNhLfCXNXsX2PiY2h9V1BcqwDtzM8ccWWAP5dTaX"
+        },
+        {
+          "who": "kop-guest-984702.testnet",
+          "near": 0.2,
+          "proposal": 108,
+          "borrowed": "3cNrYo9WBeRK9XbAERs4sRC7aL6DUgQWb6bqbeoEdA2T",
+          "repaid": null
+        }
+      ]
+    }
   }
 }

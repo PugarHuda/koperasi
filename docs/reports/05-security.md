@@ -223,3 +223,14 @@ The agent's key cannot even ask for anything but `record_receipt` and `update_re
 | M4 | `record_annual_meeting` | Low | Once a year: a report approved by mistake cannot be replaced on-chain. | The DAO vote is the check; a correction is a new year's agenda item | Accepted |
 | F1 | the federation DAO | Info | Its founder account pays the DAO's storage and holds no role; only the co-ops' DAOs vote. | `npm run verify` checks no other role can vote and each co-op's vote came from its own approved proposal | By design |
 
+## Round 11 (13 Nov): contract 0.3.0 (funds, surety, loans), by-laws v6
+
+| ID | Component | Severity | Risk | Evidence / test | Status |
+|---|---|---|---|---|---|
+| L1 | `request_loan` | Medium (design) | A member could borrow and never repay. | One loan at a time, at most the voted maximum, only from the voted fund, only in good standing and with a guarantor in good standing; 7 days after the term anyone calls it late, which marks the borrower and every guarantor (out of good standing: no jury, no case, no loan). Test *a member borrows from the voted fund …* | By design, documented |
+| L2 | `on_loan_filed` | Low | The contract approves the Transfer it filed; a transfer that bounces leaves the proposal Approved and the loan Open. | As for court refunds: the members see it in the DAO and can settle it by hand; the fund was already reduced, so nothing is lent twice | Accepted |
+| L3 | `guarantee`, `mark` | Low | A guarantee could be gamed to hurt a guarantor (an account falls on purpose). | Only members choose whom they guarantee, at most 3 guarantors each, a guarantor can withdraw while no loan is open, and the members clear marks by vote | Accepted |
+| L4 | `set_share_funds` | Low | Funds could eat the members' part. | At most 3 funds, together at most the rule's reserve bps; paid only from what the reserve holds; a failed transfer goes to the DAO | **By design** |
+| V1 | by-laws v6 | Info | A new model must be as trustworthy as the old one. | deepseek-v3.2's servers attested (Intel TDX, 8 NVIDIA GPUs, evidence/); the runtime checks the attestation and each response's signature as before | Checked |
+| T1 | runtime unit tests | Low | The stand-in model in the tests named the v5 model, so CI failed after v6. | The tests take the model from the voted by-laws | **Fixed** |
+

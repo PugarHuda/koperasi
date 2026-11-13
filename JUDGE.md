@@ -41,14 +41,17 @@ every day (`.github/workflows/tests.yml`).
 | 13f | The annual members' meeting | *Commons* → *Annual members' meeting 2026*, or `/rat/2026.md` | the report the co-op's agent wrote in a TEE from the chain's facts, approved by DAO vote #86, whose description carries the report's and the facts' sha256 |
 | 13g | Dues, the agent's strikes, the agenda, the federation | *Commons* (the lines under the court) and `npm run verify` | 0.01 NEAR dues voted by #89 and paid by all five; 1 strike (case #5); the 2026 agenda; the federation's resolution passed by both co-ops' votes (#87, #9) |
 | 13h | A job won on a third-party testnet market | *The agent* (section 03) → "On Taskbond … scored 95/100", or `npm run verify` | Taskbond jobs #13 and #14: Paid, the winner is the co-op's agent (95/100 each), the reviewer's reason quoted; receipts `taskbond-13`, `taskbond-14` with the TEE proof |
+| 13i | The co-ops' network and federation | `/coops.html` | who recognises whom; the federation's members (the two co-ops' DAOs only) and its resolutions, each vote with the co-op proposal that cast it, including the shared reserve's grant |
+| 13j | Funds, surety and loans (0.3.0) | *Commons* (the lines under the court) and `npm run verify` | education 5% and social 2.5% from every share; a 1 NEAR loan fund; bob's loan repaid, guest's open, both guaranteed by alice |
+| 13k | What needs a member | the panel after signing in | proposals not yet voted, juries, pledges to confirm, dues falling due; a browser notification if allowed |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source
 
 | # | Check | Command | You should see |
 |---|---|---|---|
-| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `6119a73a4c36849bae148cd1dae81117bdcc205290ddf3d728f6688fb8746933`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
-| 15 | The tests | `npm test` | lint, typecheck, unit tests and 146 contract tests (unit, fuzz, invariant) pass |
+| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `fb807cd76d0b2dedadf1af09b30335ce13af158cec615ef909921a9739d7c51d`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
+| 15 | The tests | `npm test` | lint, typecheck, unit tests and 149 contract tests (unit, fuzz, invariant) pass |
 | 16 | Against the real Sputnik DAO code, not a mock | `cd contract && cargo test --test sputnik_sandbox` (Linux/macOS) | a task paid out of the treasury of a local DAO running the showcase DAO's own wasm |
 
 ## What is not real yet (said plainly)
