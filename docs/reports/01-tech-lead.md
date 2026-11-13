@@ -1,6 +1,6 @@
 # 01 · Tech Lead: an honest map of the project (8 Nov 2026, after upgrade #33)
 
-Audit only, no code fixes. Earlier reports: [01-audit](01-audit.md) (before the trust tiers), [09](09-peningkatan.md) (improvements since).
+Audit only, no code fixes. Earlier reports: [01-audit](01-audit.md) (before the trust tiers), [09](09-improvements.md) (improvements since).
 
 ## Summary
 
@@ -63,7 +63,7 @@ is no ABI (NEAR uses JSON); the views and methods the front end calls exist in t
   - #34.
 - Bounce test: test co-op #5, [BpccRtdt…](https://testnet.nearblocks.io/txns/BpccRtdtAakvzAakvyxMZCmAFPPsWneMfz53FgWhXXL9).
 
-More are listed in [03](03-kontrak.md) and [09](09-peningkatan.md).
+More are listed in [03](03-contract-8nov.md) and [09](09-improvements.md).
 
 ## Claimed vs. what actually runs
 

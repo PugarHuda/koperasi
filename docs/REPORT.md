@@ -5,7 +5,7 @@ Intents wallet and the co-op's Ethereum address all answer to the members' votes
 chain, in the browser or with `npm run verify`.
 
 Per-phase detail is in [`docs/reports/`](reports), each with a *12 Nov* pass at the end: [01 audit](reports/01-audit.md) ·
-[02 strategy](reports/02-strategi.md) · [03 contracts](reports/03-contracts.md) · [04 dApp](reports/04-dapp.md) ·
+[02 strategy](reports/02-strategy.md) · [03 contracts](reports/03-contracts.md) · [04 dApp](reports/04-dapp.md) ·
 [05 security](reports/05-security.md) (round 7) · [06 QA](reports/06-qa.md) · [submission materials](submission.md) ·
 [the judges' checklist](../JUDGE.md).
 
@@ -62,7 +62,7 @@ Scanners: `npm audit` 0 high/critical at the root (2 low); no secrets in the rep
 
 The track had 74 entries on 12 Nov. "An AI agent bound by DAO rules" is now parity; none of them combines a co-op's
 whole life on chain with an agent whose wallet and cross-chain payments answer to the members. Detail and positioning:
-[02-strategi](reports/02-strategi.md).
+[02-strategy](reports/02-strategy.md).
 
 > For communities that want an AI agent to earn for them, Koperasi is a co-op on NEAR that owns its agent, one member
 > one vote, unlike agent launchpads where holders vote by weight if at all and the operator holds the keys.

@@ -1,6 +1,6 @@
 # 05 · Security (Web3 Security Auditor), 9 Nov 2026
 
-This report follows [05-keamanan](05-keamanan.md), the first round on 8 Nov. That round covered findings S1–S11 in `tasks.rs`. This round covers the code added since:
+This report follows [05-security-8nov](05-security-8nov.md), the first round on 8 Nov. That round covered findings S1–S11 in `tasks.rs`. This round covers the code added since:
 - the stuck-payout settlement (T6);
 - NEP-297 events;
 - the leave flow;
@@ -32,7 +32,7 @@ The chain is NEAR, and the contract is written in Rust. Slither and Aderyn only 
 
 ## Findings
 
-Severity follows the brief: Critical, High, Medium, Low. Earlier findings S1–S11 are in 05-keamanan. They are still fixed, and their tests still pass.
+Severity follows the brief: Critical, High, Medium, Low. Earlier findings S1–S11 are in 05-security-8nov. They are still fixed, and their tests still pass.
 
 | ID | Component | Severity | Impact | PoC | Status |
 |---|---|---|---|---|---|

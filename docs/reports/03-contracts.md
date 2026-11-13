@@ -1,6 +1,6 @@
 # 03 · Smart contract engineer (9 Nov 2026, upgrade #41)
 
-Builds on [03-kontrak](03-kontrak.md) (the first contract report) and [01-tech-lead](01-tech-lead.md) (the audit).
+Builds on [03-contract-8nov](03-contract-8nov.md) (the first contract report) and [01-tech-lead](01-tech-lead.md) (the audit).
 Stack: NEAR, Rust, near-sdk 5.30. The EVM tools in the brief have NEAR equivalents, used below:
 
 | EVM brief | Used here |

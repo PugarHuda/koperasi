@@ -1,6 +1,6 @@
 # Submission materials (phase 7)
 
-Every number and transaction here can be checked on testnet; see [reports/03-kontrak.md](reports/03-kontrak.md).
+Every number and transaction here can be checked on testnet; see [reports/03-contract-8nov.md](reports/03-contract-8nov.md).
 The video and the deck must be recorded and made by the builder, because they need a face, a voice and a screen. This
 file is the script.
 

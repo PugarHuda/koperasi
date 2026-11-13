@@ -1,6 +1,6 @@
 # 09 · Improvements toward the top 3 in Social Money (8 Nov 2026)
 
-Builds on [05-keamanan](05-keamanan.md) and [06-qa](06-qa.md). Priorities came from an honest comparison with the
+Builds on [05-security-8nov](05-security-8nov.md) and [06-qa](06-qa.md). Priorities came from an honest comparison with the
 strongest projects in the track, scored against the judging criteria (technical, design, impact, originality,
 sustainability). That comparison is internal and not committed. Its conclusions:
 

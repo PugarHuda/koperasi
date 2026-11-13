@@ -1,6 +1,6 @@
 # 04 · dApp / full-stack (9 Nov 2026)
 
-Builds on [01-tech-lead](01-tech-lead.md), [02-strategi](02-strategi.md) and [03-contracts](03-contracts.md). The page
+Builds on [01-tech-lead](01-tech-lead.md), [02-strategy](02-strategy.md) and [03-contracts](03-contracts.md). The page
 is a static site (`web/`, no build step) on Vercel: https://koperasi-kohl.vercel.app. Commits `f56ee41`, `2574942`.
 
 ## Findings fixed
@@ -83,7 +83,7 @@ Previews of each panel state, without a wallet, on localhost: `/?as=<account>`.
 
 ## Earlier round (8 Nov 2026): tasks with earned trust on the page
 
-Builds on [03-kontrak](03-kontrak.md).
+Builds on [03-contract-8nov](03-contract-8nov.md).
 
 ## What changed
 
@@ -131,7 +131,7 @@ Builds on [03-kontrak](03-kontrak.md).
   node scripts/tasks.mjs accept 2 kop-alice-mw4i3w8f.testnet
   node scripts/tasks.mjs list
   ```
-- **Evidence:** the transactions in [03-kontrak](03-kontrak.md#the-main-flow-on-testnet-real-transactions).
+- **Evidence:** the transactions in [03-contract-8nov](03-contract-8nov.md#the-main-flow-on-testnet-real-transactions).
 
 ## Tests
 

@@ -25,9 +25,9 @@ business, every member has one vote, and profit is shared by savings and by cont
   into a vote. Mid-size tasks need one other member, and large ones go to every member as a DAO bounty.
   Every point on a record links to the task or proposal it came from.
 - **Profit is shared by rule.** The members vote a split (reserve, savings, contribution). The contract divides
-  each payout to the last USDC unit, and each member claims their own share. It is the split an Indonesian koperasi
-  makes of its surplus (*sisa hasil usaha*, Law 25/1992 art. 45): a reserve first, then members by their savings
-  (*jasa modal*) and by their work with the co-op (*jasa usaha*), in proportions the members' meeting sets. The agent
+  each payout to the last USDC unit, and each member claims their own share. It is the split an Indonesian co-op
+  makes of its yearly surplus (Law 25/1992 art. 45): a reserve first, then members by their savings
+  and by their work with the co-op, in proportions the members' meeting sets. The agent
   can also pay the shares from its NEAR Intents wallet to the chain each member chose.
 - **The business is an AI agent the members steer.** Its prompt, model, prices and spend caps are by-laws hashed
   on-chain, and they change only by vote. The model's TEE is re-verified within the hour before each job, and any visitor can check it with their own nonce.

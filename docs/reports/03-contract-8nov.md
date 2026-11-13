@@ -1,6 +1,6 @@
 # 03 · Smart contract (Smart Contract Engineer), 8 Nov 2026
 
-Builds on [02-strategi](02-strategi.md). This round adds a new module, [`contract/src/tasks.rs`](../contract/src/tasks.rs),
+Builds on [02-strategy](02-strategy.md). This round adds a new module, [`contract/src/tasks.rs`](../contract/src/tasks.rs),
 for tasks with earned trust.
 
 ## Design
@@ -56,7 +56,7 @@ The task tests cover:
 2. **Upgrade vote.**
    - DAO proposal **#19** approved by alice, bob and guest; the contract switched to that code.
    - #20 re-ran the same upgrade, because the script stopped early on a lagging RPC (fixed, A3).
-3. **Security fixes (S10, S11, from [05-keamanan](05-keamanan.md)).** Code `3wCdocCi3UyfoBLmKTNFfveH1mDcxskR4Nk3zvde8nhX`,
+3. **Security fixes (S10, S11, from [05-security-8nov](05-security-8nov.md)).** Code `3wCdocCi3UyfoBLmKTNFfveH1mDcxskR4Nk3zvde8nhX`,
    proposal **#25**. The script waited for the new code and filed no duplicate proposal, which confirms the A3 fix.
    Tasks, records and the budget were intact after the upgrade.
 4. **Source equals chain.** Rebuilding `contract/` gives the same hash as `global_contract_hash` (`3wCdocCi…` after #25).

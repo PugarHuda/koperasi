@@ -9,13 +9,13 @@ This report covers what changed this round.
 |---|---|---|---|
 | Social Money: collective ownership, shared budgets | 9 | 9 | the DAO owns the agent and the treasury |
 | Social Money: programmable rewards | 8 | 9 | profit share by rule, plus tasks paid by tier from a voted budget |
-| Social Money: reputation-based access | 4 | 9 | task tiers by an on-chain record ([03-kontrak](03-kontrak.md)) |
+| Social Money: reputation-based access | 4 | 9 | task tiers by an on-chain record ([03-contract-8nov](03-contract-8nov.md)) |
 | Sputnik/Trezu without rebuilding the multisig | 8 | 9 | the tiers sit beside an unmodified Sputnik DAO; large tasks are still Sputnik bounties |
 | Autonomous Business / Agent Economy | 7 | 7 | blocked by NEAR AI credits and Agent Market having no testnet |
 | Demo with real transactions | 8 | 9 | three tiers, proven by testnet transactions |
 
 Why reputation is not a 10: the trust rule is still the members' choice, and two colluding members can still pay each
-other up to `one_vote_max` from the budget (known issue, [05-keamanan](05-keamanan.md)).
+other up to `one_vote_max` from the budget (known issue, [05-security-8nov](05-security-8nov.md)).
 
 ## Social Money checklist (the brief's sample prompt)
 
@@ -71,7 +71,7 @@ other up to `one_vote_max` from the budget (known issue, [05-keamanan](05-keaman
 - **Flow:** `post_task` → `claim_task` → `submit_task` → `accept_task`, which pays at once (trust) or goes to
   `approve_task` (one other member, read from the DAO policy) → `on_task_paid` → record. Large tasks go through a
   Sputnik bounty, then `credit_dao_bounty`.
-- **Acceptance criteria:** the unit tests in [03-kontrak](03-kontrak.md), the three tiers proven on testnet, and the board plus panel tested in Playwright.
+- **Acceptance criteria:** the unit tests in [03-contract-8nov](03-contract-8nov.md), the three tiers proven on testnet, and the board plus panel tested in Playwright.
 
 ## Copy for the first 10 seconds
 
