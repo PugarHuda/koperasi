@@ -188,6 +188,12 @@ pub enum Event {
     /// The steward's term ran out: the role is empty until the members appoint one.
     #[event_version("1.0.0")]
     StewardTermEnded { steward: AccountId },
+    /// The members voted the share of every profit share split by credit score.
+    #[event_version("1.0.0")]
+    ReputationShareSet { bps: u16 },
+    /// A profit share's reputation dividend was credited by credit score.
+    #[event_version("1.0.0")]
+    ReputationDividend { amount: U128 },
     /// The members voted the share of every earnings deposit kept in the risk fund.
     #[event_version("1.0.0")]
     AgentSavesSet { bps: u16 },

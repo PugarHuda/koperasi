@@ -55,7 +55,7 @@ const KEY_STAKING_POOL: &[u8] = b"staking_pool";
 const PROOF_PREFIX: &[u8] = b"proof:";
 const MAX_PROOF_LEN: usize = 1024;
 /// Σ profit shares credited and not yet claimed, by anyone (members and former members), in the current token.
-const KEY_OWED_SHARES: &[u8] = b"owed_shares";
+pub(crate) const KEY_OWED_SHARES: &[u8] = b"owed_shares";
 /// Σ USDC sent by ft_transfer whose callback has not come back yet (claims and transfers to the DAO).
 const KEY_IN_FLIGHT: &[u8] = b"in_flight";
 /// The least USDC the DAO must keep outside a profit share (set by vote; 0 = no floor). Its own key: no migration.
@@ -80,7 +80,7 @@ fn write_u128(key: &[u8], v: u128) {
     env::storage_write(key, &v.to_le_bytes());
 }
 /// Add to (or, with `sub`, take from) a counter. Counters exist from `new`, or from `init_ledger` on older co-ops.
-fn bump(key: &[u8], by: u128, sub: bool) {
+pub(crate) fn bump(key: &[u8], by: u128, sub: bool) {
     if let Some(v) = read_u128(key) {
         write_u128(key, if sub { v.saturating_sub(by) } else { v + by });
     }
@@ -769,6 +769,8 @@ impl Koperasi {
         let reserve = self.distribute(amount);
         // 0.3.0: the education and social funds the members voted come out of the reserve part
         let reserve = self.pay_funds(amount, reserve);
+        // 0.3.2: a reputation dividend, by each member's credit score, also out of the reserve part
+        let reserve = self.pay_reputation(amount, reserve);
         if reserve > 0 {
             self.forward_to_dao(reserve);
         }

@@ -246,6 +246,14 @@ impl Koperasi {
         let line1 = format!("{} finished, {} NEAR earned", r.done, near2(r.earned.0));
         let line2 = format!("pledges {} kept, {} broken", s.pledges_honored, s.pledges_broken);
         let line3 = format!("juries {} served, {} missed; slashed {}", s.juries_served, s.juries_missed, s.slashed);
+        // 0.3.2: the member card: credit score, dues and loan, read live like the rest
+        let (score, limit) = self.get_credit(who.clone());
+        let dues = self.get_dues_status(who.clone());
+        let loan = self.get_loan(who.clone()).filter(|l| l.status != crate::lending::LoanStatus::Repaid);
+        let line4 = format!("credit {score}/10 (loan up to {} NEAR); {}{}", near2(limit.0),
+            match &dues { Some((_, true)) => "dues paid", Some((_, false)) => "dues late", None => "no dues" },
+            match &loan { Some(l) if l.status == crate::lending::LoanStatus::Late => "; loan LATE".to_string(),
+                Some(l) => format!("; loan {} NEAR open", near2(l.principal.0)), None => String::new() });
         let svg = format!(
             "<svg xmlns='http://www.w3.org/2000/svg' width='600' height='340' viewBox='0 0 600 340'>\
              <rect width='600' height='340' fill='#030a2a'/><rect x='0' y='0' width='600' height='8' fill='#1a4bff'/>\
@@ -254,8 +262,9 @@ impl Koperasi {
              <text x='36' y='170' fill='#fff' font-family='sans-serif' font-size='22'>{line1}</text>\
              <text x='36' y='206' fill='#fff' font-family='sans-serif' font-size='22'>{line2}</text>\
              <text x='36' y='242' fill='#fff' font-family='sans-serif' font-size='22'>{line3}</text>\
-             <text x='36' y='300' fill='{c}' font-family='sans-serif' font-size='18'>{g}</text>\
-             <text x='564' y='300' fill='#9fb4ff' font-family='monospace' font-size='14' text-anchor='end'>{co}</text></svg>",
+             <text x='36' y='274' fill='#ffd54a' font-family='sans-serif' font-size='18'>{line4}</text>\
+             <text x='36' y='312' fill='{c}' font-family='sans-serif' font-size='18'>{g}</text>\
+             <text x='564' y='312' fill='#9fb4ff' font-family='monospace' font-size='14' text-anchor='end'>{co}</text></svg>",
             c = if good { "#7ee2a8" } else { "#ff9a94" },
             g = if good { "in good standing" } else { "not in good standing" },
             co = env::current_account_id(),
@@ -265,13 +274,14 @@ impl Koperasi {
             "owner_id": who,
             "metadata": {
                 "title": format!("Koperasi work record: {who}"),
-                "description": format!("{line1}; {line2}; {line3}; {}{}. Read live from {} each time: nobody can edit it, \
+                "description": format!("{line1}; {line2}; {line3}; {line4}; {}{}. Read live from {} each time: nobody can edit it, \
                     and it cannot be transferred.", if good { "in good standing" } else { "not in good standing" },
                     if member { ", a member" } else { "" }, env::current_account_id()),
                 "media": format!("data:image/svg+xml;base64,{}", B64.encode(svg)),
                 "media_hash": null, "copies": 1, "issued_at": null, "expires_at": null, "starts_at": null, "updated_at": null,
                 "extra": json!({ "done": r.done, "earned": r.earned, "refs": r.refs, "standing": s, "good_standing": good,
-                    "member": member, "passport": self.get_passport(who.clone()) }).to_string(),
+                    "member": member, "passport": self.get_passport(who.clone()),
+                    "credit": { "score": score, "loan_limit": limit }, "dues": dues, "loan": loan }).to_string(),
                 "reference": null, "reference_hash": null,
             },
             "approved_account_ids": {},

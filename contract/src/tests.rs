@@ -2684,3 +2684,29 @@ fn a_further_agent_runs_the_by_laws_the_members_voted_for_it() {
     receipt(&mut k, "j-1", 1, H1); // the founding agent still runs the co-op's
 }
 
+
+/// 0.3.2: a reputation dividend, by credit score, out of each profit share's reserve part; and the member card shows
+/// the credit score, dues and loan.
+#[test]
+fn a_reputation_dividend_follows_credit_scores_and_the_card_shows_them() {
+    let mut k = setup(); // 20% reserve
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let (alice, bob) = (acc("alice.testnet"), acc("bob.testnet"));
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_reputation_share(2500); }), "within the reserve");
+    as_(&dao(), near(0));
+    k.set_reputation_share(1000); // 10% of each share
+    commons::mark(&alice, |s| s.pledges_honored += 3); // alice 3 of 10
+    commons::mark(&bob, |s| s.pledges_honored += 1); // bob 1 of 10
+    as_(&usdc(), near(0));
+    let _ = k.ft_on_transfer(dao(), U128(4_000_000), "share".into()); // reputation pool: 0.4 USDC, 3:1
+    assert!(logs_have("reputation_dividend"));
+    assert_eq!(k.get_claimable(alice.clone()).0, 300_000);
+    assert_eq!(k.get_claimable(bob.clone()).0, 100_000);
+    // the card: credit and dues on the token, live
+    at_paying(&alice, DAY, commons::PLEDGE_FEE);
+    k.mint_work_record();
+    let t = k.nft_token(alice.to_string()).unwrap();
+    let extra: Value = near_sdk::serde_json::from_str(t["metadata"]["extra"].as_str().unwrap()).unwrap();
+    assert_eq!(extra["credit"]["score"], 3);
+    assert!(t["metadata"]["description"].as_str().unwrap().contains("credit 3/10"));
+}

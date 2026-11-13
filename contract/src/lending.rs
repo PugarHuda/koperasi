@@ -24,6 +24,8 @@
 //!   the contract files the refund as a DAO proposal, as before.
 //! - **Credit from the record** (0.3.2): a loan is at most the voted largest loan times the borrower's score out of 10:
 //!   finished tasks and bounties, pledges kept, juries served, and two points for each guarantor in good standing.
+//! - **A reputation dividend** (0.3.2): the members may vote a share of every profit share (out of the reserve part)
+//!   that is split by each member's credit score: work done, pledges kept, juries served, guarantors.
 //! - **An agent's own by-laws** (0.3.2): the members can vote a further agent its own by-laws (`set_agent_config`); its
 //!   receipts must then carry that hash, and the OutLayer gate checks that file.
 //!
@@ -38,6 +40,7 @@ const KEY_LOAN_FUND: &[u8] = b"loan_fund";
 const KEY_AGENTS: &[u8] = b"more_agents";
 const KEY_RISK: &[u8] = b"risk_fund";
 const KEY_AGENT_SAVES: &[u8] = b"agent_saves_bps";
+const KEY_REPUTATION: &[u8] = b"reputation_bps";
 pub(crate) const GAS_RISK_REFUND: Gas = Gas::from_tgas(10);
 
 pub(crate) fn risk_fund() -> u128 {
@@ -144,6 +147,33 @@ fn loan_fund() -> u128 {
 }
 
 impl Koperasi {
+    /// The reputation dividend of a profit share of `amount`, out of `reserve` at most, credited to the members by
+    /// credit score. Returns what is left of the reserve.
+    pub(crate) fn pay_reputation(&mut self, amount: u128, reserve: u128) -> u128 {
+        let bps = load::<u16>(KEY_REPUTATION).unwrap_or(0) as u128;
+        let pool = (amount * bps / 10_000).min(reserve);
+        if pool == 0 {
+            return reserve;
+        }
+        let scores: Vec<(AccountId, u128)> = self.members.keys().map(|a| (a.clone(), self.get_credit(a.clone()).0 as u128)).collect();
+        let total: u128 = scores.iter().map(|(_, s)| s).sum();
+        if total == 0 {
+            return reserve;
+        }
+        let mut paid = 0;
+        for (a, s) in scores {
+            let x = pool * s / total;
+            if x > 0 {
+                let c = self.claimable.get(&a).copied().unwrap_or(0);
+                self.claimable.insert(a.clone(), c + x);
+                paid += x;
+            }
+        }
+        crate::bump(crate::KEY_OWED_SHARES, paid, false);
+        Event::ReputationDividend { amount: U128(paid) }.emit();
+        reserve - paid
+    }
+
     /// Good standing, all of it: the record (pledges, juries, slashes), dues, and no guarantee called against them.
     pub(crate) fn in_good_standing(&self, a: &AccountId) -> bool {
         crate::commons::standing_of(a).good() && self.dues_ok(a) && guarantee_failures(a) == 0
@@ -175,6 +205,20 @@ impl Koperasi {
 
 #[near]
 impl Koperasi {
+    // ---------- the reputation dividend ----------
+
+    /// DAO only: the share of every profit share (bps, out of the reserve part) split by credit score.
+    pub fn set_reputation_share(&mut self, bps: u16) {
+        self.assert_dao();
+        require!(bps as u32 <= self.share_rule.reserve_bps as u32, "it comes out of the reserve: at most its bps");
+        save(KEY_REPUTATION, &bps);
+        Event::ReputationShareSet { bps }.emit();
+    }
+
+    pub fn get_reputation_share(&self) -> u16 {
+        load(KEY_REPUTATION).unwrap_or(0)
+    }
+
     // ---------- the risk fund ----------
 
     /// DAO only: the share of every earnings deposit (bps, at most 20%) that stays in the risk fund.
