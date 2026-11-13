@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "3e5dc56701610919c311437bbbba192c9db9c5cc27dabf34fd8ca7010991918f",
   "configUri": "config/config.v7.yaml",
-  "codeSha256": "6185b266fdfa12e180b39350bd7a55d7fbd69659a5a7aca5620b8ea992aae162",
+  "codeSha256": "1141653dfb4d6dd843a58c4e217296a9a5814ccf8c1017ac881b02ef170705b6",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -898,5 +898,10 @@
       "factsSha": "65d9e697ae2e04bc3ba4fada8118a913d9ca2ee9a44de6ab62ea35902fcf5ada",
       "inference": "3c897058-8332-5c16-9acb-4892267b481a"
     }
+  },
+  "tee": {
+    "registry": "kop-tee-mwfb5bj2.testnet",
+    "registryVote": 134,
+    "compose": "agent/phala-compose.yml"
   }
 }
