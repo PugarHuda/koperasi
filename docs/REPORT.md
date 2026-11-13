@@ -15,7 +15,7 @@ Our own estimate on the rubric (technical, design, impact, originality, sustaina
 
 | Criterion | 8 Nov | 12 Nov | What moved it |
 |---|---|---|---|
-| Technical | 8 | 9–10 | 0.2.7 (appeals, payout routes, work-record tokens) after round-7 fixes; the DAO pays on Ethereum by vote; the agent's Intents wallet is the DAO's; the by-laws gate ran in a TDX enclave; a real TEE-proven job; 141 contract + 38 unit tests; byte-for-byte rebuild in CI |
+| Technical | 8 | 9–10 | 0.2.7 (appeals, payout routes, work-record tokens) after round-7 fixes; the DAO pays on Ethereum by vote; the agent's Intents wallet is the DAO's; the by-laws gate ran in a TDX enclave; a real TEE-proven job; 143 contract + 40 unit tests; 0.2.8 (passport, evidence), the gate judges each job, 19 attacks refused on-chain; byte-for-byte rebuild in CI |
 | Design | 8 | 8.5–9 | live proof on the first screen; Lighthouse 100 on accessibility, best practices, SEO; LCP 1.7 s on a slow phone, CLS 0 |
 | Impact | 5 | 6 | testnet money landed on NEAR, Ethereum and Base by member votes; still demo members and no Agent Market job |
 | Originality | 9 | 9 | a co-op's whole life on chain, not only "an agent bound by a DAO" |
@@ -101,7 +101,7 @@ whole life on chain with an agent whose wallet and cross-chain payments answer t
 | | |
 |---|---|
 | Live page | https://koperasi-kohl.vercel.app |
-| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet), 0.2.7, global code `95HEy3tP…`, sha256 `77f62ea3…`, proposal #76, 0 full-access keys |
+| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet), 0.2.8, global code `7bLZ4Sq9…`, sha256 `61f1fa38…`, proposal #82, 0 full-access keys |
 | DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet) |
 | The DAO's Ethereum address | `0xb3dc0128b4a9804de94796480bef8ba014dfca7d` (Chain Signatures) |
 | The agent's Intents wallet | `agent_7faa1d7f6f2be9e778c9fd18` (Tidepool testnet), owner: the address above |

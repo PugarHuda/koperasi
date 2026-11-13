@@ -78,6 +78,7 @@ let left = (await fullAccess()).length;
 for (let i = 0; lock && left && i < 10; i++) { await new Promise((ok) => setTimeout(ok, 1500)); left = (await fullAccess()).length; }
 // new co-ops (scripts/deploy.mjs without a local build) start from the code these members voted
 // the page reads its own copy (web/deployment.json): its rebuild card shows this sha256
-if (!fileArg) for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) fs.writeFileSync(f, `${JSON.stringify({ ...dep, codeSha256: sha256(wasm) }, null, 2)}
+// (read again here: another script, e.g. an Intents share, may have written the files while this one ran)
+if (!fileArg) for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) fs.writeFileSync(f, `${JSON.stringify({ ...JSON.parse(fs.readFileSync(f, "utf8")), codeSha256: sha256(wasm) }, null, 2)}
 `);
 console.log(`${dep.contract} runs ${codeHash}; ${after.members} members, ${after.receipts} receipts, by-laws v${after.config.version} intact; full-access keys: ${left}`);

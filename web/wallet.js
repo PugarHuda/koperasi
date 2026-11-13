@@ -307,6 +307,11 @@ function commonsPanel(s) {
     const over = Date.now() >= nsMs(c.opened) + 3 * DAY_MS;
     const mine = c.jurors.includes(me) && !c.votes.some(([j]) => j === me);
     const head = `<span><strong>Case #${c.id}</strong> job ${esc(c.job_id)}: refund ${usdc(c.amount)} USDC to ${esc(c.refund_to)}<span class="claim">“${esc(c.reason)}”, brought by ${esc(c.claimant)}; jurors ${c.jurors.map(esc).join(", ")}; ${c.votes.length} ruled</span></span>`;
+    // contract 0.2.8: both sides are heard, the claimant and the steward who answers for the agent's work
+    if (!over && (c.claimant === me || s.info?.steward === me)) {
+      items.push(`<li>${head}<span class="stake-row"><label>Evidence <input type="text" maxlength="280" autocomplete="off" data-cevid-in="${c.id}" aria-label="Evidence for case #${c.id}: a link or a hash and what it shows"></label>
+        <button type="button" class="btn ghost small" data-cevid="${c.id}">File (0.01 NEAR)</button></span></li>`);
+    }
     if (over) items.push(`<li>${head}<button type="button" class="btn small" data-cclose="${c.id}">Close (3 days passed)</button></li>`);
     else if (mine) items.push(`<li>${head}<span class="task-done"><button type="button" class="btn small" data-crule="${c.id}" data-up="1">Uphold: refund</button><button type="button" class="btn ghost small" data-crule="${c.id}" data-up="0">Reject</button></span></li>`);
   }
@@ -343,6 +348,13 @@ function armCommons() {
   one("crule", "Rule on case", "rule_case", (b) => ({ id: Number(b.dataset.crule), uphold: b.dataset.up === "1" }), 300);
   one("cclose", "Close case", "close_case", (b) => ({ id: Number(b.dataset.cclose) }), 300);
   one("csettle", "Settle the appeal of case", "settle_appeal", (b) => ({ id: Number(b.dataset.csettle) }), 300);
+  box.querySelectorAll("[data-cevid]").forEach((b) => {
+    b.onclick = () => {
+      const what = box.querySelector(`[data-cevid-in="${b.dataset.cevid}"]`)?.value.trim() ?? "";
+      if (!what) { say(`<span class="err">Evidence: a link or a hash, and what it shows (up to 280 characters).</span>`); return; }
+      act(`Evidence in case #${b.dataset.cevid}`, () => send(dep.contract, "add_evidence", { id: Number(b.dataset.cevid), what }, { deposit: PLEDGE_FEE, tgas: 30 }));
+    };
+  });
   box.querySelectorAll("[data-cappeal]").forEach((b) => {
     b.onclick = () => act(`Appeal case #${b.dataset.cappeal} to the members`, () => send(dep.contract, "appeal_case", { id: Number(b.dataset.cappeal) }, { deposit: APPEAL_BOND, tgas: 100 }));
   });

@@ -14,8 +14,14 @@ const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 process.env.KOP_MARKET_URL = "http://localhost:8787";
 process.env.KOP_MARKET_TOKEN = "aat_mock";
 const mock = await startMockMarket();
-mock.addJob({ title: "Research: how Indonesian village co-ops (koperasi) share surplus (SHU)", tags: ["research"], budgetAmount: "3",
-  description: "Five short bullet points: how a koperasi splits its sisa hasil usaha (SHU) between members by their transactions and their savings, under Indonesia's co-op law. Name your sources; say what you could not verify." });
+// the jobs run so far, newest last (`node scripts/job.mjs 0` runs the first again); the enclave judges each by job_filter
+const JOBS = [
+  { title: "Research: how Indonesian village co-ops (koperasi) share surplus (SHU)", tags: ["research"], budgetAmount: "3",
+    description: "Five short bullet points: how a koperasi splits its sisa hasil usaha (SHU) between members by their transactions and their savings, under Indonesia's co-op law. Name your sources; say what you could not verify." },
+  { title: "Localization: a co-op's welcome note, English to Indonesian", tags: ["localization", "translation"], budgetAmount: "3",
+    description: "Translate into Indonesian, plainly, for village members: \"Welcome to the co-op. You own an equal share of the vote. Profit is shared by what you put in and what you do. Ask any member to see the books.\" Keep it under 60 words." },
+];
+mock.addJob(JOBS[Number(process.argv[2] ?? JOBS.length - 1)]);
 const before = (await view(dep.contract, "get_info")).receipts;
 await runOnce({ dep });
 await sleep(2500); // the stand-in accepts the bid after 1.5 s

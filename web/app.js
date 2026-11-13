@@ -13,7 +13,7 @@ if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
   }, { passive: true });
 }
 
-import { dep, testnet, RAW, explorer, txUrl, view, all, query, $, esc, usdc, nearAmt } from "./near.js";
+import { dep, testnet, RAW, explorer, txUrl, txStatus, view, all, query, $, esc, usdc, nearAmt } from "./near.js";
 import { verifyInBrowser } from "./tee.js";
 import { byLawsPath, configVote, trustSources } from "./share.js";
 const byLawsUrl = (uri) => (byLawsPath(uri) ? `${RAW}${uri}` : "about:blank#refused");
@@ -447,13 +447,16 @@ cargo near build reproducible-wasm
     Promise.all(members.map(([a]) => view(dep.contract, "get_standing", { account_id: a })))]).then(async ([pledges, claims, cases, [days, ends], standing]) => {
     // contract 0.2.7: a dismissed case may go on appeal to every member, who vote the refund as a DAO proposal
     const appeals = await Promise.all(cases.map((c) => (c.status === "Dismissed" ? view(dep.contract, "get_appeal", { id: c.id }).catch(() => null) : null)));
+    // contract 0.2.8: what the claimant and the steward filed while the case was open
+    const evidence = await Promise.all(cases.map((c) => view(dep.contract, "get_evidence", { id: c.id }).catch(() => [])));
     const APPEAL = { Open: "on appeal: the members vote", Upheld: "appealed: the members overturned it, refunded", Dismissed: "appealed: the members kept the ruling" };
     const kept = (id, st) => claims.filter((c) => c.pledge === id && c.status === st).length;
     rows($("pledges").tBodies[0], [...pledges].reverse().map((p) => `<tr><td><strong>#${p.id}</strong> ${esc(p.what)}</td>
       <td data-label="By"><a href="cert.html?who=${encodeURIComponent(p.issuer)}">${esc(p.issuer)}</a></td>
       <td class="num" data-label="Called in">${p.called} of ${p.units}</td><td data-label="Kept / broken">${kept(p.id, "Honored")} / ${kept(p.id, "Broken")}</td></tr>`).join(""));
     const OUT = { Open: "jury out", Upheld: "upheld: refunded", Dismissed: "not upheld" };
-    rows($("cases").tBodies[0], [...cases].map((c, i) => [c, appeals[i]]).reverse().map(([c, a]) => `<tr><td><strong>#${c.id}</strong> job ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, brought by ${esc(c.claimant)} for ${esc(c.refund_to)}</span></td>
+    rows($("cases").tBodies[0], [...cases].map((c, i) => [c, appeals[i], evidence[i]]).reverse().map(([c, a, ev]) => `<tr><td><strong>#${c.id}</strong> job ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, brought by ${esc(c.claimant)} for ${esc(c.refund_to)}</span>${
+      ev.map(([by, what]) => `<span class="claim">evidence from ${by === c.claimant ? "the claimant" : "the steward"}: ${esc(what)}</span>`).join("")}</td>
       <td class="num" data-label="Refund">${usdc(c.amount)} USDC</td>
       <td data-label="Jurors">${c.jurors.map((j) => { const v = c.votes.find(([x]) => x === j); return `${esc(j)}: ${v ? (v[1] ? "uphold" : "reject") : "–"}`; }).join("<br>")}</td>
       <td data-label="Outcome">${OUT[c.status] ?? esc(c.status)}${c.refund_proposal !== null ? `; <a href="${explorer(dep.dao)}">DAO proposal #${esc(c.refund_proposal)}</a>` : ""}${
@@ -526,4 +529,21 @@ function armTeeCheck(model) {
       <tbody>${row("Gateway", r.gateway)}${r.models.map((m, i) => row(`Model ${i + 1}`, m)).join("")}</tbody></table></div>
       <p class="hint">NVIDIA's own verdict on the GPUs needs NVIDIA's service, which browsers cannot call: the agent checks it before every job and CI daily (above).</p>`);
   };
+}
+
+// attacks sent to the live co-op as real transactions (scripts/redteam.mjs): each is read back here and must have failed
+// on-chain with the refusal it was saved with, so the list cannot claim a refusal the chain does not show
+if (dep.redteam?.length) {
+  Promise.all(dep.redteam.map((r) => txStatus(r.tx, r.by).then((t) => {
+    const failure = JSON.stringify(t?.status?.Failure ?? t?.receipts_outcome?.map((o) => o.outcome.status.Failure).find(Boolean) ?? null);
+    return failure !== "null" && failure.includes(JSON.stringify(r.error.slice(0, 60)).slice(1, -1));
+  }, () => null))).then((res) => {
+    const refused = res.filter((x) => x === true).length;
+    const unread = res.filter((x) => x === null).length;
+    verdict("ck-attacks", unread ? null : refused === res.length, `${refused} of ${res.length} attacks on this co-op failed on-chain with the contract's or the DAO's own refusal${unread ? ` (${unread} not readable right now)` : ""}.
+      <details><summary>What was tried</summary><ul class="attacks">${dep.redteam.map((r, i) => `<li>${res[i] === true ? "refused" : res[i] === null ? "not read" : "<strong>NOT REFUSED</strong>"}: ${esc(r.what)}
+        <span class="claim">“${esc(r.error.slice(0, 90))}” <a href="${txUrl(r.tx)}">tx</a></span></li>`).join("")}</ul></details>`);
+  });
+} else {
+  $("ck-attacks").hidden = true;
 }

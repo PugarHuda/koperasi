@@ -261,6 +261,10 @@ if (d.intents) {
   }
   // profit shares from the wallet: split by the contract's voted rule, each part on the route the member set on-chain
   for (const sh of i.shares ?? []) {
+    if (sh.pending) { // cut short and not resumed yet (`intents.mjs share` resumes it): what landed so far, not a claim
+      console.log(`INFO  a share of ${sh.amount} USDC is in progress: ${sh.payouts.filter((p) => p.status === "SUCCESS").length} of ${sh.payouts.length} payouts done; \`node scripts/intents.mjs share ${sh.amount}\` finishes it`);
+      continue;
+    }
     const res = await Promise.all(sh.payouts.map(landedOn));
     check(res.every((r) => r.landed), `the agent shared ${sh.amount} USDC from its wallet by the voted rule, each member paid on their own route`,
       sh.payouts.map((p, k) => `${p.to.split(".")[0]} ${p.amount} on ${CHAIN_NAME[p.chain] ?? p.chain}: ${res[k].landed ? "landed" : "FAILED"} (${res[k].where})`).join("; ")
@@ -296,6 +300,49 @@ if (d.outlayer) {
   const g = await gate(o.tx, o.sender, d.configHash);
   check(g.ok, "the by-laws were also checked inside an Intel TDX enclave (OutLayer), by this repo's program, on-chain",
     `wasm ${GATE_WASM.slice(0, 12)}… (web/outlayer/bylaws-check.wasm, source outlayer/bylaws-check), ${g.line}`);
+}
+
+// the passport (0.2.8): a sister co-op the members voted, running Koperasi code, whose token for the account still
+// holds (finished work, good standing), and the stamp here that counts it as a trust source
+if (d.passport) {
+  const { sister, account: who } = d.passport;
+  const [sisters, stamps, sources, token, code, ours] = await Promise.all([view(d.contract, "get_sister_coops"),
+    view(d.contract, "get_passport", { account_id: who }), view(d.contract, "get_trust_sources", { account_id: who }),
+    view(sister, "nft_token", { token_id: who }), rawQuery({ request_type: "view_account", account_id: sister }),
+    rawQuery({ request_type: "view_account", account_id: d.contract })]);
+  const extra = token ? JSON.parse(token.metadata.extra) : {};
+  const stamp = stamps.find((s) => s.coop === sister);
+  check(sisters.includes(sister) && stamp && token?.owner_id === who && extra.good_standing === true && extra.done >= stamp.done && stamp.done > 0
+    && (code.global_contract_hash ?? code.code_hash) === (ours.global_contract_hash ?? ours.code_hash) && sources >= 1,
+    "a work record from a sister co-op the members voted counts here as a trust source, read by the contract from that co-op's token",
+    `${who}: ${stamp?.done} finished at ${sister} (now ${extra.done}, ${extra.good_standing ? "good standing" : "NOT in good standing"}), `
+    + `same code as this co-op (${String(code.global_contract_hash ?? code.code_hash).slice(0, 10)}…); trust sources here: ${sources}`);
+}
+
+// both sides heard (0.2.8): every piece of evidence in a case came from its claimant or the steward, at most 3 each
+{
+  const cs = await view(d.contract, "get_cases", { from: 0, limit: 100 });
+  const ev = await Promise.all(cs.map((c) => view(d.contract, "get_evidence", { id: c.id }).catch(() => [])));
+  const heard = cs.map((c, i) => [c, ev[i]]).filter(([, e]) => e.length);
+  if (heard.length) {
+    const steward = (await view(d.contract, "get_info")).steward;
+    const ok = heard.every(([c, e]) => e.every(([by]) => by === c.claimant || by === steward)
+      && [c.claimant, steward].every((who) => e.filter(([by]) => by === who).length <= 3));
+    check(ok, "in court both sides are heard: evidence came only from the claimant and the steward who answers for the agent",
+      heard.map(([c, e]) => `case #${c.id}: ${e.length} piece(s), ${e.filter(([by]) => by === c.claimant).length} from the claimant, `
+        + `${e.filter(([by]) => by !== c.claimant).length} from the steward; ${c.status}`).join("; "));
+  }
+}
+
+// attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
+if (d.redteam?.length) {
+  const res = await Promise.all(d.redteam.map(async (r) => {
+    const t = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r.tx, sender_account_id: r.by, wait_until: "FINAL" });
+    const failure = JSON.stringify(t?.status?.Failure ?? t?.receipts_outcome?.map((o) => o.outcome.status.Failure).find(Boolean) ?? null);
+    return failure !== "null" && failure.includes(JSON.stringify(r.error.slice(0, 60)).slice(1, -1)) && t.transaction.receiver_id === r.contract;
+  }));
+  check(res.every(Boolean), `every attack sent to the live co-op was refused on-chain (${d.redteam.length} transactions)`,
+    d.redteam.map((r, i) => `${r.what}: ${res[i] ? "refused" : "NOT REFUSED"} ("${r.error.slice(0, 50)}")`).join("; "));
 }
 
 // 6. profit shares: USDC left the treasury only by a members' vote, through the contract's split

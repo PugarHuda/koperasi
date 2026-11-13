@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "4e28de45f843b798bb3f58973d19045473f5972b4ff1e3eb3bf1735c473eb395",
   "configUri": "config/config.v4.yaml",
-  "codeSha256": "77f62ea33346f9f2a8f6f077080196f309e0e3b0ec8b46d787ebbf1470d3bf11",
+  "codeSha256": "61f1fa38d4c09a30b125afd561f56230e6c19a849afecb4290223a8ae8a0c358",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -162,7 +162,78 @@
           "0x5e3b0f2c5d9297f6d8b295ac746ca1d43340e29d"
         ]
       ]
-    }
+    },
+    "shares": [
+      {
+        "amount": 5,
+        "rule": {
+          "reserve_bps": 2000,
+          "savings_bps": 4000,
+          "points_bps": 4000
+        },
+        "reserve": 1.000005,
+        "at": "2026-11-13T02:59:28.855Z",
+        "pending": true,
+        "payouts": [
+          {
+            "to": "kop-steward-mw4i2iwk.testnet",
+            "address": "kop-steward-mw4i2iwk.testnet",
+            "amount": 0.333277,
+            "chain": "near",
+            "status": "SUCCESS",
+            "tx": "CBHgW4EFcGPnxm1fR9quKYznJx7inhwzyZeEBtLPS2nb",
+            "destination_chain": null,
+            "destination_tx": "CBHgW4EFcGPnxm1fR9quKYznJx7inhwzyZeEBtLPS2nb",
+            "at": "2026-11-13T03:09:33.553Z"
+          },
+          {
+            "to": "kop-alice-mw4i3w8f.testnet",
+            "address": "0x5e3b0f2c5d9297f6d8b295ac746ca1d43340e29d",
+            "amount": 0.833277,
+            "chain": "arb",
+            "swap": "exec_007c51bfe0ba78f7cbc48670",
+            "payout": "exec_516af7c43ed2ae522015ad65",
+            "status": "SUCCESS",
+            "tx": "CPRuEfN9uaeJY6f81eEx7uyPzEfRUBAbPbV92vAMCArv",
+            "destination_chain": "arb",
+            "destination_tx": "0x934a30527fca9c8eafd068890e6ff22109124142a73c2df6c550b5da6d49deb2",
+            "at": "2026-11-13T03:29:53.026Z"
+          },
+          {
+            "to": "kop-bob-mw4i3w8f.testnet",
+            "address": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
+            "amount": 0.618991,
+            "chain": "base",
+            "swap": "exec_508668ab6c8228b4066023f5",
+            "payout": "exec_d1dbe834fb4f5ec14903a602",
+            "status": "SUCCESS",
+            "tx": "14N1NLaKaxzdVVJAY7AVrc6ChuZSzzUmqMWGQnw7XZDw",
+            "destination_chain": "base",
+            "destination_tx": "0x759bf2e17afb1fa72cbb0bc2edcfd069e99f762f3934303df64c9c3fedfc97cd",
+            "at": "2026-11-13T03:50:10.390Z"
+          },
+          {
+            "to": "kop-guest-984702.testnet",
+            "address": "kop-guest-984702.testnet",
+            "amount": 1.357308,
+            "chain": "near",
+            "payout": "exec_3b74e5eb9158d2ac9bc0f9f9",
+            "status": "SUCCESS",
+            "tx": "D5TSUiRUnq87XD7pAnYZTHBmjvQJZrCt1dZdfHknkfKA",
+            "destination_chain": null,
+            "destination_tx": "D5TSUiRUnq87XD7pAnYZTHBmjvQJZrCt1dZdfHknkfKA",
+            "at": "2026-11-13T04:00:18.945Z"
+          },
+          {
+            "to": "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
+            "address": "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
+            "amount": 0.857142,
+            "chain": "near",
+            "payout": "exec_4aa51dca32abe05b40bc991f"
+          }
+        ]
+      }
+    ]
   },
   "outlayer": {
     "provider": "OutLayer (Intel TDX), outlayer.testnet",
@@ -172,5 +243,185 @@
     "tx": "4EShvWPavQuFDZtNMfyEBgVGMuA7J2oy8h9VxgCsqFma",
     "sender": "kop-alice-mw4i3w8f.testnet",
     "version": 4
+  },
+  "redteam": [
+    {
+      "what": "an outsider rewrites the agent's by-laws",
+      "by": "kop-carol-mw4i2iwk.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "set_config",
+      "tx": "BtNg5pg1RF8VS1Gdp8sa2eyeTjh2qq9G3B14hzbon4Qw",
+      "error": "only the DAO",
+      "at": "2026-11-13T03:31:44.987Z"
+    },
+    {
+      "what": "a member votes themselves profit-share points",
+      "by": "kop-alice-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "award_points",
+      "tx": "5C15jnw7Ri89SwuikBvbaQKp7CsQJX2uDWwhTLbmzTrs",
+      "error": "only the DAO",
+      "at": "2026-11-13T03:31:47.599Z"
+    },
+    {
+      "what": "a member swaps the contract's code without a vote",
+      "by": "kop-alice-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "upgrade",
+      "tx": "4tmYivWjQHvAmmkPbwJsS5jj4KQUQhz7QToGWArVTTps",
+      "error": "only the DAO",
+      "at": "2026-11-13T03:31:49.725Z"
+    },
+    {
+      "what": "a member gives all profit to contribution points",
+      "by": "kop-bob-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "set_share_rule",
+      "tx": "9k3Hava2pXbyECKSzeYTDcUwSfu53f9UUpdJ99XAPK2T",
+      "error": "only the DAO",
+      "at": "2026-11-13T03:31:52.345Z"
+    },
+    {
+      "what": "a member drops the trust rule to pay friends with no vote",
+      "by": "kop-bob-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "set_trust",
+      "tx": "533d8Mvw3uDUMjhXo2VAF7UqmZuRroG1bKzY64cGUoef",
+      "error": "only the DAO",
+      "at": "2026-11-13T03:31:54.724Z"
+    },
+    {
+      "what": "the agent records a job done under by-laws nobody voted",
+      "by": "agent.koperasi-mw4i2iwk.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "record_receipt",
+      "tx": "E1d5s6gE8SicFYT19MXteQeuSP6fH77P4LDmC9oyL9zk",
+      "error": "config_mismatch: the agent is not running the approved config",
+      "at": "2026-11-13T03:31:57.033Z"
+    },
+    {
+      "what": "the agent records the same job twice to count its pay again",
+      "by": "agent.koperasi-mw4i2iwk.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "record_receipt",
+      "tx": "2muWthLhe6q7WCY89YmsoHk5Xc83qoVejJvnBenTxCu2",
+      "error": "receipt exists",
+      "at": "2026-11-13T03:31:59.366Z"
+    },
+    {
+      "what": "a member writes a receipt as if they were the agent",
+      "by": "kop-alice-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "update_receipt",
+      "tx": "4miCUkse3o1pKGX18UYpBpyrjBh9R4RiJTq7F4z7NG11",
+      "error": "only the agent",
+      "at": "2026-11-13T03:32:01.574Z"
+    },
+    {
+      "what": "a member pauses the co-op",
+      "by": "kop-alice-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "pause",
+      "tx": "9ea2YzBBTY5SVJpdZ2CefBpBHabZHo8Arig4LQu7qUnD",
+      "error": "only the DAO or the steward",
+      "at": "2026-11-13T03:32:03.658Z"
+    },
+    {
+      "what": "a member sells their work record to an outsider",
+      "by": "kop-alice-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "nft_transfer",
+      "tx": "9d28hbKE5f5wEWnJJvqku9g6RHRE1GmxnQBu3xVBLA9Y",
+      "error": "a work record cannot be transferred: it belongs to the account that earned it",
+      "at": "2026-11-13T03:32:06.181Z"
+    },
+    {
+      "what": "an account with no work here mints a work record",
+      "by": "kop-flow-mw8r2327.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "mint_work_record",
+      "tx": "6qVV75VYGDnbsR1M8rBCiNT2ome5naFd4ZqCMZSZBC8B",
+      "error": "no record here to mint",
+      "at": "2026-11-13T03:32:09.267Z"
+    },
+    {
+      "what": "an outsider routes the co-op's payouts to their address",
+      "by": "kop-carol-mw4i2iwk.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "set_payout_route",
+      "tx": "HBatuhPv4WR4mCqHhqocRPdRqjNqgu1h5NGvXEQ6HihP",
+      "error": "only a member",
+      "at": "2026-11-13T03:32:11.673Z"
+    },
+    {
+      "what": "a member sets a payout route to a malformed address",
+      "by": "kop-bob-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "set_payout_route",
+      "tx": "Ai5qZe7sQq8XoUp8HPv9V7nffgkDd1W1u2iieSJjELrT",
+      "error": "address: 0x and 40 lowercase hex digits",
+      "at": "2026-11-13T03:32:13.996Z"
+    },
+    {
+      "what": "an outsider takes a job to the co-op court",
+      "by": "kop-carol-mw4i2iwk.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "open_case",
+      "tx": "2pex2EqeeSHk9hozTB7sNqpn9eANUXi8ohV8Gxhnrk4N",
+      "error": "only a member",
+      "at": "2026-11-13T03:32:17.035Z"
+    },
+    {
+      "what": "a member appeals a case the jury already upheld",
+      "by": "kop-alice-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "appeal_case",
+      "tx": "57H56sVQ4UjXxBSZ1gVmpWprnHu4vb614QFf46wCzuxg",
+      "error": "only the member who opened the case",
+      "at": "2026-11-13T03:32:20.054Z"
+    },
+    {
+      "what": "a member recognises a sister co-op without a vote",
+      "by": "kop-alice-mw4i3w8f.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "set_sister_coops",
+      "tx": "8yB2LVzGFfmd6SvL5YCzLeHndkRGYptyQtdCu596ee9A",
+      "error": "only the DAO",
+      "at": "2026-11-13T03:32:22.473Z"
+    },
+    {
+      "what": "an outsider stamps a passport from a co-op nobody voted for",
+      "by": "kop-carol-mw4i2iwk.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "stamp_passport",
+      "tx": "5iR3j3BK8iJHFtSh6DWMezJ68rh2XUaaDtN169HAwGfm",
+      "error": "not a co-op the members recognise",
+      "at": "2026-11-13T03:32:25.709Z"
+    },
+    {
+      "what": "an outsider files evidence in a court case",
+      "by": "kop-carol-mw4i2iwk.testnet",
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "method": "add_evidence",
+      "tx": "A7DHDGudnZ9F6xrPcAibvLfhPBEa1RtLJ1GUNxjoahZq",
+      "error": "the case is closed",
+      "at": "2026-11-13T03:32:28.507Z"
+    },
+    {
+      "what": "an outsider votes on the members' wallet policy in the DAO",
+      "by": "kop-carol-mw4i2iwk.testnet",
+      "contract": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+      "method": "act_proposal",
+      "tx": "4P88vS11gKqt9S6DTtEXv2PRCzhx1mbBnfRbVX841W3x",
+      "error": "panicked at 'ERR_PERMISSION_DENIED', src/proposals.rs:451:9",
+      "at": "2026-11-13T03:32:30.933Z"
+    }
+  ],
+  "passport": {
+    "sister": "koperasi-mw80aczw.testnet",
+    "account": "kop-carol-mw80aczw.testnet",
+    "vote": 83,
+    "mint_tx": "AKd9P8GXeMRtUoWb5uGWBnKV16tbtjkVmpnwuvp6nfeq",
+    "stamp_tx": "A6fSvb3KzZxeJLjXRkkxiNwYNnafjw9rP9DDnoeU2Kiz"
   }
 }

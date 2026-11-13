@@ -189,3 +189,27 @@ the agent runtime, the agent wallet's `policy_update`, and the page's Ethereum p
 | E2 | `web/eth.js`, `web/wallet.js` (automated review) | Medium | A matching hash only proves the description's fields are what is signed: a proposal for chain 1 (Ethereum mainnet, where the same address exists) or with an outsized fee would still have read "checked". | The page reads only a Sepolia transaction (chain id 11155111) from a description and shows it as a payment only within the fees `transfer` sets (5 gwei max, 1 gwei tip, at most 100 000 gas); the fee is shown; anything else is a warning, and the page sends nothing for it. Playwright case: the same payment with chain 1 is never shown as a payment. | **Fixed** |
 | I1 | `scripts/intents.mjs` | Medium | The swap check before a withdrawal tested `/^d+$/` (a missing backslash), so every payout to another chain was refused after its swap. | Fixed in the shared `payout()`; profit shares and `pay … base` use it. | **Fixed** |
 | O1 | `agent/gate.mjs` | Info | The gate costs the steward an OutLayer execution per job (deposit refunded when unused), and a gate that does not answer stops the run. | Fail closed: no job starts without a match on-chain against the hash the receipt will carry; `npm run verify` checks each gate named in a receipt. | By design |
+
+## Round 9 (13 Nov): contract 0.2.8, the gate that judges jobs, attacks sent to the live co-op
+
+The author's review of the new surface (not independent), the automated review of each commit, and 19 attacks sent
+to the live co-op as real transactions (`scripts/redteam.mjs`, re-read by `npm run verify` and by the page).
+
+| ID | Component | Severity | Risk | Evidence / test | Status |
+|---|---|---|---|---|---|
+| P1 | `stamp_passport` | Medium (design) | Anyone could type in a reputation from a co-op of their own making. | Only co-ops the members voted (`set_sister_coops`, DAO only, at most 20); the stamp is what the contract itself read from that co-op's `nft_token` (owner, finished work, good standing), one per co-op; a failed read changes nothing, a read that no longer holds removes the stamp. Test `a_sister_coops_work_record_counts_as_one_trust_source…`; on testnet #83 | **Fixed by design** |
+| P2 | `stamp_passport` | Low | A sister co-op's own members could inflate records there (two friends paying each other tasks). | Counts as one trust source at most, whatever the record says; the members choose which co-ops to recognise and can drop one by vote, which stops it counting at once | Accepted, documented |
+| C1 | `add_evidence` | Low | Evidence is a line of text, not the file. | Up to 280 characters each, 3 per side, 0.01 NEAR storage, only the claimant and the steward, only while the case is open; a hash in it can be checked against the receipt's `deliverable_hash` | By design |
+| G1 | `agent/runtime.mjs` (automated review) | Medium | A job the enclave judged not allowed by the by-laws halted the agent and stayed assigned, so every pass ran the gate on it again. | The job is handed back to the market with a message and the agent goes on with the others; unit test *a job it refuses is handed back, not started, and not gated again* | **Fixed** |
+| G2 | `agent/runtime.mjs` | Low | OutLayer's worker fails often on testnet ("Execution promise failed", deposit refunded, 0.001 NEAR kept): the gate answered `null` and no job started. | Asked up to twice more; a mismatch or a refusal is never asked again. Seen on 13 Nov (tx `HCAJ3cvP…`), the next attempt answered | **Fixed** |
+| G3 | `scripts/verify.mjs` | Low | A new gate build would make the gates already on-chain (run by the older build) fail verification. | Earlier builds from the repo's history are listed by sha256 | **Fixed** |
+| U1 | `scripts/upgrade.mjs` | Low | It wrote the deployment files from the copy it read at the start, so a script that wrote them meanwhile (an Intents share) lost its record. | Reads the files again just before writing | **Fixed** |
+| I2 | `scripts/intents.mjs share` | Medium | A share cut short (a timeout) lost which members were already paid: running it again would pay them twice. | Each request is saved the moment the Agent API takes it and the run resumes from there; the 13 Nov share was resumed this way from the API's own history | **Fixed** |
+
+Attacks sent on 13 Nov, all refused on-chain: an outsider rewrites the by-laws; a member votes themselves points,
+swaps the code, sets the share rule or the trust rule, pauses the co-op, writes a receipt as the agent, sells a work
+record, routes payouts to a malformed address, appeals someone else's case, recognises a sister co-op without a vote;
+the agent records a job under by-laws nobody voted, or the same job twice; an account with no work mints a record; an
+outsider routes payouts, opens a case, stamps a passport from a co-op nobody voted, files evidence, or votes in the DAO.
+The agent's key cannot even ask for anything but `record_receipt` and `update_receipt` (refused before the chain).
+

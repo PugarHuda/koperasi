@@ -43,6 +43,14 @@ test("the work record reads a member's pledges and jury duty from the chain, and
   await expect(page.locator("img:not(.cert-token)")).toHaveCount(0);
 });
 
+test("0.2.8: the passport stamp from a sister co-op is shown on the work record, and the attacks are read back as refused", async ({ page }) => {
+  await page.goto(`/cert.html?who=kop-carol-mw80aczw.testnet`);
+  await expect(page.locator("#cert-sum")).toContainText(/2 finished at koperasi-mw80aczw\.testnet.*counts as one trust source here/);
+  await page.goto("/#checks");
+  await expect(page.locator("#ck-attacks")).toContainText(/(\d+) of \1 attacks on this co-op failed on-chain/, { timeout: 30_000 });
+  await expect(page.locator("#ck-attacks")).toHaveClass(/pass/);
+});
+
 test("a juror is offered uphold and reject; someone else is not", async ({ page }, testInfo) => {
   onlyLocal(testInfo);
   await answerViews(page, { get_pledges: [], get_pledge_claims: [], get_cases: [kase()], get_standing: good });

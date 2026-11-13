@@ -309,9 +309,10 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         // the enclave also judges this job by the by-laws it matched: the receipt's job id, its tags and what it pays
         const judged = { id: a.assignmentId, tags: job.tags ?? [], price_usdc: Number(a.escrowAmount) };
         let g = await bylawsGate(payer, dep.contract, judged);
-        // no answer at all (the enclave's resume came back empty, seen once on testnet) is asked once more; a mismatch is not
-        if (g.out === null || g.out === undefined) {
-          log(`the by-laws gate gave no answer (tx ${g.tx}); asking once more`);
+        // no answer at all: OutLayer's worker failed ("Execution promise failed", the deposit refunded but 0.001 NEAR),
+        // which testnet does often; asked up to twice more. A mismatch or a refusal is never asked again.
+        for (let k = 0; k < 2 && (g.out === null || g.out === undefined); k++) {
+          log(`the by-laws gate gave no answer (tx ${g.tx}); asking again`);
           g = await bylawsGate(payer, dep.contract, judged);
         }
         if (!g.out?.match || g.out.voted_sha256 !== hash) throw new Error(`no match (${JSON.stringify(g.out).slice(0, 160)})`);

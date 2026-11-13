@@ -149,14 +149,14 @@ test("the by-laws gate runs before the job and its transaction goes into the rec
   assert.ok(proof.model, "the model's proof is still there");
 });
 
-test("a gate that gives no answer is asked once more; two silences in a row and the job is not started", async () => {
-  fresh(7, { gateSilent: 1 });
+test("a gate that gives no answer is asked up to twice more; three silences in a row and the job is not started", async () => {
+  fresh(7, { gateSilent: 2 });
   await run();
-  assert.equal(w.gates, 2);
+  assert.equal(w.gates, 3);
   assert.equal(JSON.parse(w.calls.find((c) => c.method === "record_receipt").args.proof).gate.tx, "GateTx");
-  fresh(8, { gateSilent: 2 });
+  fresh(8, { gateSilent: 3 });
   await run();
-  assert.equal(w.gates, 2);
+  assert.equal(w.gates, 3);
   assert.equal(w.completions, 0);
   assert.equal(w.calls.length, 0);
 });

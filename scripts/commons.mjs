@@ -4,12 +4,16 @@
 //   --pledge    alice pledges a review; bob calls it in and says it was kept
 //   --court     a demo job the buyer disputed and the market then paid (recorded by the agent, as `npm run demo` does:
 //               Agent Market has no testnet, so its "demo-" receipts carry no inference proof); bob takes the buyer's
-//               case to the co-op court; the drawn jurors rule; an upheld case refunds the buyer from the treasury.
+//               case to the co-op court; (0.2.8) bob and the steward each file evidence; the drawn jurors rule; an upheld
+//               case refunds the buyer from the treasury.
 //   --appeal <case> approve|reject   (0.2.7) the claimant of a dismissed case appeals to every member; the members vote
 //               the refund proposal the contract filed; anyone settles the appeal from the DAO's decision
 //   --routes    (0.2.7) bob routes his payouts to Base, alice to Arbitrum, each to their own Chain Signatures address
 //               (derived from their NEAR account: no new wallet)
 //   --mint      (0.2.7) alice, bob and the steward mint their work records as tokens
+//   --passport  (0.2.8) carol, who did paid tasks in another co-op (koperasi-mw80aczw), mints her record there; the
+//               members vote that co-op a sister; the contract reads her token there and stamps her passport here,
+//               one more trust source for payouts on trust
 import fs from "node:fs";
 import { daoAddress } from "./chainsig.mjs";
 import { DEPLOYMENT, NEAR, account, callRaw, decide, fnCall, txUrl, view, vote } from "./lib.mjs";
@@ -58,6 +62,11 @@ if (process.argv.includes("--court")) {
     reason: "The buyer disputed the report on Agent Market: half the sources were missing. The market paid the agent anyway; refund half." }, { deposit: NEAR / 2n, tgas: 30 });
   const id = value(o);
   say(`bob took the buyer's case to court: case #${id}`, o);
+  // 0.2.8: both sides are heard before the jurors rule
+  say("bob filed evidence", await callRaw(account(B), dep.contract, "add_evidence", { id,
+    what: `The brief asked for 10 sources; the delivered report (deliverable sha256 ${"0".repeat(8)}…) names 5. Buyer's dispute on the market job page.` }, { deposit: NEAR / 100n, tgas: 30 }));
+  say("the steward filed evidence", await callRaw(account(S), dep.contract, "add_evidence", { id,
+    what: "The market's own arbiter ruled for the agent (receipt status Paid); the report covers the brief's three questions." }, { deposit: NEAR / 100n, tgas: 30 }));
   const c = (await view(dep.contract, "get_cases", { from: id, limit: 1 }))[0];
   console.log("jurors drawn:", c.jurors.join(", "));
   for (const j of c.jurors) {
@@ -100,4 +109,21 @@ if (process.argv.includes("--mint")) {
     say(`${who} minted their work record`, await callRaw(account(who), dep.contract, "mint_work_record", {}, { deposit: NEAR / 100n, tgas: 30 }));
   }
   console.log("tokens:", (await view(dep.contract, "nft_tokens", {})).map((t) => `${t.token_id}: ${t.metadata.description.slice(0, 90)}…`).join("\n"));
+}
+
+if (process.argv.includes("--passport")) {
+  const SISTER = "koperasi-mw80aczw.testnet", CAROL = "kop-carol-mw80aczw.testnet";
+  if (!(await view(SISTER, "nft_token", { token_id: CAROL }))) say("carol minted her work record at the sister co-op",
+    await callRaw(account(CAROL), SISTER, "mint_work_record", {}, { deposit: NEAR / 100n, tgas: 30 }));
+  if (!(await view(dep.contract, "get_sister_coops")).includes(SISTER)) {
+    const { id } = await decide(account(A), [A, B, S].map(account), dep.dao,
+      `Recognise ${SISTER} as a sister co-op: work records there in good standing count as one trust source here`,
+      fnCall(dep.contract, "set_sister_coops", { coops: [SISTER] }, { tgas: 30 }));
+    console.log(`proposal #${id} approved: set_sister_coops([${SISTER}])`);
+  }
+  const before = await view(dep.contract, "get_trust_sources", { account_id: CAROL });
+  const r = await callRaw(account(B), dep.contract, "stamp_passport", { account_id: CAROL, coop: SISTER }, { deposit: NEAR / 100n, tgas: 60 });
+  say(`bob asked the contract to read carol's record at ${SISTER}: stamped ${value(r)}`, r);
+  console.log(`carol's trust sources here: ${before} → ${await view(dep.contract, "get_trust_sources", { account_id: CAROL })};`,
+    JSON.stringify(await view(dep.contract, "get_passport", { account_id: CAROL })));
 }
