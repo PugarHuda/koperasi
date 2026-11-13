@@ -35,6 +35,9 @@ const KEY_TEE_REGISTRY: &[u8] = b"tee_registry";
 fn attested_key(a: &AccountId) -> Vec<u8> {
     format!("attested:{a}").into_bytes()
 }
+fn tee_revoked_key(a: &AccountId) -> Vec<u8> {
+    format!("tee_revoked:{a}").into_bytes()
+}
 fn tee_required_key(a: &AccountId) -> Vec<u8> {
     format!("tee_required:{a}").into_bytes()
 }
@@ -144,8 +147,9 @@ impl Koperasi {
     /// With `commit`, the weights are kept as the new baseline (a dividend was paid by them).
     pub(crate) fn reputation_weights(&self, commit: bool) -> Vec<(AccountId, u128)> {
         let mut out = vec![];
-        // ponytail: every case, read once per dividend; a co-op with thousands of cases would keep running counters
-        let cases = self.get_cases(Some(0), Some(u32::MAX));
+        // the court record of the last 200 cases: recent conduct, like the decay, and bounded gas for any co-op
+        let n = crate::commons::cases_count();
+        let cases = self.get_cases(Some(n.saturating_sub(200)), Some(200));
         for a in self.members.keys() {
             let done = self.get_record(a.clone()).map_or(0, |r| r.done);
             let s = crate::commons::standing_of(a);
@@ -268,6 +272,7 @@ impl Koperasi {
         self.assert_dao();
         if required {
             save(&tee_required_key(&account_id), &true);
+            env::storage_remove(&tee_revoked_key(&account_id)); // marking it again is the members' way back in
         } else {
             env::storage_remove(&tee_required_key(&account_id));
         }
@@ -279,6 +284,7 @@ impl Koperasi {
         let reg: Option<AccountId> = load(KEY_TEE_REGISTRY);
         require!(reg.as_ref() == Some(&env::predecessor_account_id()), "only the TEE registry the members named");
         require!(compose_hash.len() <= 64, "compose hash: 64 hex");
+        require!(!env::storage_has_key(&tee_revoked_key(&account_id)), "the members revoked this agent's attestation");
         save(&attested_key(&account_id), &(until, compose_hash.clone()));
         Event::AgentAttested { account_id, until, compose_hash }.emit();
     }
@@ -287,6 +293,7 @@ impl Koperasi {
     pub fn revoke_attestation(&mut self, account_id: AccountId) {
         self.assert_dao();
         env::storage_remove(&attested_key(&account_id));
+        save(&tee_revoked_key(&account_id), &true); // it stays out until the members mark it again (set_agent_tee)
         Event::AgentAttested { account_id, until: U64(0), compose_hash: String::new() }.emit();
     }
 

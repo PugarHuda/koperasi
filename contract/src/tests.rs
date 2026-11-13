@@ -2977,6 +2977,9 @@ fn a_tee_only_agent_records_only_while_attested() {
     as_(&dao(), near(0));
     k.revoke_attestation(worker.clone());
     assert!(fails(|| { at(&worker, 2 * DAY); rec(&mut k, "t-2"); }), "revoked by the members");
+    assert!(fails(|| { as_(&registry, near(0)); k.note_attested(worker.clone(), U64(10 * DAY), "ab".into()); }), "no way back by registering again");
+    as_(&dao(), near(0));
+    k.set_agent_tee(worker.clone(), true); // the members let it back in
     as_(&registry, near(0));
     k.note_attested(worker.clone(), U64(10 * DAY), "ab".into());
     assert!(fails(|| { at(&worker, 11 * DAY); rec(&mut k, "t-2"); }), "the attestation expired");

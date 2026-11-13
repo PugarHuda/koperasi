@@ -148,6 +148,11 @@ fn claim_key(id: u32) -> Vec<u8> {
 fn case_key(id: u32) -> Vec<u8> {
     format!("case:{id}").into_bytes()
 }
+/// How many cases were ever opened.
+pub(crate) fn cases_count() -> u32 {
+    count(KEY_CASES)
+}
+
 /// Tests only: store a case as if the court had ruled it.
 #[cfg(test)]
 pub(crate) fn put_case(c: &Case) {
