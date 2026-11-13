@@ -247,3 +247,15 @@ The agent's key cannot even ask for anything but `record_receipt` and `update_re
 | P2 | `agent_propose_bylaws` → `set_config` | Medium (found live) | The filed call named the agent as contributor; `set_config` gives points to a contributor and panicked for a non-member, so the members' approval (#123) did nothing. | `set_config` names a non-member contributor with no points; the test runs the exact call the proposal makes. The members passed the same file by #124 | **Fixed in source** |
 | P3 | `agent_propose_bylaws` | Low (design) | The contract pays the proposal's bond (0.1 NEAR) for the agent. | One proposal every 7 days, only the next version, only from the agent's own signature; Sputnik returns the bond when the members decide | Accepted |
 | W1 | `web/near.js` | Low | The page's ~130 reads on load hit the public RPCs' per-IP limit (CI failed every Firefox test, which runs last). | The same view is read once (kept 30 s, dropped after the member's own transaction or a new event), at most 4 requests in flight, an RPC that answered 429 skipped for 15 s | **Fixed** |
+
+## Round 13 (14 Nov): contract 0.3.3 live (the agent as a member, the federation's rules, late loans told)
+
+| ID | Component | Severity | Risk | Evidence / test | Status |
+|---|---|---|---|---|---|
+| P1, P2 | as above | Medium | | Live by vote #126, a reproducible build (sha256 `6185b266…`) | **Fixed, live** |
+| F2 | `note_late_elsewhere` (automated review) | Medium | One sister co-op could lift the late-loan note another sister had set. | Each co-op's note is kept apart and lifted only by that co-op; test *a late loan is told to the sister co-ops …* covers two sisters | **Fixed before live** |
+| F3 | `get_credit` (automated review) | Medium | A passport stamp read long ago kept adding to credit after the work record there changed. | Only stamps read in the last 30 days count; anyone may stamp again. Test *credit counts work stamped from a sister co-op* | **Fixed before live** |
+| F4 | `set_federation_rules` | Medium (design) | A federation could set a ceiling that stops a co-op lending. | Only the DAO the co-op's members named may set it, by a resolution every member co-op voted; leaving is the co-op's own vote (`set_federation(None)`) | By design |
+| F5 | `note_late_elsewhere` (migration, automated review) | Info | The note's storage format changed during review. | 0.3.3 was never live with the earlier format, so there is nothing to migrate | Not applicable |
+| X1 | `agent/runtime.mjs` referral (automated review) | Medium | A market could name any co-op as the one that brought a job, in the agent's attested receipt. | The runtime records a referral only for a co-op the contract lists as a sister; the 30% moves only by the members' vote (sister #21) | **Fixed** |
+| A2 | `pay_agent_share` | Low | The agent's share could crowd out the members' part. | Out of the reserve only, after the funds and the reputation dividend, at most the reserve bps; halved per live strike, nothing while suspended | By design |

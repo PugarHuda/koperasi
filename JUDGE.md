@@ -48,14 +48,18 @@ every day (`.github/workflows/tests.yml`).
 | 13m | Credit, a reputation dividend and the member card (0.3.2) | `/cert.html?who=kop-alice-mw4i3w8f.testnet`; `npm run verify` | alice's card says "credit 7/10 (loan up to 0.35 NEAR); dues paid"; vote #121 set a 10% reputation dividend, the agent's 10% savings into the risk fund and the translator's own by-laws; share #122 paid the dividend by each member's record |
 | 13n | A profit share in ETH, and the member's feed | *Commons* → Chain Signatures; `/api/inbox?who=kop-bob-mw4i3w8f.testnet` | Sepolia ETH to alice (#115) and bob (#116), each signed by Chain Signatures after its vote; an RSS feed of what needs bob, read from the chain |
 | 13o | The federation's shared loan standard | `/coops.html` | resolution #2 (at most 2% flat, 30 days, a guarantor) passed by both co-ops' votes (#111, sister #18) |
+| 13p | The agent as a member, and the risk fund's cycle (0.3.3) | *Commons* → *The agent is a member too*; `npm run verify` | 5% of every share into the risk fund (#127), halved per strike; the agent saved 0.38 USDC from its earnings and case #10 was refunded 0.40 from the fund with no proposal |
+| 13q | The federation's rules bind the code | `npm run verify` (the federation-ceiling line); DAO proposal #130 | federation resolutions #4 and #5 set at most 2% for 30 days in each contract; the members' own 4% vote (#130) is Approved, and `get_loan_rule` still says 200 bps |
+| 13r | Work passed between co-ops | `npm run verify` (the work-passes line) | the sister's receipt names the showcase as the co-op that brought the job; the sister's #21 paid 1.14 USDC to the showcase's treasury, as federation resolution #3 says |
+| 13s | The agent judges its own proposal | `/agent-proposals/v8.facts.json`; `npm run verify` | the facts the agent read, whose sha256 the record holds; its answer: too few jobs under v7 to judge, so no change proposed |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source
 
 | # | Check | Command | You should see |
 |---|---|---|---|
-| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `cd7d70d2fc8abff164fd6d2c0775166c1b84f9edf187007dc486d40ec15b28ca`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
-| 15 | The tests | `npm test` | lint, typecheck, unit tests and 156 contract tests (unit, fuzz, invariant) pass |
+| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `6185b266fdfa12e180b39350bd7a55d7fbd69659a5a7aca5620b8ea992aae162`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
+| 15 | The tests | `npm test` | lint, typecheck, unit tests and 162 contract tests (unit, fuzz, invariant) pass |
 | 16 | Against the real Sputnik DAO code, not a mock | `cd contract && cargo test --test sputnik_sandbox` (Linux/macOS) | a task paid out of the treasury of a local DAO running the showcase DAO's own wasm |
 
 ## What is not real yet (said plainly)
@@ -72,7 +76,8 @@ every day (`.github/workflows/tests.yml`).
 - The agent's first proposal (#123) was approved by the members but did nothing: the contract named the agent as the
   by-laws' contributor, and `set_config` gave points only to members, so the call failed (Sputnik v2 on testnet keeps
   the proposal *Approved*). The members passed the same file by #124; the code now names a non-member contributor
-  with no points. The agent may propose once every 7 days.
-- The risk fund is voted (the agent saves 10% of every earnings deposit) but still empty: no earnings were deposited
-  since 0.3.2.
+  with no points. How often the agent may propose is the members' to set (0.3.3; they set no wait, #127).
+- No loan has been late on testnet (a term plus 7 days' grace has not passed), so a late loan told to the sister
+  co-ops, dues in arrears and a guarantee called are proven by contract tests only.
+- The agent's model-written proposal (0.3.3) proposed nothing yet: too few jobs under by-laws v7 to judge.
 - Testnet only. The path to mainnet is in the README, under *Sustainability and the path to mainnet*.
