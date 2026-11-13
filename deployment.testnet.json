@@ -869,28 +869,24 @@
       }
     },
     "share": {
-      "proposal": 132,
-      "agentShare": "50003",
+      "proposal": 135,
+      "agentShare": "50000",
       "weights": [
         [
-          "kop-steward-mw4i2iwk.testnet",
-          "1"
-        ],
-        [
           "kop-alice-mw4i3w8f.testnet",
-          "7"
+          "560"
         ],
         [
           "kop-bob-mw4i3w8f.testnet",
-          "6"
+          "825"
         ],
         [
           "kop-guest-984702.testnet",
-          "7"
+          "1200"
         ],
         [
           "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
-          "10"
+          "2500"
         ]
       ]
     },
@@ -920,5 +916,31 @@
     "registry": "kop-tee-mwfb5bj2.testnet",
     "registryVote": 134,
     "compose": "agent/phala-compose.yml"
+  },
+  "v034": {
+    "share": {
+      "proposal": 135,
+      "weights": [
+        [
+          "kop-alice-mw4i3w8f.testnet",
+          "560"
+        ],
+        [
+          "kop-bob-mw4i3w8f.testnet",
+          "825"
+        ],
+        [
+          "kop-guest-984702.testnet",
+          "1200"
+        ],
+        [
+          "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
+          "2500"
+        ]
+      ],
+      "note": "the steward added no work since the last dividend and its weight decayed to nothing; each weight x100 times (good+2)/(bad+2) from the court record"
+    },
+    "upgrade": 133,
+    "teeRegistryVote": 134
   }
 }
