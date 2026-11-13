@@ -15,11 +15,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { infer, loadApprovedConfig } from "../agent/runtime.mjs";
-import { DEPLOYMENT, NEAR, ROOT, account, decide, fnCall, sha256, view } from "./lib.mjs";
+import { DEPLOYMENT, NEAR, ROOT, account, decide, fnCall, propose, sha256, view, vote } from "./lib.mjs";
 
 const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 const year = Number(process.argv.slice(2).find((a) => /^\d{4}$/.test(a)) ?? new Date().getUTCFullYear());
 const duesArg = process.argv.includes("--dues") ? process.argv[process.argv.indexOf("--dues") + 1] : null;
+// --reject: the members vote the draft down (nothing is recorded; the agenda stays open for the next draft).
+// Another co-op of this repo (KOP_DEPLOYMENT) keeps its reports under rat/<contract>/ and its own voters (KOP_VOTERS).
+const reject = process.argv.includes("--reject");
+const showcase = path.basename(DEPLOYMENT) === "deployment.testnet.json";
 const C = dep.contract;
 const usdc = (u) => Number(u) / 1e6;
 const near = (y) => Number(BigInt(y) / 10n ** 21n) / 1000;
@@ -64,11 +68,12 @@ const facts = {
   agenda: (await view(C, "get_agenda", { year }).catch(() => [])).map(([by, item]) => ({ by, item })),
   dao_proposals: { filed: lastProposal, last: recent.map((p) => ({ id: p.id, status: p.status, what: p.description.slice(0, 120) })) },
 };
-const dir = path.join(ROOT, "web", "rat");
+const sub = showcase ? "" : `${dep.contract}/`;
+const dir = path.join(ROOT, "web", "rat", sub);
 fs.mkdirSync(dir, { recursive: true });
 const factsText = `${JSON.stringify(facts, null, 2)}\n`;
 fs.writeFileSync(path.join(dir, `${year}.facts.json`), factsText);
-console.log(`facts of ${year} read from the chain: web/rat/${year}.facts.json`);
+console.log(`facts of ${year} read from the chain: web/rat/${sub}${year}.facts.json`);
 
 // 2. the report, by the co-op's own agent, from those facts only
 const { config } = await loadApprovedConfig(dep);
@@ -91,13 +96,13 @@ const report = `# Annual members' meeting ${year}: ${C}\n\n`
   + `response signed by TEE key ${done.proof.tee_signer}. The members approve or reject it by DAO vote.${unknown.length
     ? ` Figures not found as such in the facts (sums, or errors: check them before voting): ${unknown.join(", ")}.` : " Every decimal figure in it is in the facts."}_\n\n${done.text.trim()}\n`;
 fs.writeFileSync(path.join(dir, `${year}.md`), report);
-console.log(`report: web/rat/${year}.md (${report.length} bytes, inference ${done.costMicroUsd / 1e6} USD)`);
+console.log(`report: web/rat/${sub}${year}.md (${report.length} bytes, inference ${done.costMicroUsd / 1e6} USD)`);
 
 // 3. the members' vote on exactly those bytes
-const voters = ["kop-alice-mw4i3w8f.testnet", "kop-bob-mw4i3w8f.testnet", dep.steward];
-const description = `Annual members' meeting ${year}: approve the accountability report ${dep.page ?? "https://koperasi-kohl.vercel.app"}/rat/${year}.md `
+const voters = process.env.KOP_VOTERS?.split(",") ?? ["kop-alice-mw4i3w8f.testnet", "kop-bob-mw4i3w8f.testnet", dep.steward];
+const description = `Annual members' meeting ${year}: approve the accountability report ${dep.page ?? "https://koperasi-kohl.vercel.app"}/rat/${sub}${year}.md `
   + `(sha256 ${sha256(report)}), written by the co-op's agent in a TEE from the facts read from the chain `
-  + `(rat/${year}.facts.json, sha256 ${sha256(factsText)}; inference ${done.proof.inference_id})`;
+  + `(rat/${sub}${year}.facts.json, sha256 ${sha256(factsText)}; inference ${done.proof.inference_id})`;
 // the record, and the decisions the meeting takes, in one proposal: approved, all of it runs; rejected, none of it
 const kind = fnCall(C, "record_annual_meeting", { year, report_sha256: sha256(report), facts_sha256: sha256(factsText) }, { tgas: 30 });
 if (duesArg) {
@@ -105,12 +110,27 @@ if (duesArg) {
   const extra = fnCall(C, "set_dues", { amount: String(BigInt(Math.round(Number(amount) * 1000)) * NEAR / 1000n), every_days: Number(days) }, { tgas: 30 });
   kind.FunctionCall.actions.push(...extra.FunctionCall.actions);
 }
-const { id } = await decide(account(voters[0]), voters.map(account), dep.dao,
-  `${description}${duesArg ? `; and, as the agenda asked, mandatory dues of ${duesArg.replace("/", " NEAR every ")} days` : ""}`, kind);
+const full = `${description}${duesArg ? `; and, as the agenda asked, mandatory dues of ${duesArg.replace("/", " NEAR every ")} days` : ""}`;
+if (reject) {
+  const id = await propose(account(voters[0]), dep.dao, full, kind);
+  for (const v of voters) {
+    if ((await view(dep.dao, "get_proposal", { id })).status !== "InProgress") break;
+    await vote(account(v), dep.dao, id, "VoteReject");
+  }
+  const p = await view(dep.dao, "get_proposal", { id });
+  console.log(`proposal #${id} ${p.status}: the members did not approve this draft; nothing recorded:`, JSON.stringify(await view(C, "get_annual_meetings")));
+  const draft = { year, report: `rat/${sub}${year}.md`, report_sha256: sha256(report), proposal: id, status: p.status, at: new Date().toISOString() };
+  fs.renameSync(path.join(dir, `${year}.md`), path.join(dir, `${year}.rejected-${id}.md`)); // the next draft takes the name
+  draft.report = `rat/${sub}${year}.rejected-${id}.md`;
+  const d = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
+  fs.writeFileSync(DEPLOYMENT, JSON.stringify({ ...d, rat_rejected: [...(d.rat_rejected ?? []), draft] }, null, 2) + "\n");
+  process.exit(0);
+}
+const { id } = await decide(account(voters[0]), voters.map(account), dep.dao, full, kind);
 console.log(`proposal #${id} approved: the members approved the ${year} report`);
-const rat = { year, ...(duesArg ? { decided: { dues: duesArg } } : {}), report: `rat/${year}.md`, report_sha256: sha256(report), facts: `rat/${year}.facts.json`, facts_sha256: sha256(factsText),
+const rat = { year, ...(duesArg ? { decided: { dues: duesArg } } : {}), report: `rat/${sub}${year}.md`, report_sha256: sha256(report), facts: `rat/${sub}${year}.facts.json`, facts_sha256: sha256(factsText),
   proposal: id, proof: done.proof, at: new Date().toISOString() };
-for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) {
+for (const f of showcase ? [DEPLOYMENT, path.join(ROOT, "web/deployment.json")] : [DEPLOYMENT]) {
   const d = JSON.parse(fs.readFileSync(f, "utf8"));
   fs.writeFileSync(f, JSON.stringify({ ...d, rat: [...(d.rat ?? []).filter((r) => r.year !== year), rat] }, null, 2) + "\n");
 }

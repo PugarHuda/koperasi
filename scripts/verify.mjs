@@ -388,6 +388,18 @@ for (const r of d.rat ?? []) {
   }
 }
 
+// the full cycle: three upheld cases suspended the agent, the contract refused its receipt, the members reinstated it
+if (d.suspension) {
+  const sp = d.suspension;
+  const [t, p, cs] = await Promise.all([rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: sp.refused.tx, sender_account_id: sp.refused.by, wait_until: "FINAL" }),
+    view(d.dao, "get_proposal", { id: sp.reinstated_by }), view(d.contract, "get_cases", { from: 0, limit: 100 })]);
+  const failed = JSON.stringify(t?.status?.Failure ?? t?.receipts_outcome?.map((o) => o.outcome.status.Failure).find(Boolean) ?? null).includes("suspended by the co-op court");
+  const ok = failed && sp.strikes.length >= 3 && sp.strikes.every((id) => cs.find((c) => c.id === id)?.status === "Upheld")
+    && p.status === "Approved" && argsOf(p).some((a) => a.method === "reinstate_agent");
+  check(ok, "the court suspended the agent after three upheld cases, the contract refused its receipt, and the members reinstated it by vote",
+    `strikes: ${sp.strikes.map((c) => `case #${c}`).join(", ")}; refused ${sp.refused.tx.slice(0, 10)}… ("${sp.refused.error.slice(0, 50)}…"); reinstated by #${sp.reinstated_by} (${p.status})`);
+}
+
 // the federation (scripts/federation.mjs): a DAO whose only members are co-ops' DAOs; its resolution passed by both,
 // and each co-op's vote was cast by a proposal its own members approved
 if (d.federation) {

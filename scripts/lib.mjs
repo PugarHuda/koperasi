@@ -46,7 +46,8 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const KEYS = path.join(ROOT, ".keys");
 // the showcase co-op (the one the web page reads); the demo and fresh deploys use their own local file
-export const DEPLOYMENT = path.join(ROOT, `deployment.${NETWORK}.json`);
+// KOP_DEPLOYMENT: run a script against another co-op of this repo (e.g. deployment.testnet.local.json, the sister co-op)
+export const DEPLOYMENT = process.env.KOP_DEPLOYMENT ? path.resolve(ROOT, process.env.KOP_DEPLOYMENT) : path.join(ROOT, `deployment.${NETWORK}.json`);
 export const LOCAL_DEPLOYMENT = path.join(ROOT, `deployment.${NETWORK}.local.json`);
 
 export const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");

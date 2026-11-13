@@ -16,6 +16,7 @@
 //               one more trust source for payouts on trust
 //   --agenda    (0.2.9) alice and bob put items on this year's annual meeting agenda (then: scripts/rat.mjs)
 //   --dues      (0.2.9) every member pays the mandatory dues the members voted (two periods each)
+//   --reinstate (0.2.9) the members vote to reinstate the agent the co-op court suspended (3 upheld cases in 90 days)
 //   --passport-back  (0.2.8) the other way: the sister co-op's members vote the showcase a sister; its contract reads
 //               carol's record here (9 paid tasks) and stamps her passport there, so the recognition is mutual
 import fs from "node:fs";
@@ -164,5 +165,13 @@ if (process.argv.includes("--dues")) {
     say(`${m.split(".")[0]} paid two periods of dues`, await callRaw(account(m), dep.contract, "pay_dues", {}, { deposit: 2n * BigInt(d.amount), tgas: 30 }));
     console.log("   ", JSON.stringify(await view(dep.contract, "get_dues_status", { account_id: m })));
   }
+}
+
+if (process.argv.includes("--reinstate")) {
+  const before = await view(dep.contract, "get_agent_standing");
+  const { id } = await decide(account(A), [A, B, S].map(account), dep.dao,
+    `Reinstate the agent: the court suspended it after ${before.strikes.length} upheld cases (${before.strikes.map(([c]) => `#${c}`).join(", ")}); the members reviewed them and let it work again`,
+    fnCall(dep.contract, "reinstate_agent", {}, { tgas: 30 }));
+  console.log(`proposal #${id} approved: reinstate_agent;`, JSON.stringify(await view(dep.contract, "get_agent_standing")));
 }
 

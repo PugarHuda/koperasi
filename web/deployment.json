@@ -6,8 +6,8 @@
   "steward": "kop-steward-mw4i2iwk.testnet",
   "contract": "koperasi-mw4i2iwk.testnet",
   "agent": "agent.koperasi-mw4i2iwk.testnet",
-  "configHash": "9925e2571e03cf0453c457e20017c5dc6493226a853f44b36d98c1a00160d168",
-  "configUri": "config/config.v5.yaml",
+  "configHash": "4d379b1acffd931d87d428a889cd74ebbfd50e29cb8637ac544c6d40b0a17347",
+  "configUri": "config/config.v6.yaml",
   "codeSha256": "6119a73a4c36849bae148cd1dae81117bdcc205290ddf3d728f6688fb8746933",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
@@ -244,9 +244,9 @@
     "program": "outlayer/bylaws-check",
     "wasm": "https://koperasi-kohl.vercel.app/outlayer/bylaws-check.wasm?v=5d1c4ec7ae6a",
     "wasm_sha256": "5d1c4ec7ae6a3b3f89dc101acde74034b532dbe73ed9b80900783af1869a28a5",
-    "tx": "EKXe3A71HFxVTnzdzLGzZCa7XwqhkY12BgiTtX2MAPhB",
+    "tx": "8bWZcAeChfcigaYDMCH6a5tXHCfoShVNiuHHmGCR7zB3",
     "sender": "kop-alice-mw4i3w8f.testnet",
-    "version": 5
+    "version": 6
   },
   "redteam": [
     {
@@ -507,6 +507,34 @@
       "receipt": "taskbond-14",
       "at": "2026-11-13T07:14:02.347Z",
       "passed_on": "6kHgD6ir4imbDugrZRrArcZHWwiu44jCeDnYWcNpPpX4"
+    },
+    {
+      "escrow": "escrow.tbnd246748.testnet",
+      "job": 15,
+      "poster": "pusaka-s-mvzgq3wm.testnet",
+      "agent_id": 39,
+      "owner": "kop-steward-mw4i2iwk.testnet",
+      "review": "Accepted",
+      "reason": "[NEAR AI] 95/100 · Accurately covers all brief points with valid citations, clearly distinguishing key types and providing testnet sources.",
+      "score": 95,
+      "winner": 39,
+      "status": "Paid",
+      "receipt": "taskbond-15",
+      "at": "2026-11-13T07:34:00.486Z",
+      "passed_on": "7ynhzCtLfNPjs8XW5KCvAZzKRXPHRR7NghZ7vB85M7k8"
     }
-  ]
+  ],
+  "suspension": {
+    "strikes": [
+      5,
+      8,
+      9
+    ],
+    "refused": {
+      "tx": "BCqfR5HS8ghkNn4jPQUqvgBxTkUgRhCHBjh5bjQyqgfS",
+      "by": "agent.koperasi-mw4i2iwk.testnet",
+      "error": "the agent is suspended by the co-op court (3 upheld cases in 90 days): the members reinstate it by vote"
+    },
+    "reinstated_by": 100
+  }
 }
