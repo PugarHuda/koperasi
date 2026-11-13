@@ -1,6 +1,6 @@
 {
   "contract": "koperasi-mw4i2iwk.testnet",
-  "read_at": "2026-11-13T17:59:13.388Z",
+  "read_at": "2026-11-13T19:37:03.880Z",
   "by_laws": {
     "version": 7,
     "active_since": "2026-11-13T16:59:21.015Z",
@@ -32,17 +32,17 @@
     "avg_inference_usd": 0.0005461379310344828
   },
   "jobs_under_these_by_laws": {
-    "jobs": 1,
-    "paid": 1,
+    "jobs": 4,
+    "paid": 4,
     "refunded": 0,
     "disputed": 0,
     "submitted": 0,
-    "avg_price_usdc": 1,
-    "avg_inference_usd": 0
+    "avg_price_usdc": 4,
+    "avg_inference_usd": 0.0005065
   },
-  "jobs_by_tag_prefix": {
+  "jobs_by_kind": {
     "demo-court": 11,
-    "demo-": 23,
+    "demo-": 26,
     "taskbond-": 3
   },
   "court": {
@@ -51,7 +51,7 @@
     "strikes_live": 1,
     "suspended": false
   },
-  "risk_fund_usdc": 0.030003,
+  "risk_fund_usdc": 1.505003,
   "agent_share_bps": 500,
   "standing_bps": 5000,
   "my_last_proposal": {

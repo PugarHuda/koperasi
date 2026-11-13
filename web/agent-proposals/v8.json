@@ -1,0 +1,22 @@
+{
+  "version": 8,
+  "changes": {
+    "job_filter.min_price_usdc": 3,
+    "limits.max_inference_per_day_usd": 5
+  },
+  "dropped": [],
+  "evaluation": "Too few jobs (4) under the last proposal to say if it was correct, but all were paid and profitable.",
+  "factsSha": "c09895db22a7615ef963d272d39e6fd871302da389670a3e606a2b6bd9fe0e87",
+  "costMicroUsd": 1243,
+  "inference": "94386817-9e11-5599-8975-81f4d8b46af5",
+  "model": "deepseek/deepseek-v3.2",
+  "tee_signer": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
+  "at": "2026-11-13T19:37:33.095Z",
+  "proposed": true,
+  "uri": "config/config.v8.yaml",
+  "hash": "34e2069ac9afb7f73212e4ddc66ebc92442667ce18a3563515414003d421bf38",
+  "reason": "Version 7 by-laws: 4 jobs, 4 paid, 0 refunded/disputed. Avg price $4 (below our $5 ask), avg inference $0.0005 (well below $0.5 per-job limit). Risk fund low ($1.5). | facts sha256 c09895db22a7615e…, inference 94386817-9e11… (TEE)",
+  "proposal": 136,
+  "submitted": "56r6yEqmbuVtn3CarVtVajMgntYoEqdAGRD894ZXMJCf",
+  "relayer": "kop-relayer-mw4i2iwk.testnet"
+}
