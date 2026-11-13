@@ -6,8 +6,8 @@
   "steward": "kop-steward-mw4i2iwk.testnet",
   "contract": "koperasi-mw4i2iwk.testnet",
   "agent": "agent.koperasi-mw4i2iwk.testnet",
-  "configHash": "4e28de45f843b798bb3f58973d19045473f5972b4ff1e3eb3bf1735c473eb395",
-  "configUri": "config/config.v4.yaml",
+  "configHash": "9925e2571e03cf0453c457e20017c5dc6493226a853f44b36d98c1a00160d168",
+  "configUri": "config/config.v5.yaml",
   "codeSha256": "6119a73a4c36849bae148cd1dae81117bdcc205290ddf3d728f6688fb8746933",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
@@ -242,11 +242,11 @@
   "outlayer": {
     "provider": "OutLayer (Intel TDX), outlayer.testnet",
     "program": "outlayer/bylaws-check",
-    "wasm": "https://koperasi-kohl.vercel.app/outlayer/bylaws-check.wasm?v=725254a197b4",
-    "wasm_sha256": "725254a197b432cdb366ee6f3e4086d9ff9099ed350d114fcf6fb87d2e984fa0",
-    "tx": "4EShvWPavQuFDZtNMfyEBgVGMuA7J2oy8h9VxgCsqFma",
+    "wasm": "https://koperasi-kohl.vercel.app/outlayer/bylaws-check.wasm?v=5d1c4ec7ae6a",
+    "wasm_sha256": "5d1c4ec7ae6a3b3f89dc101acde74034b532dbe73ed9b80900783af1869a28a5",
+    "tx": "EKXe3A71HFxVTnzdzLGzZCa7XwqhkY12BgiTtX2MAPhB",
     "sender": "kop-alice-mw4i3w8f.testnet",
-    "version": 4
+    "version": 5
   },
   "redteam": [
     {
@@ -476,5 +476,22 @@
         }
       ]
     }
-  }
+  },
+  "taskbond": [
+    {
+      "escrow": "escrow.tbnd246748.testnet",
+      "job": 13,
+      "poster": "kop-publisher-mw5tkpfo.testnet",
+      "agent_id": 37,
+      "owner": "kop-steward-mw4i2iwk.testnet",
+      "review": "Accepted",
+      "reason": "[NEAR AI] 95/100 · Accurately covers all brief points with valid citations, clearly distinguishing key types and testnet acquisition.",
+      "score": 95,
+      "winner": 37,
+      "status": "Paid",
+      "receipt": "taskbond-13",
+      "at": "2026-11-13T06:43:57.835Z",
+      "passed_on": "CqBieK14pn1rkb2c4SBFoQZpi9M9kQPCLDD8xcYPoHPw"
+    }
+  ]
 }

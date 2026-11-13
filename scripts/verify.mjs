@@ -435,8 +435,22 @@ if (gated.length) {
   check(res.every((r) => r.ok), "every job that names a by-laws gate had its by-laws checked inside an Intel TDX enclave first, against the hash its receipt carries",
     gated.map(([x], i) => `${x.job_id.slice(0, 14)}…: ${res[i].ok ? "match" : "FAILED"} (${res[i].line})`).join("; "));
 }
-const market = proven.filter((x) => !x.job_id.startsWith("demo-")).length;
-console.log(`INFO  receipts: ${receipts.length}, ${proven.length} with a TEE inference proof (${proven.length - market} for a demo buyer, ${market} from Agent Market: 0 = no real Agent Market job yet, as the README says)`);
+// jobs from a third-party testnet market (scripts/taskbond.mjs): posted by an account that is not a member, guarded,
+// reviewed and paid by that market's own operator and escrow; the co-op's receipt names the job
+for (const t of d.taskbond ?? []) {
+  const [job, agent, member] = await Promise.all([view(t.escrow, "get_job", { job_id: t.job }), view(t.escrow, "get_agent", { agent_id: t.agent_id }),
+    view(d.contract, "get_member", { account_id: t.poster })]);
+  const i = receipts.findIndex((x) => x.job_id === t.receipt);
+  const proof = parsedProofs[i];
+  const ok = job.status === "Paid" && job.winner_agent_id === t.agent_id && agent.owner === t.owner && agent.review === "Accepted" && member === null
+    && proof?.model && proof?.market?.escrow === t.escrow && proof.market.job === t.job;
+  check(ok, "the agent won a job on a third-party testnet market (Taskbond): posted by a non-member, judged and paid by that market's own AIs and escrow",
+    `${t.escrow} job #${t.job} posted by ${t.poster} (not a member): ${job.status}, winner agent #${job.winner_agent_id} (ours, run by ${agent.owner}), `
+    + `score ${job.score}: "${agent.review_reason.slice(0, 90)}"; receipt ${t.receipt} with the TEE proof (${proof?.model})`);
+}
+const third = proven.filter((x) => x.job_id.startsWith("taskbond-")).length;
+const market = proven.filter((x) => !x.job_id.startsWith("demo-") && !x.job_id.startsWith("taskbond-")).length;
+console.log(`INFO  receipts: ${receipts.length}, ${proven.length} with a TEE inference proof (${proven.length - market - third} for a demo buyer, ${third} from a third-party testnet market, ${market} from Agent Market: 0 = no real Agent Market job yet, as the README says)`);
 console.log(`INFO  audit: expected ${usd(audit.expected)} USDC, deposited ${usd(audit.deposited)}, owed ${usd(audit.owed)} (red on purpose: the demo's last step has the steward keep a payout)`);
 const usdc = await view(info.usdc_id, "ft_balance_of", { account_id: d.dao });
 console.log(`INFO  DAO treasury: ${usd(usdc)} USDC (${info.usdc_id.slice(0, 12)}…)`);

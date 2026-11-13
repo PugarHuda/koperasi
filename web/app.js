@@ -195,14 +195,17 @@ try {
       ? `<span class="state on">TEE verified</span> ${esc(when)} UTC: Intel TDX ${esc(m.tdx_status ?? "")}, NVIDIA GPU ${m.gpu?.verdict === true ? "pass" : "unknown"}, bound to a fresh nonce. The agent re-checks before every job and refuses unverified models. <a href="/evidence/${esc(file)}">Evidence</a>`
       : `<span class="state off">TEE not verified</span> ${esc(when)} UTC: ${esc(ev.reason ?? "a check failed")}. The agent will not send jobs to this model.`;
   }).catch((e) => verdict("ck-bylaws", false, `Could not download the by-laws file (${esc(e.message)}). Reload to try again.`));
-  const paidJobs = receipts.filter((x) => x.status === "Paid").length;
   const teeJobs = checked.filter((r, i) => parsed[i]?.model);
-  const teeMarket = teeJobs.filter((r) => !r.job_id.startsWith("demo-")).length;
+  const teeMarket = teeJobs.filter((r) => !/^(demo|taskbond)-/.test(r.job_id)).length;
+  const demoTee = teeJobs.filter((r) => r.job_id.startsWith("demo-"));
+  // jobs won on a third-party testnet market (scripts/taskbond.mjs): another team's escrow, guard and reviewer
+  const won = (dep.taskbond ?? []).filter((t) => t.status === "Paid" && t.winner === t.agent_id);
+  const third = won.length ? ` On <a href="https://taskbond-iota.vercel.app/jobs/${esc(won.at(-1).job)}">Taskbond</a>, another team's testnet market, it won ${won.length === 1 ? "a job" : `${won.length} jobs`} its reviewer AI scored ${won.map((t) => esc(t.score)).join(", ")}/100, paid by that market's escrow.` : "";
   $("p-agent").innerHTML = info.paused
     ? `<span class="state off">Paused</span> The members voted to stop it.`
     : `<span class="state on">Allowed to work</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${teeMarket
       ? `${teeMarket} Agent Market ${teeMarket === 1 ? "job" : "jobs"} done by a TEE-verified model.`
-      : `No Agent Market job yet.${teeJobs.length ? ` ${teeJobs.length === 1 ? "One job" : `${teeJobs.length} jobs`} from a demo buyer ${teeJobs.length === 1 ? "was" : "were"} done by a TEE-verified model, with the proof on-chain;` : ""} the ${paidJobs} paid receipts come from the testnet demo, where a local stand-in plays Agent Market and no model runs.`}`;
+      : `No Agent Market job yet.${third}${demoTee.length ? ` ${demoTee.length === 1 ? "One job" : `${demoTee.length} jobs`} from a demo buyer ${demoTee.length === 1 ? "was" : "were"} done by a TEE-verified model, with the proof on-chain;` : ""} the other paid receipts come from the testnet demo, where a local stand-in plays Agent Market and no model runs.`}`;
 
   // passbook: the co-op's life as ledger lines, newest first
   const lines = [

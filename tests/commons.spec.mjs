@@ -54,6 +54,11 @@ test("0.2.8: the passport stamp from a sister co-op is shown on the work record,
   await expect(page.locator("#rat")).toContainText(/Annual members' meeting \d{4}[\s\S]*DAO vote #\d+/);
 });
 
+test("the agent's job won on a third-party testnet market is shown with its reviewer's score", async ({ page }) => {
+  await page.goto("/#work");
+  await expect(page.locator("#p-agent")).toContainText(/On Taskbond, another team's testnet market, it won a job its reviewer AI scored \d+\/100/);
+});
+
 test("a juror is offered uphold and reject; someone else is not", async ({ page }, testInfo) => {
   onlyLocal(testInfo);
   await answerViews(page, { get_pledges: [], get_pledge_claims: [], get_cases: [kase()], get_standing: good });

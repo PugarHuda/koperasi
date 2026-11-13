@@ -12155,7 +12155,7 @@ async function gate(tx, sender, voted, jobId) {
   const job = out.job ? `; job ${String(out.job.id).slice(0, 14)}\u2026 ${out.job.allowed ? "allowed" : "REFUSED"} by the by-laws (${out.job.reason})` : "";
   return { ok, out, line: `tx ${tx} by ${sender}: read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}\u2026 = voted ${String(out.voted_sha256).slice(0, 12)}\u2026${job}` };
 }
-var PAGE, d2, view2, argsOf, near, usd, failed, SEPOLIA_RPCS, BASE_SEPOLIA_RPCS, EVM_RPCS, CHAIN_NAME, NEAR_TX_RPCS, check, info, policy, board, contributors, audit, proposal, last, proposals, approvedCall, fileHash, byLaws, acct, code, want, upgraded, keys, full, agentKeys, scoped, role, daoMembers, members, outside, vp, wide, tasksRole, r, ruleVote, vetoVote, tasks, steward, overdue, termDays, termEnds, cases, allReceipts, routes, tokens, pledges, pclaims, GATE_WASM, GATE_WASMS, shares, receipts, proofs, parsedProofs, proven, gated, market, usdc;
+var PAGE, d2, view2, argsOf, near, usd, failed, SEPOLIA_RPCS, BASE_SEPOLIA_RPCS, EVM_RPCS, CHAIN_NAME, NEAR_TX_RPCS, check, info, policy, board, contributors, audit, proposal, last, proposals, approvedCall, fileHash, byLaws, acct, code, want, upgraded, keys, full, agentKeys, scoped, role, daoMembers, members, outside, vp, wide, tasksRole, r, ruleVote, vetoVote, tasks, steward, overdue, termDays, termEnds, cases, allReceipts, routes, tokens, pledges, pclaims, GATE_WASM, GATE_WASMS, shares, receipts, proofs, parsedProofs, proven, gated, third, market, usdc;
 var init_verify = __esm({
   async "scripts/verify.mjs"() {
     init_lib();
@@ -12581,8 +12581,24 @@ var init_verify = __esm({
         gated.map(([x2], i) => `${x2.job_id.slice(0, 14)}\u2026: ${res[i].ok ? "match" : "FAILED"} (${res[i].line})`).join("; ")
       );
     }
-    market = proven.filter((x2) => !x2.job_id.startsWith("demo-")).length;
-    console.log(`INFO  receipts: ${receipts.length}, ${proven.length} with a TEE inference proof (${proven.length - market} for a demo buyer, ${market} from Agent Market: 0 = no real Agent Market job yet, as the README says)`);
+    for (const t2 of d2.taskbond ?? []) {
+      const [job, agent, member] = await Promise.all([
+        view2(t2.escrow, "get_job", { job_id: t2.job }),
+        view2(t2.escrow, "get_agent", { agent_id: t2.agent_id }),
+        view2(d2.contract, "get_member", { account_id: t2.poster })
+      ]);
+      const i = receipts.findIndex((x2) => x2.job_id === t2.receipt);
+      const proof = parsedProofs[i];
+      const ok = job.status === "Paid" && job.winner_agent_id === t2.agent_id && agent.owner === t2.owner && agent.review === "Accepted" && member === null && proof?.model && proof?.market?.escrow === t2.escrow && proof.market.job === t2.job;
+      check(
+        ok,
+        "the agent won a job on a third-party testnet market (Taskbond): posted by a non-member, judged and paid by that market's own AIs and escrow",
+        `${t2.escrow} job #${t2.job} posted by ${t2.poster} (not a member): ${job.status}, winner agent #${job.winner_agent_id} (ours, run by ${agent.owner}), score ${job.score}: "${agent.review_reason.slice(0, 90)}"; receipt ${t2.receipt} with the TEE proof (${proof?.model})`
+      );
+    }
+    third = proven.filter((x2) => x2.job_id.startsWith("taskbond-")).length;
+    market = proven.filter((x2) => !x2.job_id.startsWith("demo-") && !x2.job_id.startsWith("taskbond-")).length;
+    console.log(`INFO  receipts: ${receipts.length}, ${proven.length} with a TEE inference proof (${proven.length - market - third} for a demo buyer, ${third} from a third-party testnet market, ${market} from Agent Market: 0 = no real Agent Market job yet, as the README says)`);
     console.log(`INFO  audit: expected ${usd(audit.expected)} USDC, deposited ${usd(audit.deposited)}, owed ${usd(audit.owed)} (red on purpose: the demo's last step has the steward keep a payout)`);
     usdc = await view2(info.usdc_id, "ft_balance_of", { account_id: d2.dao });
     console.log(`INFO  DAO treasury: ${usd(usdc)} USDC (${info.usdc_id.slice(0, 12)}\u2026)`);

@@ -121,7 +121,7 @@ function loadState() {
 }
 const saveState = (s) => fs.writeFileSync(STATE, JSON.stringify(s));
 
-export async function infer(config, job, capMicroUsd, { local = false } = {}) {
+export async function infer(config, job, capMicroUsd, { local = false, maxTokens = MAX_OUTPUT_TOKENS, brief = false } = {}) {
   const key = process.env.NEARAI_API_KEY;
   if (!key) {
     if (!local) throw new NotVerified("no NEARAI_API_KEY: the agent does not deliver work no model did");
@@ -137,8 +137,11 @@ export async function infer(config, job, capMicroUsd, { local = false } = {}) {
     { role: "system", content: config.system_prompt },
     { role: "user", content: `Job: ${String(job.title).slice(0, 300)}\n\n${String(job.description)}`.slice(0, MAX_BRIEF_CHARS) },
   ];
-  const max_tokens = maxTokensWithin(capMicroUsd, Buffer.byteLength(JSON.stringify(messages)), prices);
-  const body = JSON.stringify({ model: config.model, messages, max_tokens });
+  // a caller may bound the answer further: a reasoning model given 16 000 tokens on a long brief can think past the
+  // 300 s timeout (13 Nov: an 8 KB brief answered in 65 s with 2 000 tokens, timed out with 16 000)
+  const max_tokens = Math.min(maxTokens, maxTokensWithin(capMicroUsd, Buffer.byteLength(JSON.stringify(messages)), prices));
+  // `brief`: ask the model's chat template to skip its thinking (GLM honours it partly: 22 reasoning tokens instead of 71)
+  const body = JSON.stringify({ model: config.model, messages, max_tokens, ...(brief ? { chat_template_kwargs: { enable_thinking: false } } : {}) });
   try {
     const res = await fetch(`${NEARAI}/chat/completions`, {
       method: "POST",
