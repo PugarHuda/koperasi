@@ -100,7 +100,7 @@ if (run("propose")) {
   say(`the agent proposed by-laws v${version} (signed by the agent, submitted by ${RELAYER})`, r);
   await new Promise((ok) => setTimeout(ok, 4000));
   const p = (await view(K, "get_agent_proposals")).at(-1);
-  if (p?.version !== version || p.proposal == null) throw new Error("the DAO did not file the agent's proposal");
+  if (p?.version !== version || p.proposal === null) throw new Error("the DAO did not file the agent's proposal");
   console.log(`   DAO proposal #${p.proposal}: ${(await view(D, "get_proposal", { id: p.proposal })).description}`);
   for (const v of voters) {
     if ((await view(D, "get_proposal", { id: p.proposal })).status !== "InProgress") break;

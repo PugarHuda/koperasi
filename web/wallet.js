@@ -2,7 +2,7 @@
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
 import { SEPOLIA, eth, plainPayment, rawHash, rawTx, toHex, transfer, txFromText, txsFromText, txHash, txText } from "./eth.js";
-import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
+import { dep, view, all, query, forget, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
 import { affordable, checkVouch, inviteOf, inviteParam, joinText, vouchParam, vouchSuffix, vouchText, nearUnits, oneLine, payPath, plainCall, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
@@ -242,6 +242,7 @@ async function act(label, fn, check) {
   }
   busy = false;
   await new Promise((r) => setTimeout(r, 1500));
+  forget(); // the member's own transaction changed what the views say
   await render();
 }
 
@@ -862,7 +863,7 @@ async function render() {
 }
 
 // a new event on-chain (live.js) refreshes the panel, unless a transaction is in progress
-window.addEventListener("koperasi:events", () => { if (me && !busy) render(); });
+window.addEventListener("koperasi:events", () => { forget(); if (me && !busy) render(); });
 connector.on("wallet:signIn", (e) => { me = e?.accounts?.[0]?.accountId ?? ""; note = ""; render(); });
 connector.on("wallet:signOut", () => { me = ""; note = ""; render(); });
 // ponytail: ?as=<account> previews the panel for any account, on localhost only (to test each state without a wallet)
