@@ -15,7 +15,7 @@ const n = Number(process.argv[2] ?? 3);
 const BUYERS = ["kop-bob-mw4i3w8f.testnet", "kop-guest-984702.testnet"];
 const before = (await view(dep.contract, "get_info")).receipts;
 for (let i = 0; i < n; i++) {
-  const r = spawnSync(process.execPath, ["--env-file=.env", path.join(ROOT, "scripts/job.mjs"), String(i % 2)], { encoding: "utf8", timeout: 600_000, env: { ...process.env, KOP_NO_PROPOSE: "1", KOP_NO_SHARE: "1" } });
+  const r = spawnSync(process.execPath, ["--env-file=.env", path.join(ROOT, "scripts/job.mjs"), String(i % 2)], { encoding: "utf8", timeout: 600_000, env: { ...process.env, KOP_NO_PROPOSE: "1", KOP_NO_SHARE: "1", KOP_JOB_BUDGET: process.env.KOP_JOB_BUDGET ?? "6" } });
   console.log(`${r.stdout}${r.stderr}`.trim().split("\n").filter((l) => /delivered|Paid|gate|refus|not starting/.test(l)).join("\n"));
 }
 const fresh = (await view(dep.contract, "get_receipts", { from: before, limit: 50 })).filter((r) => r.status === "Paid");
@@ -31,6 +31,7 @@ for (const b of BUYERS) {
   console.log(`${b} paid the steward ${Number(x) / 1e6} USDC: ${txUrl(t.transaction.hash)}`);
   left -= x;
 }
+if (!net) { console.log("nothing to pass on"); process.exit(1); }
 const paid = net - left;
 const fund0 = BigInt((await view(dep.contract, "get_risk_fund"))[0]);
 const d = await callRaw(account(dep.steward), dep.usdc, "ft_transfer_call", { receiver_id: dep.contract, amount: String(paid), msg: "earnings" }, { deposit: 1n, tgas: 150 });

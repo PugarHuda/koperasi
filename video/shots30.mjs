@@ -22,6 +22,7 @@ await shot("attacks", "/#checks", "#ck-attacks", { sel: "#ck-attacks", text: "of
 await shot("taskbond", "/#work", "#p-agent", { sel: "#p-agent", text: "Taskbond" });
 await shot("passport", "/cert.html?who=kop-carol-mw80aczw.testnet", "#cert-sum-t", { sel: "#cert-sum", text: "trust source" });
 await shot("meeting", "/#commons", "#rat", { sel: "#rat", text: "Annual members" });
-await shot("duties", "/#commons", "#duties", { sel: "#duties", text: "Mandatory dues" });
+await shot("duties", "/#commons", "#duties", { sel: "#duties", text: "The agent proposes" });
+await shot("risk", "/#commons", "#duties", { sel: "#duties", text: "The agent is a member too" });
 await shot("federation", "/coops.html", "#network", { sel: "#resolutions tbody tr", text: "Resolution" });
 await browser.close();

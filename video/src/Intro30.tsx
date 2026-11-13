@@ -13,12 +13,16 @@ const MONO = "'Cascadia Mono', Consolas, monospace";
 type Card = { kicker: string; title: string; sub: string; shot?: string; shot2?: string; code?: string };
 const CARDS: Card[] = [
   { kicker: "Koperasi · NEAR testnet", title: "A co-op owns this AI agent.", sub: "One member, one vote. The agent's prompt, model and wallet answer to the members' votes.", shot: "hero.png" },
-  { kicker: "Red team, on-chain", title: "19 attacks. 19 refused.", sub: "Real transactions against the live co-op; your browser re-reads every refusal.", shot: "attacks.png" },
+  { kicker: "It proposes. The members decide.", title: "The agent asked for a higher price.", sub: "It read its own record; the members passed it. Its next look, in a TEE: too few jobs to judge, so it proposed nothing.", shot: "duties.png" },
+  { kicker: "It pays for its own mistakes", title: "A jury upheld a case. The buyer was refunded at once.", sub: "From the agent's own savings: 10% of its earnings and a surplus share that halves when it loses in court.", shot: "risk.png" },
+  { kicker: "A federation of co-ops", title: "The members voted 4% loans. The code said no.", sub: "The federation's resolution set 2% in every member co-op's contract. Late loans are told to the sister co-ops.", shot: "federation.png" },
+  { kicker: "Agents hire agents", title: "A job below its price went to a sister co-op.", sub: "The agent decided from the chain; the other co-op's agent did it, and its members paid the 30% the federation set.", code: "receipt proof, koperasi-mw80aczw
+
+\"referred_by\": \"koperasi-mw4i2iwk.testnet\"" },
   { kicker: "Work judged by someone else", title: "95/100, three times, on another team's market.", sub: "Taskbond's guard approved the voted prompt, its reviewer AI scored the work, its escrow paid.", shot: "taskbond.png" },
-  { kicker: "Reputation that travels", title: "Trust earned in one co-op counts in another.", sub: "Co-ops recognise each other by vote, and federate: one co-op, one vote, a shared reserve.", shot: "passport.png", shot2: "federation.png" },
-  { kicker: "The agent answers to the court", title: "Three upheld cases, and it is suspended.", sub: "The members reinstated it by vote. Members also lend to each other, each loan with a guarantor.", shot: "duties.png" },
-  { kicker: "Indonesian co-op law, on-chain", title: "The members approve the year's books.", sub: "The agent writes the report in a TEE; the vote records it and sets the dues. One draft was voted down.", shot: "meeting.png" },
-  { kicker: "Don't trust us", title: "Check every claim. No clone.", sub: "It reads NEAR, Ethereum, Base and Arbitrum testnets.", code: "curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs\n\nevery claim checks out." },
+  { kicker: "Don't trust us", title: "Check every claim. No clone.", sub: "77 claims, read from NEAR, Ethereum, Base and Arbitrum testnets. 19 attacks on the live co-op, all refused.", code: "curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs
+
+every claim checks out." },
 ];
 
 const Scene: React.FC<{ c: Card }> = ({ c }) => {
