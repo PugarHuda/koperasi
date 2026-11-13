@@ -2718,7 +2718,7 @@ fn a_reputation_dividend_follows_credit_scores_and_the_card_shows_them() {
 #[test]
 fn the_agent_proposes_new_by_laws_and_only_the_members_decide() {
     let mut k = setup();
-    let propose = |k: &mut Koperasi, v: u32| { let _ = k.agent_propose_bylaws(v, H2.into(), "config/config.v2.yaml".into(), "refunds are rare: raise the price".into(), None); };
+    let propose = |k: &mut Koperasi, v: u32| { let _ = k.agent_propose_bylaws(v, if v == 2 { H2 } else { H1 }.into(), "config/config.v2.yaml".into(), "refunds are rare: raise the price".into(), None); };
     assert!(fails(|| { at(&acc("alice.testnet"), DAY); propose(&mut k, 2); }), "the agent only");
     assert!(fails(|| { at(&agent(), DAY); propose(&mut k, 3); }), "the next version only");
     assert!(fails(|| { at(&agent(), DAY); let _ = k.agent_propose_bylaws(2, H2.into(), "u".into(), " ".into(), None); }), "a reason");
@@ -2732,9 +2732,14 @@ fn the_agent_proposes_new_by_laws_and_only_the_members_decide() {
     let p = &k.get_agent_proposals()[0];
     assert_eq!((p.version, p.proposal), (2, Some(77)));
     assert_eq!(k.get_config().version, 1, "nothing changes until the members vote");
+    // what the filed proposal calls once the members approve it: the agent named as contributor, no points
+    as_(&dao(), near(0));
+    k.set_config(2, H2.into(), "config/config.v2.yaml".into(), Some(agent()), 0);
+    assert_eq!(k.get_config().contributor, Some(agent()));
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_config(3, H1.into(), "x".into(), Some(agent()), 5); }), "points only for members");
     // a filing that failed is forgotten, so the agent can try again
     at(&agent(), 9 * DAY);
-    propose(&mut k, 2);
+    propose(&mut k, 3);
     at(&me(), 9 * DAY);
     k.on_agent_proposed(Err(PromiseError::Failed));
     assert_eq!(k.get_agent_proposals().len(), 1);

@@ -517,6 +517,38 @@ if (d.agents?.translator) {
     `${t}: tags ${mine?.tags.join(", ")} by #${d.agents.vote}; keys: ${keys.keys.length} function-call only; receipt ${d.agents.receipt.slice(0, 14)}… recorded by it, TEE proof ${JSON.parse(proof ?? "{}").model}`);
 }
 
+// 0.3.2 (scripts/v032.mjs): the agent saves, a reputation dividend, the translator's own by-laws, the member card, and
+// by-laws the agent proposed from its own record (the contract filed the DAO proposal; the members voted it)
+if (d.v032?.vote) {
+  const v = d.v032.vote;
+  const [[, saves], rep, own] = await Promise.all([view(d.contract, "get_risk_fund"), view(d.contract, "get_reputation_share"),
+    view(d.contract, "get_agent_config", { account_id: "kop-translator-mwepareu.testnet" })]);
+  check(saves === v.agentSavesBps && rep === v.reputationBps && own?.hash === v.translatorConfig.hash,
+    "the members voted the agent to save into the risk fund, a reputation dividend by each member's record, and the translator its own by-laws",
+    `agent saves ${saves / 100}%, reputation dividend ${rep / 100}% of every profit share, translator by-laws v${own?.version} ${own?.hash.slice(0, 12)}… (#${v.proposal})`);
+}
+if (d.v032?.share) {
+  const p = await view(d.dao, "get_proposal", { id: d.v032.share.proposal });
+  check(p.status === "Approved" && argsOf(p).some((a) => a.method === "ft_transfer_call" && a.args.msg === "share"),
+    "a profit share paid the reputation dividend by each member's record (work done, pledges kept, juries served)",
+    `#${p.id}: ${p.status}; ${d.v032.share.poolUsdc} USDC split by scores ${d.v032.share.scores.map((s) => `${s.account.split(/[-.]/)[1]} ${s.score}`).join(", ")}`);
+}
+if (d.v032?.card) {
+  const t = await view(d.contract, "nft_token", { token_id: d.v032.card.token });
+  const extra = JSON.parse(t?.metadata?.extra ?? "{}");
+  check(typeof extra.credit?.score === "number" && /credit \d+\/10/.test(t.metadata.description),
+    "the member card (a soulbound work-record token) shows the credit score, dues and loan, read live", t.metadata.description.slice(0, 160));
+}
+if (d.v032?.agentProposal) {
+  const a = d.v032.agentProposal;
+  const [mine, p, cfg] = await Promise.all([view(d.contract, "get_agent_proposals"), view(d.dao, "get_proposal", { id: a.proposal }), view(d.contract, "get_config")]);
+  const filed = mine.find((x) => x.proposal === a.proposal);
+  const ok = filed?.hash === a.hash && p.proposer === d.contract && p.status === "Approved" && p.description.includes(a.reason)
+    && cfg.version >= a.version && Boolean(approvedCall("set_config", (x) => x.hash === a.hash));
+  check(ok, "the agent proposed new by-laws from its own record; the contract filed the proposal and the members voted it in",
+    `#${a.proposal} filed by ${p.proposer} (${p.status}): "${a.reason}"${a.refiled ? `; that call failed (${a.outcome.split("(")[1]?.replace(")", "") ?? ""}), so the members passed the same file by #${a.refiled}` : ""}; by-laws now v${cfg.version}`);
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {

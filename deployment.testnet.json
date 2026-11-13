@@ -6,8 +6,8 @@
   "steward": "kop-steward-mw4i2iwk.testnet",
   "contract": "koperasi-mw4i2iwk.testnet",
   "agent": "agent.koperasi-mw4i2iwk.testnet",
-  "configHash": "4d379b1acffd931d87d428a889cd74ebbfd50e29cb8637ac544c6d40b0a17347",
-  "configUri": "config/config.v6.yaml",
+  "configHash": "3e5dc56701610919c311437bbbba192c9db9c5cc27dabf34fd8ca7010991918f",
+  "configUri": "config/config.v7.yaml",
   "codeSha256": "258ff2361a0c7e9bd71f75e4d6506240157024e09568e615680fd52f99c73ad6",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
@@ -682,5 +682,85 @@
     "translator": "kop-translator-mwepareu.testnet",
     "vote": 110,
     "receipt": "demo-105eb63b-176b-47c3-a585-8c5f4e3ae0f7"
+  },
+  "v032": {
+    "vote": {
+      "proposal": 121,
+      "agentSavesBps": 1000,
+      "reputationBps": 1000,
+      "translatorConfig": {
+        "uri": "config/translator/config.v1.yaml",
+        "hash": "e526b9def1e242e47116724959e5e7bbfec4cdf0e70eb79fc650e6e827f60ab7"
+      },
+      "firstProposal": 119
+    },
+    "share": {
+      "proposal": 122,
+      "duplicateRejected": 120,
+      "poolUsdc": 0.2,
+      "scores": [
+        {
+          "account": "kop-steward-mw4i2iwk.testnet",
+          "score": 1
+        },
+        {
+          "account": "kop-alice-mw4i3w8f.testnet",
+          "score": 7
+        },
+        {
+          "account": "kop-bob-mw4i3w8f.testnet",
+          "score": 6
+        },
+        {
+          "account": "kop-guest-984702.testnet",
+          "score": 7
+        },
+        {
+          "account": "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
+          "score": 10
+        }
+      ]
+    },
+    "card": {
+      "token": "kop-alice-mw4i3w8f.testnet",
+      "extra": {
+        "done": 0,
+        "earned": "0",
+        "refs": [],
+        "standing": {
+          "pledges_honored": 2,
+          "pledges_broken": 0,
+          "juries_served": 5,
+          "juries_missed": 0,
+          "slashed": 0
+        },
+        "good_standing": true,
+        "member": true,
+        "passport": [],
+        "credit": {
+          "score": 7,
+          "loan_limit": "350000000000000000000000"
+        },
+        "dues": [
+          "1799733651899754385",
+          true
+        ],
+        "loan": null
+      }
+    },
+    "agentProposal": {
+      "version": 7,
+      "uri": "config/config.v7.yaml",
+      "hash": "3e5dc56701610919c311437bbbba192c9db9c5cc27dabf34fd8ca7010991918f",
+      "reason": "23 jobs settled, 4 refunded or disputed (17%), 19 paid at an average inference cost of $0.0003: the price can go from 4 to 5 USDC",
+      "price": {
+        "from": 4,
+        "to": 5
+      },
+      "proposal": 123,
+      "at": "1794588891023503867",
+      "outcome": "approved by the members, but the call failed (the agent named as contributor)",
+      "refiled": 124
+    }
   }
 }

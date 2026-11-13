@@ -399,7 +399,8 @@ impl Koperasi {
         self.assert_dao();
         require!(version > self.config.version, "version must increase");
         require!(valid_hash(&hash), "hash must be 64 lowercase hex chars");
-        if let Some(c) = &contributor {
+        // 0.3.2: a contributor who is not a member (the agent, proposing its own by-laws) is named, with no points
+        if let Some(c) = contributor.as_ref().filter(|_| points > 0) {
             self.add_points(c, points);
         }
         Event::ConfigSet { version, hash: hash.clone(), uri: uri.clone(), contributor: contributor.clone(), points }.emit();
