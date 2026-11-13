@@ -2866,7 +2866,16 @@ fn a_late_loan_is_told_to_the_sister_coops_and_lifted_when_repaid() {
     k.guarantee(bob.clone());
     assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(1)); }), "late at a sister");
     assert!(fails(|| { as_(&acc("koperasi-other.testnet"), near(0)); k.note_late_elsewhere(bob.clone(), false); }));
+    // a second sister notes it too; the first lifting its note does not lift the second's
+    let sister2 = acc("koperasi-sister2.testnet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone(), sister2.clone()]);
+    as_(&sister2, near(0));
+    k.note_late_elsewhere(bob.clone(), true);
     as_(&sister, near(0));
+    k.note_late_elsewhere(bob.clone(), false);
+    assert_eq!(k.get_credit(bob.clone()).0, 0, "still late at the second");
+    as_(&sister2, near(0));
     k.note_late_elsewhere(bob.clone(), false);
     assert_eq!(k.get_credit(bob.clone()).0, 7, "5 pledges and alice");
     // sent: alice borrows here, is called late; every sister is told, and told again when she repays
@@ -2902,6 +2911,8 @@ fn credit_counts_work_stamped_from_a_sister_coop() {
         "extra": near_sdk::serde_json::json!({ "done": 4, "earned": "5", "good_standing": true }).to_string() } });
     assert!(k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(Some(token))));
     assert_eq!(k.get_credit(frank.clone()).0, 4);
+    at(&frank, 31 * DAY);
+    assert_eq!(k.get_credit(frank.clone()).0, 0, "a stamp older than 30 days stops counting until it is read again");
     as_(&dao(), near(0));
     k.set_sister_coops(vec![]);
     assert_eq!(k.get_credit(frank.clone()).0, 0, "a co-op the members dropped stops counting");

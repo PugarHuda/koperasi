@@ -66,9 +66,14 @@ pub(crate) fn within_federation(rate_bps: u16, term_days: u32) -> bool {
     fed_rules().is_none_or(|r| rate_bps <= r.max_rate_bps && term_days <= r.max_term_days)
 }
 
-/// The sister co-op that noted this account's loan late, if any.
+/// The sister co-ops that noted this account's loan late there (each lifts only its own note).
+fn late_notes(a: &AccountId) -> Vec<AccountId> {
+    load(&late_key(a)).unwrap_or_default()
+}
+
+/// A sister co-op that noted this account's loan late, if any.
 pub(crate) fn late_elsewhere(a: &AccountId) -> Option<AccountId> {
-    load(&late_key(a))
+    late_notes(a).into_iter().next()
 }
 
 /// Tell every recognised sister co-op that `a`'s loan here is late (or settled).
@@ -172,17 +177,22 @@ impl Koperasi {
     pub fn note_late_elsewhere(&mut self, account_id: AccountId, late: bool) {
         let coop = env::predecessor_account_id();
         require!(self.get_sister_coops().contains(&coop), "only a sister co-op the members recognise");
+        let mut notes = late_notes(&account_id);
+        notes.retain(|c| *c != coop);
         if late {
-            save(&late_key(&account_id), &coop);
-        } else if late_elsewhere(&account_id).as_ref() == Some(&coop) {
+            notes.push(coop.clone());
+        }
+        if notes.is_empty() {
             env::storage_remove(&late_key(&account_id));
+        } else {
+            save(&late_key(&account_id), &notes);
         }
         Event::LateElsewhere { account_id, coop, late }.emit();
     }
 
-    /// The sister co-op where `account_id` has a late loan, if any.
-    pub fn get_late_elsewhere(&self, account_id: AccountId) -> Option<AccountId> {
-        late_elsewhere(&account_id)
+    /// The sister co-ops where `account_id` has a late loan.
+    pub fn get_late_elsewhere(&self, account_id: AccountId) -> Vec<AccountId> {
+        late_notes(&account_id)
     }
 
     /// DAO only: clear a sister's note by hand (a sister that left, or a note the members judged settled).

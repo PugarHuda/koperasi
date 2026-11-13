@@ -277,7 +277,9 @@ impl Koperasi {
         let s = crate::commons::standing_of(&account_id);
         let g = self.get_guarantors(account_id.clone()).iter().filter(|x| self.in_good_standing(x)).count() as u32;
         let sisters = self.get_sister_coops();
-        let away: u32 = self.get_passport(account_id.clone()).iter().filter(|p| sisters.contains(&p.coop)).map(|p| p.done).sum();
+        // only stamps read in the last 30 days: anyone can stamp again (stamp_passport) to bring one up to date
+        let fresh = env::block_timestamp().saturating_sub(30 * DAY_NS);
+        let away: u32 = self.get_passport(account_id.clone()).iter().filter(|p| sisters.contains(&p.coop) && p.at.0 >= fresh).map(|p| p.done).sum();
         let score = (done + s.pledges_honored + s.juries_served + 2 * g + away).min(10);
         let max = load::<LoanRule>(KEY_LOAN_RULE).map_or(0, |r| r.max_loan.0);
         (score, U128(max * score as u128 / 10))
