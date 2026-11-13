@@ -12483,6 +12483,16 @@ var init_verify = __esm({
         );
       }
     }
+    for (const r2 of d2.rat ?? []) {
+      const [report, facts] = await Promise.all([file(`web/${r2.report}`, r2.report), file(`web/${r2.facts}`, r2.facts)]);
+      const p2 = await view2(d2.dao, "get_proposal", { id: r2.proposal });
+      const ok = p2.status === "Approved" && p2.kind === "Vote" && p2.description.includes(`sha256 ${sha2562(report)}`) && p2.description.includes(`sha256 ${sha2562(facts)}`) && Boolean(r2.proof?.model && r2.proof?.tee_signer);
+      check(
+        ok,
+        `the members approved the ${r2.year} annual report by vote, and the report is the one the co-op's agent wrote in a TEE from the chain's facts`,
+        `proposal #${r2.proposal} ${p2.status}: report sha256 ${sha2562(report).slice(0, 12)}\u2026, facts ${sha2562(facts).slice(0, 12)}\u2026; model ${r2.proof?.model}, TEE key ${r2.proof?.tee_signer}`
+      );
+    }
     if (d2.redteam?.length) {
       const res = await Promise.all(d2.redteam.map(async (r2) => {
         const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.tx, sender_account_id: r2.by, wait_until: "FINAL" });
