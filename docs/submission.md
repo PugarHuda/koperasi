@@ -28,40 +28,48 @@ file is the script.
    - NEAR AI Cloud (TEE, billing);
    - Agent Market;
    - global contracts.
-7. **Validation:** 143 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 40 unit tests, 19 attacks sent to the live co-op and refused on-chain, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), the bonded steward #54, by-laws v4 #55, a member who joined with an NEP-413 signed vouch #56, the DAO's Ethereum address signing by vote through Chain Signatures #57, upgrades by vote up to #76 (0.2.7), the steward's 90-day term #59, a co-op court case upheld by a random jury and refunded from the treasury #60, a member's pledge kept, a 10-minute veto window on no-vote payouts #62 (task #7 released after it, #64; task #8 vetoed by a member and approved by another, #63); tasks #9–#15 in every state, court cases #1–#2 not upheld, profit share #67 claimed, #68 rejected by the members. The DAO pays on Ethereum by vote (Chain Signatures, #74, landed on Sepolia), owns the agent's NEAR Intents wallet with a members-only policy (Tidepool testnet Agent API, #72–#73), and the agent checks its by-laws in an Intel TDX enclave through OutLayer before every job. Contract 0.2.7: a dismissed court case appealed to every member (#77 overturned, #78 kept), payouts routed to each member's chain of choice with the Intents wallet's policy changed by vote (#80), work records as non-transferable NEP-171 tokens, and an Ethereum payment filed from a Trezu template (#81, sent to Sepolia). Checklist for judges: JUDGE.md.
+7. **Validation:** 150 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 40 unit tests, 19 attacks sent to the live co-op and refused on-chain, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), the bonded steward #54, by-laws v4 #55, a member who joined with an NEP-413 signed vouch #56, the DAO's Ethereum address signing by vote through Chain Signatures #57, upgrades by vote up to #76 (0.2.7), the steward's 90-day term #59, a co-op court case upheld by a random jury and refunded from the treasury #60, a member's pledge kept, a 10-minute veto window on no-vote payouts #62 (task #7 released after it, #64; task #8 vetoed by a member and approved by another, #63); tasks #9–#15 in every state, court cases #1–#2 not upheld, profit share #67 claimed, #68 rejected by the members. The DAO pays on Ethereum by vote (Chain Signatures, #74, landed on Sepolia), owns the agent's NEAR Intents wallet with a members-only policy (Tidepool testnet Agent API, #72–#73), and the agent checks its by-laws in an Intel TDX enclave through OutLayer before every job. Contract 0.2.7: a dismissed court case appealed to every member (#77 overturned, #78 kept), payouts routed to each member's chain of choice with the Intents wallet's policy changed by vote (#80), work records as non-transferable NEP-171 tokens, and an Ethereum payment filed from a Trezu template (#81, sent to Sepolia). Checklist for judges: JUDGE.md.
 8. **Next:** mainnet with Circle USDC, NEAR AI credits for the organization, independent members, a tighter CSP, a USDC task budget.
 
-## Submission form text
+## Submission form text (13 Nov; paste as is)
 
-**Social Money.** Koperasi is a member-owned AI co-op on a Sputnik DAO.
-- **Collective ownership:** the DAO owns the agent, its by-laws and its code.
-- **Shared budget:** the members vote a task budget, and profit shares are split by rule.
-- **Programmable rewards:** reserve, savings and contribution points.
-- **Reputation-based access:** each contributor's on-chain record decides who must approve their payout:
-  - paid on acceptance after the record is earned;
-  - one other member for mid-size payouts;
-  - a full vote above that, as a normal Sputnik bounty.
+**One line.** Koperasi is an Indonesian village co-op, on NEAR, that owns an AI agent: one member one vote, every rule
+on-chain, every claim checked from the chain in one command (`curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs`).
 
-  Every point names the task or proposal it came from.
-- **No new multisig:** custody stays in Sputnik.
-- **Gasless for members:** a NEP-366 relayer pays the gas for members' calls to the co-op (deposits stay the member's).
-- **Savings can't be gamed:** a stake counts toward the profit share only after 7 days of daily readings (security fix S12, upgrades #48 and #50 by vote).
-- **Invite links:** a member shares a link; the newcomer's proposal names them, shown as vouched once they vote for it.
-- **Evidence:** tasks #0–#6 paid from the treasury by DAO proposals, bounty #24, profit share #36; `npm run verify` checks it all against testnet.
+**Social Money (main track).** Collective ownership, shared budgets, programmable rewards and reputation-based access,
+built on an unmodified Sputnik DAO (no new multisig):
+- **Earned trust:** small payouts go to contributors other members already paid, after a 10-minute veto window;
+  mid-size payouts need one other member; large ones are a full vote. Every point names its task or proposal.
+- **Reputation that travels:** a non-transferable NEP-171 work record; co-ops that recognise each other by vote count each
+  other's records (the passport, both ways), and a federation of co-ops votes one co-op one vote, with a shared reserve.
+- **The co-op's whole life, from Indonesian co-op law (Law 25/1992):** profit shares split by savings and work, an
+  education and a social fund from every share, mandatory dues, members standing surety for each other, a
+  savings-and-loan fund, an annual members' meeting whose report the agent writes in a TEE (the members can reject it,
+  and did once), pledges of work, and a court drawn at random with evidence from both sides and appeal to every member.
+- **Proof:** contract 0.3.1 upgraded only by vote (#109), 0 full-access keys, rebuilt byte for byte in CI; 150 contract
+  tests; 19 attacks sent to the live co-op as real transactions, all refused on-chain, re-sent weekly by CI.
 
-**Autonomous Business.** The agent sells on Agent Market and buys its own inference on NEAR AI Cloud.
-- Humans set only the constraints (by-laws: price, caps, kill switch).
-- The agent account holds only a function-call key.
-- Each job has an on-chain receipt and a public audit.
+**Autonomous Business / Agent Economy.** The DAO owns the agent:
+- **What it may do:** its prompt, model, prices and markets are by-laws pinned by hash (v6, #97).
+- **Checked before every job:** an Intel TDX enclave (OutLayer) checks the by-laws and judges the job on-chain.
+- **Where it works:** on NEAR AI Cloud, after verifying the model's TEE.
+- **Who judges it:** it won 3 jobs on Taskbond, another team's testnet market, each scored 95/100 by Taskbond's own
+  reviewer AI and paid by its escrow.
+- **Who can stop it:** the co-op court suspended it after three upheld cases, the contract refused its receipt, and the
+  members reinstated it by vote (#100).
+- **Its money:** the agent's NEAR Intents wallet is owned by the DAO's Chain Signatures address; profit shares landed
+  on NEAR, Arbitrum and Base, each member on the chain they chose.
+- **A second agent:** voted for translation jobs (#110).
 
-**Agent Economy.** Bid → deliver → paid. Each job's inference cost comes from NEAR AI Cloud billing, with one receipt
-per job, plus a TEE proof that any visitor can verify in their own browser.
+**Honest limits.** The members are the builder's testnet accounts; Agent Market has no testnet, so no Agent Market
+job yet; the third-party jobs were posted from the builder's accounts outside the co-op and judged by Taskbond.
 
 ## X post (draft, a thread of 3; attach the video to the first)
 
 **1/3**
 
-> This AI agent has 5 owners, and it cannot pay anyone they did not agree to.
+> This AI agent is owned by a village co-op. Its members vote its prompt, judge its work in a court, and can suspend it.
+> It just won 3 jobs on another team's market, 95/100 each.
 > 
 > Koperasi: an AI agent owned by a co-op, one member one vote, every rule on @NEARProtocol. Built for #NEARHackathon (Social Money).
 > 
@@ -88,11 +96,11 @@ per job, plus a TEE proof that any visitor can verify in their own browser.
 
 - [x] Repo with README: one-liner and positioning at the top, live demo link, per-track evidence, contract addresses, setup and tests
 - [x] Live page: https://koperasi-kohl.vercel.app
-- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `61f1fa38…`, rev `bd08004`, proposal #82; CI rebuilds it weekly)
+- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `cd7d70d2…`, 0.3.1, proposal #109; CI rebuilds it weekly)
 - [x] CI: lint, typecheck, unit, contract, Playwright, npm audit, `npm run verify` (daily)
-- [x] Security rounds 1–3 ([05-security](reports/05-security.md)); S12 fixed on-chain (#48); gasless relayer live in production
-- [x] **Demo video**: `video/out/koperasi.mp4` (4:27, rendered from `video/`); attach it to the X post
+- [x] Security rounds 1–11 ([05-security](reports/05-security.md)); 19 attacks refused on-chain, re-sent weekly in CI
+- [x] **Demo video**: `video/out/koperasi.mp4` (4:27) and the 30-second opening `video/out/intro30.mp4`; attach the 30-second one to the X post
 - [x] **Pitch deck**: 9 slides built from the outline above (shared by the builder as a link)
 - [x] **Repo public** (since 12 Nov)
 - [ ] **Submission form** before 14 Nov 23:59 UTC (06:59 WIB on 15 Nov)
-- [ ] Optional, for a treasury in USDC: Circle faucet → `koperasi-mw4i2iwk.sputnik-v2.testnet`
+- [x] Treasury in USDC (Circle testnet), the audit square: demo-job earnings passed on by the steward
