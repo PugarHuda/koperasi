@@ -259,3 +259,14 @@ The agent's key cannot even ask for anything but `record_receipt` and `update_re
 | F5 | `note_late_elsewhere` (migration, automated review) | Info | The note's storage format changed during review. | 0.3.3 was never live with the earlier format, so there is nothing to migrate | Not applicable |
 | X1 | `agent/runtime.mjs` referral (automated review) | Medium | A market could name any co-op as the one that brought a job, in the agent's attested receipt. | The runtime records a referral only for a co-op the contract lists as a sister; the 30% moves only by the members' vote (sister #21) | **Fixed** |
 | A2 | `pay_agent_share` | Low | The agent's share could crowd out the members' part. | Out of the reserve only, after the funds and the reputation dividend, at most the reserve bps; halved per live strike, nothing while suspended | By design |
+
+## Round 14 (14 Nov): contract 0.3.4 (agents in a TEE, reputation weighed by judgment), the TEE registry
+
+| ID | Component | Severity | Risk | Evidence / test | Status |
+|---|---|---|---|---|---|
+| T1 | `revoke_all` in `tee-registry` (automated review) | Medium | Revoking approved code in the registry did not reach an attestation the co-op already noted. | The co-op's DAO can `revoke_attestation` at once; test *a TEE-only agent records only while attested* | **Fixed before live** |
+| T2 | `revoke_attestation` (automated review) | Medium | A revoked worker could register again and be noted again. | A revocation stays until the members mark the agent TEE-only again; the same test | **Fixed before live** |
+| T3 | `register_agent` | Medium (design) | A worker could attest code the members never saw. | Only measurements (including the compose hash, which pins the image by digest and this repo at a commit) and PPIDs the DAO approved pass; the quote, its TCB status and the report data are verified on-chain by dcap-qvl | By design |
+| Q1 | `reputation_weights` (automated review, twice) | Medium | The court record read the first 500 cases (stale), then every case (unbounded gas). | The last 200 cases: recent conduct, like the decay, and bounded gas | **Fixed before live** |
+| Q2 | `reputation_weights` (automated review) | Medium | Opening many cases could push a member's bad rulings out of the 200-case window. | Not practical: a case needs a job the buyer disputed (recorded only by the agent), at most two cases a job, and a 0.5 NEAR bond lost when dismissed; pushing 200 out costs about 100 disputed jobs and 100 NEAR | Accepted |
+| X2 | `agent/route.mjs` | Low | A sister co-op could publish by-laws other than those it voted. | The runtime routes only by a by-laws file whose sha256 equals the sister contract's voted hash, to a co-op its own members recognise | By design |
