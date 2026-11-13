@@ -172,6 +172,7 @@ check(termDays > 0 && approvedCall("set_steward_term", (a) => a.days === termDay
 const cases = await view(d.contract, "get_cases", { from: 0, limit: 200 });
 const allReceipts = await view(d.contract, "get_receipts", { from: 0, limit: 500 });
 for (const c of cases.filter((x) => x.status === "Upheld")) {
+  if (c.refund_proposal === null && d.v033?.risk?.case === c.id) continue; // 0.3.2: refunded from the risk fund, checked below
   const p = c.refund_proposal === null ? null : await proposal(c.refund_proposal);
   const tr = p?.kind.Transfer;
   const price = allReceipts.find((r) => r.job_id === c.job_id)?.price ?? "0";
@@ -547,6 +548,50 @@ if (d.v032?.agentProposal) {
     && cfg.version >= a.version && Boolean(approvedCall("set_config", (x) => x.hash === a.hash));
   check(ok, "the agent proposed new by-laws from its own record; the contract filed the proposal and the members voted it in",
     `#${a.proposal} filed by ${p.proposer} (${p.status}): "${a.reason}"${a.refiled ? `; that call failed (${a.outcome.split("(")[1]?.replace(")", "") ?? ""}), so the members passed the same file by #${a.refiled}` : ""}; by-laws now v${cfg.version}`);
+}
+
+// 0.3.3 (scripts/v033.mjs): the agent as a member, the federation's binding ceiling, the risk fund's cycle, the agent's
+// proposal written in a TEE; and work passed between the federation's co-ops (scripts/trade.mjs)
+if (d.v033?.vote) {
+  const m = await view(d.contract, "get_agent_member");
+  check(m.share_bps === d.v033.vote.agentShareBps,
+    "the agent is a member too: a voted share of every profit share goes into its risk fund, scaled by its standing in court",
+    `${m.share_bps / 100}% (#${d.v033.vote.showcase}); standing now ${m.standing_bps / 100}% (${m.strikes} live strike(s)); ${usd(m.shu_total)} USDC from its shares so far`);
+}
+if (d.v033?.federation) {
+  const f = d.v033.federation;
+  const res = await Promise.all(f.resolutions.map(async (r) => {
+    const [p, fed] = await Promise.all([view(d.federation.dao, "get_proposal", { id: r.id }), view(r.contract, "get_federation")]);
+    return p.status === "Approved" && p.kind.FunctionCall?.receiver_id === r.contract && fed?.[0] === d.federation.dao && fed?.[1]?.max_rate_bps === r.rules.max_rate_bps;
+  }));
+  const [rule, refused] = await Promise.all([view(d.contract, "get_loan_rule"), Promise.all(f.refused.proposals.map((id) => view(d.dao, "get_proposal", { id })))]);
+  check(res.every(Boolean) && rule[0].rate_bps <= f.resolutions[0].rules.max_rate_bps && refused.every((p) => p.status === "Approved"),
+    "the federation's loan ceiling binds each co-op's code: set by resolutions both co-ops voted, and a members' vote above it was refused by the contract",
+    `${f.resolutions.map((r, i) => `federation #${r.id} → ${r.contract.split(".")[0]}: ${res[i] ? `at most ${r.rules.max_rate_bps / 100}% for ${r.rules.max_term_days} days` : "NOT FOUND"}`).join("; ")}; the members' 4% vote (#${f.refused.proposals.join(", #")}) Approved, the loan rule still ${rule[0].rate_bps / 100}%`);
+}
+if (d.v033?.risk) {
+  const r = d.v033.risk;
+  const c = (await view(d.contract, "get_cases", { from: r.case, limit: 1 }))[0];
+  check(c?.status === "Upheld" && c.refund_proposal === null && BigInt(r.saved) > 0n,
+    "the risk fund's whole cycle: the agent saved from its earnings, and a case upheld against its job was refunded from the fund at once, with no proposal",
+    `saved ${usd(r.saved)} USDC from ${r.job.slice(0, 14)}…'s earnings; case #${r.case} ${c?.status}, ${usd(r.refund)} USDC refunded from the fund (no DAO proposal)`);
+}
+if (d.v033?.propose) {
+  const p = d.v033.propose;
+  const facts = await file(`web/agent-proposals/v${p.version}.facts.json`, `agent-proposals/v${p.version}.facts.json`);
+  check(sha256(facts) === p.factsSha && Boolean(p.inference),
+    "the agent judged its last proposal and wrote its next by-laws itself, with the voted model in a TEE, from facts read from the chain",
+    `facts sha256 ${p.factsSha.slice(0, 12)}… (as published), inference ${p.inference.slice(0, 13)}…: "${p.evaluation}"; ${Object.keys(p.changes).length ? `proposed ${JSON.stringify(p.changes)} (#${p.proposal})` : "it proposed nothing: the facts did not support a change"}`);
+}
+if (d.federation?.trade) {
+  const t = d.federation.trade;
+  const [res, proof, prop] = await Promise.all([view(d.federation.dao, "get_proposal", { id: t.resolution }), view(t.coop, "get_proof", { job_id: t.job }),
+    view(t.dao, "get_proposal", { id: t.proposal })]);
+  const pr = JSON.parse(proof ?? "{}");
+  check(res.status === "Approved" && pr.referred_by === d.contract && Boolean(pr.gate?.tx) && prop.status === "Approved"
+    && prop.kind.Transfer?.receiver_id === d.dao && prop.kind.Transfer.amount === t.share,
+    "work passes between the federation's co-ops: the sister's agent did a job this co-op brought, and its members paid this co-op the share the federation set",
+    `resolution #${t.resolution} ${res.status}; ${t.coop.split(".")[0]}'s receipt ${t.job.slice(0, 14)}… names ${pr.referred_by} (gate ${String(pr.gate?.tx).slice(0, 8)}…, ${pr.model}); its #${t.proposal} paid ${usd(t.share)} ${t.token} to this treasury: ${prop.status}`);
 }
 
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with

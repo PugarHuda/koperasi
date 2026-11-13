@@ -791,5 +791,112 @@
       "outcome": "approved by the members, but the call failed (the agent named as contributor)",
       "refiled": 124
     }
+  },
+  "v033": {
+    "vote": {
+      "showcase": 127,
+      "sister": 23,
+      "agentShareBps": 500,
+      "proposeEveryDays": 0
+    },
+    "federation": {
+      "resolutions": [
+        {
+          "id": 4,
+          "text": "Resolution 4: resolution 2's loan ceiling (at most 2% flat, 30 days) becomes binding in koperasi-mw4i2iwk.testnet's code",
+          "contract": "koperasi-mw4i2iwk.testnet",
+          "votes": [
+            {
+              "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+              "proposal": 128
+            },
+            {
+              "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+              "proposal": 24
+            }
+          ],
+          "rules": {
+            "max_rate_bps": 200,
+            "max_term_days": 30,
+            "set_at": "1794592449354247383"
+          }
+        },
+        {
+          "id": 5,
+          "text": "Resolution 5: resolution 2's loan ceiling (at most 2% flat, 30 days) becomes binding in koperasi-mw80aczw.testnet's code",
+          "contract": "koperasi-mw80aczw.testnet",
+          "votes": [
+            {
+              "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+              "proposal": 129
+            },
+            {
+              "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+              "proposal": 25
+            }
+          ],
+          "rules": {
+            "max_rate_bps": 200,
+            "max_term_days": 30,
+            "set_at": "1794592482122623319"
+          }
+        }
+      ],
+      "refused": {
+        "proposals": [
+          130,
+          131
+        ],
+        "rate_bps": 400,
+        "kept_bps": 200
+      }
+    },
+    "share": {
+      "proposal": 132,
+      "agentShare": "50003",
+      "weights": [
+        [
+          "kop-steward-mw4i2iwk.testnet",
+          "1"
+        ],
+        [
+          "kop-alice-mw4i3w8f.testnet",
+          "7"
+        ],
+        [
+          "kop-bob-mw4i3w8f.testnet",
+          "6"
+        ],
+        [
+          "kop-guest-984702.testnet",
+          "7"
+        ],
+        [
+          "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
+          "10"
+        ]
+      ]
+    },
+    "risk": {
+      "job": "demo-0dcd7eb6-8060-4c69-a957-2d9d7f1e18f0",
+      "paid": "3800000",
+      "deposit": null,
+      "saved": "380000",
+      "case": 10,
+      "refund": "400000",
+      "proposal": null,
+      "fund": {
+        "before": "50003",
+        "after_deposit": "430003",
+        "after_refund": "30003"
+      }
+    },
+    "propose": {
+      "version": 8,
+      "changes": {},
+      "evaluation": "Too few jobs to evaluate the last proposal.",
+      "factsSha": "65d9e697ae2e04bc3ba4fada8118a913d9ca2ee9a44de6ab62ea35902fcf5ada",
+      "inference": "3c897058-8332-5c16-9acb-4892267b481a"
+    }
   }
 }

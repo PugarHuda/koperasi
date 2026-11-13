@@ -357,8 +357,12 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
       let done;
       try {
         done = await infer(config, job, capJob, { local });
-        // a job another co-op of the federation passed on names it, for the split its resolution sets
-        done = { ...done, proof: { ...done.proof, gate, ...(job.referredBy ? { referred_by: String(job.referredBy).slice(0, 64) } : {}) } };
+        // a job another co-op of the federation passed on names it, for the split its resolution sets: only a co-op this
+        // co-op's members recognise (read from the contract), so a market cannot name anyone it likes; the money moves
+        // only by the members' vote anyway
+        const sisters = job.referredBy ? await view(dep.contract, "get_sister_coops").catch(() => []) : [];
+        const referred = sisters.includes(job.referredBy) ? { referred_by: job.referredBy } : {};
+        done = { ...done, proof: { ...done.proof, gate, ...referred } };
       } catch (e) {
         if (e.spentMicroUsd) {
           state.spentMicroUsd += e.spentMicroUsd;

@@ -20,7 +20,7 @@ import { DEPLOYMENT, NEAR, ROOT, account, all, b64, callRaw, decide, propose, sh
 const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 const sis = JSON.parse(fs.readFileSync(path.join(ROOT, "deployment.testnet.local.json"), "utf8"));
 const K = dep.contract, D = dep.dao, USDC = dep.usdc, FED = dep.federation.dao;
-const A = "kop-alice-mw4i3w8f.testnet", B = "kop-bob-mw4i3w8f.testnet", S = dep.steward, BUYER = "kop-guest-984702.testnet";
+const A = "kop-alice-mw4i3w8f.testnet", B = "kop-bob-mw4i3w8f.testnet", S = dep.steward, BUYER = "kop-publisher-mw5tkpfo.testnet"; // a buyer outside the co-op: never on its jury
 const RELAYER = `kop-relayer-${dep.tag}.testnet`;
 const CO_OPS = [
   { name: "showcase", dao: D, contract: K, voters: [A, B, S] },
@@ -74,8 +74,12 @@ if (run("federation")) {
   // the members of the showcase vote a loan rule above the ceiling: Sputnik approves it, the contract refuses it
   const before = await view(K, "get_loan_rule");
   const over = { max_loan: before[0].max_loan, rate_bps: 400, term_days: 30 };
-  const { id } = await decideIn(CO_OPS[0], "Loans at 4% flat (above the federation's ceiling of 2%: the contract should refuse it)",
-    fc(K, act("set_loan_rule", { rule: over, add_to_fund: "0" })));
+  const text = "Loans at 4% flat (above the federation's ceiling of 2%: the contract should refuse it)";
+  // the deciding vote's transaction fails with the contract's refusal; Sputnik v2 on testnet still marks it Approved
+  await decideIn(CO_OPS[0], text, fc(K, act("set_loan_rule", { rule: over, add_to_fund: "0" })))
+    .catch((e) => { if (!/above the federation's loan ceiling/.test(String(e.message))) throw e; });
+  const last = await view(D, "get_last_proposal_id");
+  const id = (await view(D, "get_proposals", { from_index: Math.max(0, last - 5), limit: 5 })).reverse().find((p) => p.description === text).id;
   const after = await view(K, "get_loan_rule");
   console.log(`showcase #${id} (4% loans) approved by the members; the loan rule is still ${after[0].rate_bps} bps`);
   if (after[0].rate_bps !== before[0].rate_bps) throw new Error("the ceiling did not hold");
@@ -100,20 +104,26 @@ if (run("risk")) {
   // the job the agent did on 13 Nov (Paid, 4 USDC): the stand-in market never pays, so the demo buyer pays its net
   const job = (await all(K, "get_receipts")).filter((r) => r.status === "Paid" && r.job_id.startsWith("demo-") && r.inference_cost !== "0").at(-1);
   const net = (BigInt(job.price) * 95n / 100n).toString();
-  say(`bob (the demo buyer) paid the steward ${usd(net)} USDC for ${job.job_id}`, await callRaw(account(B), USDC, "ft_transfer", { receiver_id: S, amount: net, memo: job.job_id }, { deposit: 1n, tgas: 30 }));
-  const fund0 = BigInt((await view(K, "get_risk_fund"))[0]);
-  const dep1 = await callRaw(account(S), USDC, "ft_transfer_call", { receiver_id: K, amount: net, msg: "earnings" }, { deposit: 1n, tgas: 150 });
-  await new Promise((ok) => setTimeout(ok, 4000));
+  // RISK_RESUME="<fund before> <court job>": the payment and the deposit landed on an earlier run (do not pay twice)
+  const [resumeFund, resumeJob] = (process.env.RISK_RESUME ?? "").split(" ");
+  let fund0 = BigInt(resumeFund || (await view(K, "get_risk_fund"))[0]), dep1 = null;
+  if (!resumeJob) {
+    say(`bob (the demo buyer) paid the steward ${usd(net)} USDC for ${job.job_id}`, await callRaw(account(B), USDC, "ft_transfer", { receiver_id: S, amount: net, memo: job.job_id }, { deposit: 1n, tgas: 30 }));
+    dep1 = await callRaw(account(S), USDC, "ft_transfer_call", { receiver_id: K, amount: net, msg: "earnings" }, { deposit: 1n, tgas: 150 });
+    await new Promise((ok) => setTimeout(ok, 4000));
+  }
   const fund1 = BigInt((await view(K, "get_risk_fund"))[0]);
   say(`the steward deposited it as earnings; the agent saved ${usd(fund1 - fund0)} USDC into the risk fund`, dep1);
   // a case upheld against an agent's job: refunded from the risk fund at once
   const agent = account(dep.agent);
   const info = await view(K, "get_info");
-  const cjob = `demo-court-${Date.now().toString(36)}`;
-  say(`agent recorded ${cjob} (1 USDC)`, await callRaw(agent, K, "record_receipt", { job_id: cjob, price: "1000000", inference_cost: "0",
-    config_hash: info.config.hash, deliverable_hash: "0".repeat(64), proof: null }, { tgas: 30 }));
-  await callRaw(agent, K, "update_receipt", { job_id: cjob, status: "Disputed" }, { tgas: 30 });
-  await callRaw(agent, K, "update_receipt", { job_id: cjob, status: "Paid" }, { tgas: 30 });
+  const cjob = resumeJob || `demo-court-${Date.now().toString(36)}`;
+  if (!resumeJob) {
+    say(`agent recorded ${cjob} (1 USDC)`, await callRaw(agent, K, "record_receipt", { job_id: cjob, price: "1000000", inference_cost: "0",
+      config_hash: info.config.hash, deliverable_hash: "0".repeat(64), proof: null }, { tgas: 30 }));
+    await callRaw(agent, K, "update_receipt", { job_id: cjob, status: "Disputed" }, { tgas: 30 });
+    await callRaw(agent, K, "update_receipt", { job_id: cjob, status: "Paid" }, { tgas: 30 });
+  }
   const amount = (fund1 < 400000n ? fund1 : 400000n).toString();
   const before = BigInt(await view(USDC, "ft_balance_of", { account_id: BUYER }));
   const o = await callRaw(account(B), K, "open_case", { job_id: cjob, refund_to: BUYER, amount,
@@ -131,7 +141,7 @@ if (run("risk")) {
   const fund2 = BigInt((await view(K, "get_risk_fund"))[0]);
   console.log(`case #${id}: ${done.status}, refund proposal ${done.refund_proposal ?? "none"}; buyer ${usd(before)} → ${usd(after)} USDC; risk fund ${usd(fund1)} → ${usd(fund2)}`);
   console.log(`agent: ${JSON.stringify(await view(K, "get_agent_member"))}`);
-  saved({ risk: { job: job.job_id, paid: net, deposit: dep1.transaction.hash, saved: String(fund1 - fund0), case: id, refund: amount,
+  saved({ risk: { job: job.job_id, paid: net, deposit: dep1?.transaction.hash ?? null, saved: String(fund1 - fund0), case: id, refund: amount,
     proposal: done.refund_proposal ?? null, fund: { before: String(fund0), after_deposit: String(fund1), after_refund: String(fund2) } } });
 }
 
