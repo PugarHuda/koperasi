@@ -676,6 +676,7 @@ impl Koperasi {
         proof: Option<String>,
     ) {
         self.assert_agent();
+        crate::meeting::note_agent_key(&self.agent_id);
         require!(!self.paused, "koperasi is paused");
         require!(!crate::meeting::agent_suspended(), "the agent is suspended by the co-op court (3 upheld cases in 90 days): the members reinstate it by vote");
         // 0.3.2: a further agent with its own voted by-laws runs those; every other agent the co-op's
@@ -709,6 +710,7 @@ impl Koperasi {
     /// Agent only: mirror the market's verdict (Submitted to Paid, Refunded or Disputed; Disputed to Paid or Refunded).
     pub fn update_receipt(&mut self, job_id: String, status: ReceiptStatus) {
         self.assert_agent();
+        crate::meeting::note_agent_key(&self.agent_id);
         let i = *self.receipt_index.get(&job_id).unwrap_or_else(|| env::panic_str("no receipt"));
         require!(self.get_receipt_agent(job_id.clone()) == env::predecessor_account_id(), "only the agent that recorded it");
         let r = self.receipts.get_mut(i).unwrap();

@@ -12,6 +12,10 @@
 //!   appeal) is a strike against the agent. The agent's runtime halves its daily inference budget for each strike in the
 //!   last 90 days; at 3 the contract suspends it (it records no new receipt) until the members reinstate it by vote.
 //!
+//! - **The agent proposes** (0.3.2): the founding agent may put new by-laws to the members (`agent_propose_bylaws`),
+//!   with the reason it read from its own record (prices, refunds, inference cost). The contract files a DAO proposal
+//!   for `set_config`, paying the bond itself, and does not vote on it: only the members decide. One every 7 days.
+//!
 //! State lives under its own storage keys, so the upgrade needs no state migration.
 
 use crate::tasks::{load, save, DAY_NS};
@@ -21,6 +25,13 @@ const KEY_DUES: &[u8] = b"dues";
 const KEY_MEETINGS: &[u8] = b"annual_meetings";
 const KEY_STRIKES: &[u8] = b"agent_strikes";
 const KEY_REINSTATED: &[u8] = b"agent_reinstated";
+const KEY_AGENT_PROPOSALS: &[u8] = b"agent_proposals";
+/// The public key the founding agent last signed a receipt with (ed25519 only: curve byte 0, then 32 bytes).
+pub(crate) const KEY_AGENT_PK: &[u8] = b"agent_pk";
+/// The agent may put new by-laws to the members at most once in this many days.
+pub const AGENT_PROPOSE_EVERY_DAYS: u64 = 7;
+const MAX_REASON: usize = 500;
+const GAS_AGENT_PROPOSED: Gas = Gas::from_tgas(10);
 /// Days a member may be behind on dues before losing good standing.
 pub const DUES_GRACE_DAYS: u64 = 7;
 /// At most this many periods paid at once.
@@ -31,6 +42,34 @@ pub const STRIKE_DAYS: u64 = 90;
 pub const SUSPEND_AT: u32 = 3;
 const MAX_AGENDA_EACH: usize = 3;
 const MAX_ITEM: usize = 280;
+
+/// What the agent signs to put new by-laws to the members (bound to this contract and to the next version).
+pub fn agent_proposal_message(contract: &AccountId, version: u32, hash: &str, uri: &str, reason: &str) -> String {
+    format!("{contract} agent_propose_bylaws v{version} {hash} {uri}
+{reason}")
+}
+
+/// Called from `record_receipt`/`update_receipt`: the founding agent's own signing key is kept.
+pub(crate) fn note_agent_key(agent: &AccountId) {
+    if env::signer_account_id() == *agent && env::predecessor_account_id() == *agent {
+        let pk: Vec<u8> = env::signer_account_pk().into_bytes();
+        if pk.first() == Some(&0) && load::<Vec<u8>>(KEY_AGENT_PK).as_ref() != Some(&pk) {
+            save(KEY_AGENT_PK, &pk);
+        }
+    }
+}
+
+/// New by-laws the agent put to the members; `proposal` is the DAO proposal once filed.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct AgentProposal {
+    pub version: u32,
+    pub hash: String,
+    pub uri: String,
+    pub reason: String,
+    pub proposal: Option<u64>,
+    pub at: U64,
+}
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -200,5 +239,70 @@ impl Koperasi {
         self.assert_dao();
         save(KEY_REINSTATED, &U64(env::block_timestamp()));
         Event::AgentReinstated {}.emit();
+    }
+
+    // ---------- the agent proposes ----------
+
+    /// The founding agent puts new by-laws to the members, with the reason it read from its record. The contract files
+    /// the DAO proposal (`set_config`, the agent named as contributor, no points) and pays its bond; the members vote.
+    ///
+    /// The agent's key may call only `record_receipt` and `update_receipt`, so it signs instead: anyone may submit the
+    /// proposal with the agent's ed25519 signature of `agent_proposal_message(...)`, checked against the key the agent
+    /// last signed a receipt with (the contract keeps it then). The agent itself may also call directly.
+    pub fn agent_propose_bylaws(&mut self, version: u32, hash: String, uri: String, reason: String, signature: Option<String>) -> Promise {
+        if env::predecessor_account_id() != self.agent_id {
+            let pk: Vec<u8> = load(KEY_AGENT_PK).unwrap_or_else(|| env::panic_str("only the co-op's agent: it has signed no receipt under this code yet"));
+            let sig = signature.as_deref().and_then(|s| near_sdk::base64::Engine::decode(&near_sdk::base64::engine::general_purpose::STANDARD, s).ok())
+                .and_then(|b| <[u8; 64]>::try_from(b).ok()).unwrap_or_else(|| env::panic_str("only the co-op's agent, or its signature (base64, 64 bytes)"));
+            let msg = agent_proposal_message(&env::current_account_id(), version, &hash, &uri, &reason);
+            require!(pk.len() == 33 && pk[0] == 0 && env::ed25519_verify(&sig, msg.as_bytes(), &pk[1..].try_into().unwrap()), "not the agent's signature");
+        }
+        require!(!agent_suspended(), "the agent is suspended");
+        require!(version == self.config.version + 1, "the next version only");
+        require!(valid_hash(&hash), "hash must be 64 lowercase hex chars");
+        require!(!uri.is_empty() && uri.len() <= 200, "uri: 1 to 200 characters");
+        require!(!reason.trim().is_empty() && reason.len() <= MAX_REASON, "reason: 1 to 500 characters");
+        let mut all: Vec<AgentProposal> = load(KEY_AGENT_PROPOSALS).unwrap_or_default();
+        let now = env::block_timestamp();
+        require!(all.last().is_none_or(|p| now >= p.at.0 + AGENT_PROPOSE_EVERY_DAYS * DAY_NS), "one proposal every 7 days");
+        all.push(AgentProposal { version, hash: hash.clone(), uri: uri.clone(), reason: reason.clone(), proposal: None, at: U64(now) });
+        save(KEY_AGENT_PROPOSALS, &all);
+        let args = near_sdk::serde_json::json!({ "version": version, "hash": hash, "uri": uri,
+            "contributor": self.agent_id, "points": 0 }).to_string();
+        let kind = near_sdk::serde_json::json!({ "FunctionCall": { "receiver_id": env::current_account_id(), "actions": [{
+            "method_name": "set_config", "args": near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, args),
+            "deposit": "0", "gas": "30000000000000" }] } });
+        let description = format!("By-laws v{version}, proposed by the co-op's agent from its record: {reason}");
+        crate::tasks::ext_dao_proposals::ext(self.dao_id.clone())
+            .with_attached_deposit(crate::tasks::PAYOUT_BOND)
+            .with_static_gas(crate::tasks::GAS_PROPOSE)
+            .add_proposal(near_sdk::serde_json::json!({ "description": description, "kind": kind }))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_AGENT_PROPOSED).on_agent_proposed())
+    }
+
+    /// Callback: the DAO filed the agent's proposal (its id kept); nothing filed, the attempt is forgotten.
+    #[private]
+    pub fn on_agent_proposed(&mut self, #[callback_result] pid: Result<u64, PromiseError>) {
+        let mut all: Vec<AgentProposal> = load(KEY_AGENT_PROPOSALS).unwrap_or_default();
+        let Some(last) = all.last_mut() else { return };
+        match pid {
+            Ok(id) => {
+                last.proposal = Some(id);
+                Event::AgentProposed { version: last.version, hash: last.hash.clone(), proposal_id: id }.emit();
+            }
+            Err(_) => {
+                all.pop();
+            }
+        }
+        save(KEY_AGENT_PROPOSALS, &all);
+    }
+
+    /// The exact text the agent signs for `agent_propose_bylaws`.
+    pub fn get_agent_proposal_message(&self, version: u32, hash: String, uri: String, reason: String) -> String {
+        agent_proposal_message(&env::current_account_id(), version, &hash, &uri, &reason)
+    }
+
+    pub fn get_agent_proposals(&self) -> Vec<AgentProposal> {
+        load(KEY_AGENT_PROPOSALS).unwrap_or_default()
     }
 }

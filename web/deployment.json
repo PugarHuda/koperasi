@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "4d379b1acffd931d87d428a889cd74ebbfd50e29cb8637ac544c6d40b0a17347",
   "configUri": "config/config.v6.yaml",
-  "codeSha256": "cd7d70d2fc8abff164fd6d2c0775166c1b84f9edf187007dc486d40ec15b28ca",
+  "codeSha256": "258ff2361a0c7e9bd71f75e4d6506240157024e09568e615680fd52f99c73ad6",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",

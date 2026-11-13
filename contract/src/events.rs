@@ -188,6 +188,9 @@ pub enum Event {
     /// The steward's term ran out: the role is empty until the members appoint one.
     #[event_version("1.0.0")]
     StewardTermEnded { steward: AccountId },
+    /// The co-op's agent put new by-laws to the members (a DAO proposal the contract filed).
+    #[event_version("1.0.0")]
+    AgentProposed { version: u32, hash: String, proposal_id: u64 },
     /// The members voted the share of every profit share split by credit score.
     #[event_version("1.0.0")]
     ReputationShareSet { bps: u16 },

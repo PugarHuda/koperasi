@@ -2712,3 +2712,58 @@ fn a_reputation_dividend_follows_credit_scores_and_the_card_shows_them() {
     assert_eq!(extra["credit"]["score"], 3);
     assert!(t["metadata"]["description"].as_str().unwrap().contains("credit 3/10"));
 }
+
+/// 0.3.2: the agent puts new by-laws to the members from its record; the contract files the proposal, never votes it,
+/// and lets the agent do so once a week.
+#[test]
+fn the_agent_proposes_new_by_laws_and_only_the_members_decide() {
+    let mut k = setup();
+    let propose = |k: &mut Koperasi, v: u32| { let _ = k.agent_propose_bylaws(v, H2.into(), "config/config.v2.yaml".into(), "refunds are rare: raise the price".into(), None); };
+    assert!(fails(|| { at(&acc("alice.testnet"), DAY); propose(&mut k, 2); }), "the agent only");
+    assert!(fails(|| { at(&agent(), DAY); propose(&mut k, 3); }), "the next version only");
+    assert!(fails(|| { at(&agent(), DAY); let _ = k.agent_propose_bylaws(2, H2.into(), "u".into(), " ".into(), None); }), "a reason");
+    assert!(k.get_agent_proposals().is_empty());
+    at(&agent(), DAY);
+    propose(&mut k, 2);
+    assert!(fails(|| { at(&agent(), 2 * DAY); propose(&mut k, 2); }), "once a week");
+    at(&me(), DAY);
+    k.on_agent_proposed(Ok(77));
+    assert!(logs_have("agent_proposed"));
+    let p = &k.get_agent_proposals()[0];
+    assert_eq!((p.version, p.proposal), (2, Some(77)));
+    assert_eq!(k.get_config().version, 1, "nothing changes until the members vote");
+    // a filing that failed is forgotten, so the agent can try again
+    at(&agent(), 9 * DAY);
+    propose(&mut k, 2);
+    at(&me(), 9 * DAY);
+    k.on_agent_proposed(Err(PromiseError::Failed));
+    assert_eq!(k.get_agent_proposals().len(), 1);
+}
+
+/// 0.3.2: the agent's key opens only its receipts, so anyone may submit its proposal with its signature, checked against
+/// the key it last signed a receipt with.
+#[test]
+fn anyone_may_submit_the_agents_signed_proposal() {
+    use ed25519_dalek::{Signer, SigningKey};
+    let mut k = setup();
+    let sk = SigningKey::from_bytes(&[9; 32]);
+    let pk: Vec<u8> = [vec![0u8], sk.verifying_key().to_bytes().to_vec()].concat();
+    let relayer = acc("relayer.testnet");
+    let (uri, why) = ("config/config.v2.yaml", "price up: no refunds in 20 jobs");
+    let sig = |sk: &SigningKey| { let m = meeting::agent_proposal_message(&me(), 2, H2, uri, why);
+        near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, sk.sign(m.as_bytes()).to_bytes()) };
+    let submit = |k: &mut Koperasi, s: Option<String>| { let _ = k.agent_propose_bylaws(2, H2.into(), uri.into(), why.into(), s); };
+    assert!(fails(|| { at(&relayer, DAY); submit(&mut k, Some(sig(&sk))); }), "no receipt signed yet: no key known");
+    // the agent signs a receipt with that key: the contract keeps it
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(agent()).signer_account_id(agent())
+        .signer_account_pk(pk.clone().try_into().unwrap()).block_timestamp(DAY);
+    testing_env!(b.build());
+    k.record_receipt("j-pk".into(), U128(1), U128(0), H1.into(), "00".into(), None);
+    assert!(fails(|| { at(&relayer, DAY); submit(&mut k, Some(sig(&SigningKey::from_bytes(&[8; 32])))); }), "another key");
+    assert!(fails(|| { at(&relayer, DAY); submit(&mut k, None); }), "no signature");
+    assert!(fails(|| { at(&relayer, DAY); let _ = k.agent_propose_bylaws(2, H2.into(), uri.into(), "price down".into(), Some(sig(&sk))); }), "the reason is signed too");
+    at(&relayer, DAY);
+    submit(&mut k, Some(sig(&sk)));
+    assert_eq!(k.get_agent_proposals().len(), 1);
+}
