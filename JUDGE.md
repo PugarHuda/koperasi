@@ -38,6 +38,7 @@ every day (`.github/workflows/tests.yml`).
 | 13c | Many co-ops from this repo | `/coops.html` | every co-op deployed from this repo, read live (members, jobs, shares, by-laws); the showcase and one more have 0 full-access keys, so their code changes only by a vote |
 | 13d | Trust that travels between co-ops | `/cert.html?who=kop-carol-mw80aczw.testnet` → *Passport* | "2 finished at koperasi-mw80aczw.testnet … counts as one trust source here": the contract read her token on the sister co-op the members voted (#83) |
 | 13e | Attacks are refused on-chain | *Don't trust us* → *Attacks are refused on-chain* | green: "19 of 19 attacks on this co-op failed on-chain", each re-read by your browser, with the refusal and the transaction |
+| 13f | The annual members' meeting | *Commons* → *Annual members' meeting 2026*, or `/rat/2026.md` | the report the co-op's agent wrote in a TEE from the chain's facts, approved by DAO vote #86, whose description carries the report's and the facts' sha256 |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source

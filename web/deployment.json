@@ -427,5 +427,24 @@
     "vote": 83,
     "mint_tx": "AKd9P8GXeMRtUoWb5uGWBnKV16tbtjkVmpnwuvp6nfeq",
     "stamp_tx": "A6fSvb3KzZxeJLjXRkkxiNwYNnafjw9rP9DDnoeU2Kiz"
-  }
+  },
+  "rat": [
+    {
+      "year": 2026,
+      "report": "rat/2026.md",
+      "report_sha256": "fae4927eceff170782cf1f5dbe43a8f6e3762d97534f363bc1ffa748efbab765",
+      "facts": "rat/2026.facts.json",
+      "facts_sha256": "a8ea39e1f855e2b47ef22f57db7caedded33995f45cef6f080d3b233c820d18a",
+      "proposal": 86,
+      "proof": {
+        "model": "z-ai/glm-5.3-flash",
+        "inference_id": "b0e47485-2d08-5348-8c6a-058d0e7050a1",
+        "chat_id": "4dc98dc1307a4da8aaa252f0ad0ce720",
+        "tee_signer": "0x3b753b4406613c5e70ae640508632b600424fa0c",
+        "tee_checked_at": "2026-11-13T05:00:14.163Z",
+        "billed": true
+      },
+      "at": "2026-11-13T05:03:45.554Z"
+    }
+  ]
 }

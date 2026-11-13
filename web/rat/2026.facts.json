@@ -1,0 +1,173 @@
+{
+  "co_op": "koperasi-mw4i2iwk.testnet",
+  "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+  "year": 2026,
+  "read_at": "2026-11-13T05:00:13.911Z",
+  "network": "NEAR testnet",
+  "by_laws": {
+    "version": 4,
+    "sha256": "4e28de45f843b798bb3f58973d19045473f5972b4ff1e3eb3bf1735c473eb395"
+  },
+  "members": [
+    {
+      "account": "kop-steward-mw4i2iwk.testnet",
+      "savings_near": 1,
+      "points": 0
+    },
+    {
+      "account": "kop-alice-mw4i3w8f.testnet",
+      "savings_near": 1,
+      "points": 7
+    },
+    {
+      "account": "kop-bob-mw4i3w8f.testnet",
+      "savings_near": 1,
+      "points": 4
+    },
+    {
+      "account": "kop-guest-984702.testnet",
+      "savings_near": 3.001,
+      "points": 10
+    },
+    {
+      "account": "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
+      "savings_near": 0,
+      "points": 17
+    }
+  ],
+  "share_rule_bps": {
+    "reserve_bps": 2000,
+    "savings_bps": 4000,
+    "points_bps": 4000
+  },
+  "jobs": {
+    "receipts": 15,
+    "paid": 11,
+    "with_tee_proof": 3,
+    "from_agent_market": 0,
+    "from_a_local_stand_in_market": 15,
+    "inference_cost_usd": 0.006132
+  },
+  "audit_usdc": {
+    "expected": 25.84,
+    "deposited": 8.74,
+    "owed": 17.1
+  },
+  "profit_shares": [
+    {
+      "id": 1,
+      "usdc": 7.6,
+      "reserve_usdc": 1.52,
+      "members": 3
+    },
+    {
+      "id": 2,
+      "usdc": 10,
+      "reserve_usdc": 2.000003,
+      "members": 4
+    },
+    {
+      "id": 3,
+      "usdc": 1,
+      "reserve_usdc": 0.600002,
+      "members": 4
+    },
+    {
+      "id": 4,
+      "usdc": 0.1,
+      "reserve_usdc": 0.060002,
+      "members": 4
+    },
+    {
+      "id": 5,
+      "usdc": 2,
+      "reserve_usdc": 0.400002,
+      "members": 5
+    }
+  ],
+  "court": [
+    {
+      "id": 0,
+      "status": "Upheld",
+      "refund_usdc": 0.5
+    },
+    {
+      "id": 1,
+      "status": "Dismissed",
+      "refund_usdc": 0.1
+    },
+    {
+      "id": 2,
+      "status": "Dismissed",
+      "refund_usdc": 0.05
+    },
+    {
+      "id": 3,
+      "status": "Upheld",
+      "refund_usdc": 0.5
+    },
+    {
+      "id": 4,
+      "status": "Upheld",
+      "refund_usdc": 0.5
+    }
+  ],
+  "pledges": {
+    "made": 5,
+    "called_in": 5,
+    "kept": 4,
+    "broken": 0
+  },
+  "tasks": {
+    "posted": 16,
+    "paid": 11,
+    "paid_near": 0.7000000000000002,
+    "budget_left_near": 0.43
+  },
+  "treasury_usdc": 9.550009,
+  "dao_proposals": {
+    "filed": 86,
+    "last": [
+      {
+        "id": 78,
+        "status": "Rejected",
+        "what": "Koperasi court case #1 on appeal to the members: refund 0.1 USDC (6 decimals: 100000) to kop-publisher-mw5tkpfo.testnet "
+      },
+      {
+        "id": 79,
+        "status": "Approved",
+        "what": "Koperasi court case #3: refund 0.5 USDC (6 decimals: 500000) to kop-publisher-mw5tkpfo.testnet for job demo-court-mwdvxl"
+      },
+      {
+        "id": 80,
+        "status": "Approved",
+        "what": "NEAR Intents (Tidepool testnet): the agent's wallet pays the 5 members on NEAR, or on the route each set on the contract"
+      },
+      {
+        "id": 81,
+        "status": "Approved",
+        "what": "* Proposal Action: custom <br>* Template: [trezu-tmpl:kop-pay-ethereum] <br>* Summary: Pay from the co-op's Ethereum add"
+      },
+      {
+        "id": 82,
+        "status": "Approved",
+        "what": "Upgrade the Koperasi contract to code 7bLZ4Sq9ZRisgPYkHRqbPoU7jRFf67bAnzziaz6KcBZy (sha256 61f1fa38d4c09a30b125afd561f56"
+      },
+      {
+        "id": 83,
+        "status": "Approved",
+        "what": "Recognise koperasi-mw80aczw.testnet as a sister co-op: work records there in good standing count as one trust source her"
+      },
+      {
+        "id": 84,
+        "status": "Approved",
+        "what": "Koperasi court case #4: refund 0.5 USDC (6 decimals: 500000) to kop-publisher-mw5tkpfo.testnet for job demo-court-mwefj0"
+      },
+      {
+        "id": 85,
+        "status": "Approved",
+        "what": "Annual members' meeting 2026: approve the accountability report https://koperasi-kohl.vercel.app/rat/2026.md (sha256 dc1"
+      }
+    ]
+  }
+}

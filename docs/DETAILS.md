@@ -183,6 +183,7 @@ The result is committed to [`evidence/`](../evidence) and shown on the live page
 | Put the co-op in every state the page shows: tasks open, taken, handed back, cancelled, waiting for a member, approved, held; pledges partly and never called in; cases not upheld; receipts submitted, disputed, refunded; a profit share, a rejected proposal, an open one | `node scripts/scenarios.mjs [gas] [tasks] [pledges] [court] [earnings] [dao]` | the shares and proposals by vote |
 | A payment on Ethereum by vote: the members vote that the DAO signs one EIP-1559 transfer from its Chain Signatures address (gas asked from the node); anyone sends it | `npm run chainsig -- --tx [0x… | member] [ETH]`, then `-- --broadcast` | signing by vote only (showcase: #74, landed on Sepolia) |
 | The agent's NEAR Intents wallet, owned by the DAO (Tidepool's testnet Agent API): create it, grant the agent, freeze, show what its policy refuses, pay a member on NEAR or on Base Sepolia | `node scripts/intents.mjs create|grant|freeze|unfreeze|status|refused|deposit|pay …` (env `TIDEPOOL_KEY`) | owner intents by vote only (#72, #73); payouts inside the policy, each held 10 minutes |
+| The annual members' meeting: the year's facts from the chain, the agent's report from them in a TEE, the members' vote on its sha256 | `node --env-file=.env scripts/rat.mjs [year]` | by vote (#86) |
 | Attacks that must fail: 19 real transactions against the live co-op (outsider, member, agent key, DAO), saved for `verify` and the page | `node scripts/redteam.mjs` | sends only refused calls; any that goes through is reported and fails the script |
 | The passport (0.2.8): a sister co-op's member mints her record there, the members vote that co-op a sister, the contract stamps her passport | `node scripts/commons.mjs --passport` | by vote (#83) |
 | The by-laws gate inside an Intel TDX enclave: a member asks OutLayer to run `outlayer/bylaws-check`; the answer comes back on-chain | `node scripts/outlayer.mjs [member]` | anyone |
@@ -258,7 +259,7 @@ none on mainnet yet: the credits are in place, and no Agent Market buyer has awa
    let trust unlock self-assignment but not payment ([Pocket PEP-42](https://forum.pokt.network/t/pep-42-reward-and-decentralise-rad/3397)),
    or give a fixed address an allowance ([Zodiac Roles, as voted by HAI](https://www.tally.xyz/gov/hai/proposal/71232920685128172221431433589301790868107413093536771388303049247330839170330)):
    the limit belongs to whoever holds the role, not to a record anyone can audit.
-   On testnet, from the treasury: task #2 (the Bahasa Indonesia quick start, [`docs/MULAI.md`](MULAI.md)) paid by
+   On testnet, from the treasury: task #2 (the quick start, [`docs/MULAI.md`](MULAI.md), first written in Bahasa Indonesia and now in English) paid by
    DAO proposal #30 after another member's approval, and its contributor, a member, earned 5 contribution points (under #27's
    rule, a flat 5 a task; a security review then showed two members could farm points with tiny tasks, so #32 makes points
    follow the pay); task #3

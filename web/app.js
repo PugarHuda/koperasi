@@ -547,3 +547,13 @@ if (dep.redteam?.length) {
 } else {
   $("ck-attacks").hidden = true;
 }
+
+// the annual members' meeting (scripts/rat.mjs): the report the agent wrote in a TEE from the chain's facts, approved by vote
+const lastRat = dep.rat?.at(-1);
+if (lastRat) {
+  $("rat").hidden = false;
+  $("rat").innerHTML = `<b>Annual members' meeting ${esc(lastRat.year)}.</b> The co-op's agent wrote the <a href="${esc(lastRat.report)}">accountability report</a>
+    inside a TEE from <a href="${esc(lastRat.facts)}">the facts read from the chain</a>; the members approved exactly those bytes by
+    <a href="${explorer(dep.dao)}">DAO vote #${esc(lastRat.proposal)}</a> (sha256 ${esc(lastRat.report_sha256.slice(0, 12))}…).`;
+}
+

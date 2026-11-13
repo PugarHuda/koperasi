@@ -345,6 +345,17 @@ if (d.passport) {
   }
 }
 
+// the annual members' meeting (scripts/rat.mjs): the members approved, by a DAO vote, exactly the report and facts files
+// served next to the page (their sha256 are in the proposal), and the report was written by a TEE-verified model
+for (const r of d.rat ?? []) {
+  const [report, facts] = await Promise.all([file(`web/${r.report}`, r.report), file(`web/${r.facts}`, r.facts)]);
+  const p = await view(d.dao, "get_proposal", { id: r.proposal });
+  const ok = p.status === "Approved" && p.kind === "Vote" && p.description.includes(`sha256 ${sha256(report)}`)
+    && p.description.includes(`sha256 ${sha256(facts)}`) && Boolean(r.proof?.model && r.proof?.tee_signer);
+  check(ok, `the members approved the ${r.year} annual report by vote, and the report is the one the co-op's agent wrote in a TEE from the chain's facts`,
+    `proposal #${r.proposal} ${p.status}: report sha256 ${sha256(report).slice(0, 12)}…, facts ${sha256(facts).slice(0, 12)}…; model ${r.proof?.model}, TEE key ${r.proof?.tee_signer}`);
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {
