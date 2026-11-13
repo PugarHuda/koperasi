@@ -26,6 +26,8 @@ const KEY_MEETINGS: &[u8] = b"annual_meetings";
 const KEY_STRIKES: &[u8] = b"agent_strikes";
 const KEY_REINSTATED: &[u8] = b"agent_reinstated";
 const KEY_AGENT_PROPOSALS: &[u8] = b"agent_proposals";
+/// Signatures consumed so far: only ever goes up, even when a filing fails.
+const KEY_AGENT_NONCE: &[u8] = b"agent_proposal_nonce";
 /// The founding agent and the public key it last signed a receipt with (ed25519 only: curve byte 0, then 32 bytes).
 /// A key noted for an earlier agent no longer counts once the members appoint another.
 pub(crate) const KEY_AGENT_PK: &[u8] = b"agent_signing_key"; // 0.3.2 live kept a bare key under "agent_pk"
@@ -259,14 +261,17 @@ impl Koperasi {
                 .unwrap_or_else(|| env::panic_str("only the co-op's agent: it has signed no receipt under this code yet"));
             let sig = signature.as_deref().and_then(|s| near_sdk::base64::Engine::decode(&near_sdk::base64::engine::general_purpose::STANDARD, s).ok())
                 .and_then(|b| <[u8; 64]>::try_from(b).ok()).unwrap_or_else(|| env::panic_str("only the co-op's agent, or its signature (base64, 64 bytes)"));
-            // bound to this contract, to the next version and to the count of proposals so far: a signature counts once
-            let msg = agent_proposal_message(&env::current_account_id(), all.len() as u32, version, &hash, &uri, &reason);
+            // bound to this contract, to the next version and to a nonce that only goes up: a signature counts once
+            let nonce: u32 = load(KEY_AGENT_NONCE).unwrap_or(0);
+            let msg = agent_proposal_message(&env::current_account_id(), nonce, version, &hash, &uri, &reason);
             require!(pk.len() == 33 && pk[0] == 0 && env::ed25519_verify(&sig, msg.as_bytes(), &pk[1..].try_into().unwrap()), "not the agent's signature");
+            save(KEY_AGENT_NONCE, &(nonce + 1));
         }
         require!(!agent_suspended(), "the agent is suspended");
         require!(version == self.config.version + 1, "the next version only");
         require!(valid_hash(&hash), "hash must be 64 lowercase hex chars");
-        require!(!uri.is_empty() && uri.len() <= 200, "uri: 1 to 200 characters");
+        // fixed fields first, separated by spaces, the free text last: the signed text reads one way only
+        require!(!uri.is_empty() && uri.len() <= 200 && uri.bytes().all(|b| b.is_ascii_graphic()), "uri: 1 to 200 characters, no spaces");
         require!(!reason.trim().is_empty() && reason.len() <= MAX_REASON, "reason: 1 to 500 characters");
         let now = env::block_timestamp();
         require!(all.last().is_none_or(|p| now >= p.at.0 + AGENT_PROPOSE_EVERY_DAYS * DAY_NS), "one proposal every 7 days");
@@ -304,8 +309,7 @@ impl Koperasi {
 
     /// The exact text the agent signs for its next `agent_propose_bylaws`.
     pub fn get_agent_proposal_message(&self, version: u32, hash: String, uri: String, reason: String) -> String {
-        let n = load::<Vec<AgentProposal>>(KEY_AGENT_PROPOSALS).map_or(0, |v| v.len()) as u32;
-        agent_proposal_message(&env::current_account_id(), n, version, &hash, &uri, &reason)
+        agent_proposal_message(&env::current_account_id(), load(KEY_AGENT_NONCE).unwrap_or(0), version, &hash, &uri, &reason)
     }
 
     pub fn get_agent_proposals(&self) -> Vec<AgentProposal> {

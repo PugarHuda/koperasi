@@ -537,6 +537,7 @@ impl Koperasi {
     pub fn set_agent(&mut self, agent_id: AccountId) {
         self.assert_dao();
         Event::AgentSet { agent_id: agent_id.clone() }.emit();
+        env::storage_remove(crate::meeting::KEY_AGENT_PK); // a key seen before this appointment never counts
         self.agent_id = agent_id;
     }
 

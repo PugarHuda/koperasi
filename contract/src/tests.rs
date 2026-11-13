@@ -2766,11 +2766,15 @@ fn anyone_may_submit_the_agents_signed_proposal() {
     at(&relayer, DAY);
     submit(&mut k, Some(sig(&sk)));
     assert_eq!(k.get_agent_proposals().len(), 1);
-    // a signature counts once: replayed a week later, it signs proposal #0, not #1
+    // a signature counts once: replayed a week later, it signs nonce 0, not 1; even after a failed filing
+    k.on_agent_proposed(Err(PromiseError::Failed));
     assert!(fails(|| { at(&relayer, 9 * DAY); submit(&mut k, Some(sig(&sk))); }), "replayed");
+    assert!(fails(|| { at(&agent(), 9 * DAY); let _ = k.agent_propose_bylaws(2, H2.into(), "a b".into(), why.into(), None); }), "a uri without spaces");
     // nor once the members appoint another agent, nor while the co-op is paused
     as_(&dao(), near(0));
     k.set_agent(acc("agent2.testnet"));
+    as_(&dao(), near(0));
+    k.set_agent(agent()); // appointed again: its key from before does not count until it signs a receipt again
     assert!(fails(|| { at(&relayer, 9 * DAY); let _ = k.agent_propose_bylaws(2, H2.into(), uri.into(), why.into(), Some(sig(&sk))); }), "an earlier agent's key");
     as_(&dao(), near(0));
     k.pause();
