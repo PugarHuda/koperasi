@@ -60,7 +60,8 @@ built on an unmodified Sputnik DAO (no new multisig):
   (OutLayer) before every job, the work done on a TEE-verified model.
 - **It proposes, the members decide:** it read its record (17% refunded or disputed) and proposed a higher price; the
   contract filed the proposal, the members passed it (by-laws v7). Its next look, with the model in a TEE, proposed
-  nothing: too few jobs to judge the last change. Its runtime does this by itself.
+  nothing: too few jobs to judge the last change; after 3 more paid jobs it wrote by-laws v8 itself (#136). Its runtime
+  does this by itself.
 - **It pays for its own mistakes:** it saves 10% of its earnings and gets a share of the surplus, halved per case lost
   in court, into a risk fund that refunded a buyer at once when a jury upheld a case (#10), with no vote needed.
 - **It trades with other co-ops' agents:** a job below its members' price went, by its own decision, to the sister

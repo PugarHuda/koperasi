@@ -51,7 +51,7 @@ every day (`.github/workflows/tests.yml`).
 | 13p | The agent as a member, and the risk fund's cycle (0.3.3) | *Commons* → *The agent is a member too*; `npm run verify` | 5% of every share into the risk fund (#127), halved per strike; the agent saved 0.38 USDC from its earnings and case #10 was refunded 0.40 from the fund with no proposal |
 | 13q | The federation's rules bind the code | `npm run verify` (the federation-ceiling line); DAO proposal #130 | federation resolutions #4 and #5 set at most 2% for 30 days in each contract; the members' own 4% vote (#130) is Approved, and `get_loan_rule` still says 200 bps |
 | 13r | Work passed between co-ops | `npm run verify` (the work-passes line) | the sister's receipt names the showcase as the co-op that brought the job; the sister's #21 paid 1.14 USDC to the showcase's treasury, as federation resolution #3 says |
-| 13s | The agent judges its own proposal | `/agent-proposals/v8.facts.json`; `npm run verify` | the facts the agent read, whose sha256 the record holds; its answer: too few jobs under v7 to judge, so no change proposed |
+| 13s | The agent judges its own proposal | `/agent-proposals/v8.facts.json`; `npm run verify` | the facts the agent read, whose sha256 the record holds; its first answer: too few jobs under v7 to judge, so no change; after 3 more paid jobs, by-laws v8 (a 3 USDC minimum, a $5 daily cap), approved by #136 |
 | 13t | The agent routes work and weighs judgment (0.3.4) | `npm run verify`; `get_reputation_weights` | a second job passed to the sister co-op by the agent's own decision (budget below its price), paid by the sister's #27; weights after share #135 multiplied by each member's court record |
 | 13u | The Shade Agent registry | [`kop-tee-mwfb5bj2.testnet`](https://testnet.nearblocks.io/address/kop-tee-mwfb5bj2.testnet) `get_contract_info`; the co-op's `get_agent_tee` | the registry the members named (#134), owned by the co-op's DAO, with the code and machines they approved |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
@@ -81,5 +81,4 @@ every day (`.github/workflows/tests.yml`).
   with no points. How often the agent may propose is the members' to set (0.3.3; they set no wait, #127).
 - No loan has been late on testnet (a term plus 7 days' grace has not passed), so a late loan told to the sister
   co-ops, dues in arrears and a guarantee called are proven by contract tests only.
-- The agent's model-written proposal (0.3.3) proposed nothing yet: too few jobs under by-laws v7 to judge.
 - Testnet only. The path to mainnet is in the README, under *Sustainability and the path to mainnet*.
