@@ -176,8 +176,16 @@ fn case(id: u32) -> Case {
 }
 pub(crate) fn mark(a: &AccountId, f: impl FnOnce(&mut Standing)) {
     let mut s: Standing = load(&standing_key(a)).unwrap_or_default();
+    let was = s.good();
     f(&mut s);
     save(&standing_key(a), &s);
+    // 0.3.0: whoever guaranteed `a` answers for its fall (tanggung renteng)
+    if was && !s.good() {
+        crate::lending::guarantors_answer(a);
+    }
+}
+pub(crate) fn standing_of(a: &AccountId) -> Standing {
+    standing(a)
 }
 fn standing(a: &AccountId) -> Standing {
     load(&standing_key(a)).unwrap_or_default()
@@ -258,8 +266,8 @@ impl Koperasi {
     /// Kept and broken pledges, juries served and missed, slashes; `good` = none broken, missed or slashed.
     pub fn get_standing(&self, account_id: AccountId) -> (Standing, bool) {
         let s = standing(&account_id);
-        // 0.2.9: a member behind on the dues the members voted is out of good standing too
-        let good = s.good() && self.dues_ok(&account_id);
+        // 0.2.9: a member behind on the dues the members voted is out of good standing too; 0.3.0: and a called guarantee
+        let good = self.in_good_standing(&account_id);
         (s, good)
     }
 
@@ -272,7 +280,7 @@ impl Koperasi {
     #[payable]
     pub fn open_case(&mut self, job_id: String, refund_to: AccountId, amount: U128, reason: String) -> u32 {
         let claimant = self.assert_member();
-        require!(standing(&claimant).good() && self.dues_ok(&claimant), "only a member in good standing");
+        require!(self.in_good_standing(&claimant), "only a member in good standing");
         require!(env::attached_deposit() >= COURT_BOND, "attach the 0.5 NEAR court bond");
         require!(!reason.trim().is_empty() && reason.len() <= MAX_WHAT, "reason: 1 to 280 characters");
         let i = *self.receipt_index.get(&job_id).unwrap_or_else(|| env::panic_str("no receipt for this job"));
@@ -290,7 +298,7 @@ impl Koperasi {
         require!(tries < MAX_CASES_PER_JOB, "this job had its two cases");
         env::storage_write(&job_tries_key(&job_id), &[tries + 1]);
         let mut pool: Vec<AccountId> = self.members.keys()
-            .filter(|m| **m != claimant && **m != refund_to && Some(*m) != self.steward.as_ref() && standing(m).good() && self.dues_ok(m))
+            .filter(|m| **m != claimant && **m != refund_to && Some(*m) != self.steward.as_ref() && self.in_good_standing(m))
             .cloned()
             .collect();
         require!(pool.len() >= JURORS, "fewer than 3 members can sit on a jury");

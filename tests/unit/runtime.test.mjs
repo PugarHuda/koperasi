@@ -14,6 +14,8 @@ import { ethAddressOf } from "../../agent/sig.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const dep = JSON.parse(fs.readFileSync(path.join(ROOT, "deployment.testnet.json"), "utf8"));
+// the model the voted by-laws name (v6: deepseek/deepseek-v3.2), so the stand-in model list and signatures match it
+const MODEL = /^model:\s*"([^"]+)"/m.exec(fs.readFileSync(path.join(ROOT, dep.configUri), "utf8"))[1];
 const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const CAP_JOB = 500_000; // config v3: 0.50 USD per job
 
@@ -66,7 +68,7 @@ globalThis.fetch = async (url, init = {}) => {
   const u = String(url);
   const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers });
   if (u.endsWith("/model/list")) {
-    return json({ models: [{ modelId: "z-ai/glm-5.3-flash", metadata: { verifiable: true },
+    return json({ models: [{ modelId: MODEL, metadata: { verifiable: true },
       inputCostPerToken: { amount: 1, scale: 7 }, outputCostPerToken: { amount: 4, scale: 7 } }] });
   }
   if (u.endsWith("/chat/completions")) {
@@ -78,7 +80,7 @@ globalThis.fetch = async (url, init = {}) => {
   }
   if (u.includes("/signature/")) {
     if (w.signatureStatus !== 200) return json({}, w.signatureStatus);
-    const text = `z-ai/glm-5.3-flash:${sha256(w.last.req)}:${sha256(w.last.raw)}`;
+    const text = `${MODEL}:${sha256(w.last.req)}:${sha256(w.last.raw)}`;
     return json({ text, signature: personalSign(text), signing_address: signer });
   }
   if (u.endsWith("/billing/costs")) return json({ costs: [{ costNanoUsd: 7_000_000 }] }); // 7000 micro-USD

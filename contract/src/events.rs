@@ -188,6 +188,39 @@ pub enum Event {
     /// The steward's term ran out: the role is empty until the members appoint one.
     #[event_version("1.0.0")]
     StewardTermEnded { steward: AccountId },
+    /// The members voted the funds paid from every profit share's reserve (education, social…).
+    #[event_version("1.0.0")]
+    ShareFundsSet { funds: u32 },
+    /// A fund's part of a profit share was paid.
+    #[event_version("1.0.0")]
+    FundPaid { name: String, to: AccountId, amount: U128 },
+    /// A member guaranteed an account.
+    #[event_version("1.0.0")]
+    Guaranteed { account_id: AccountId, guarantor: AccountId },
+    /// A guarantor withdrew.
+    #[event_version("1.0.0")]
+    GuaranteeWithdrawn { account_id: AccountId, guarantor: AccountId },
+    /// The guaranteed account fell out of good standing: the guarantor answers for it.
+    #[event_version("1.0.0")]
+    GuaranteeCalled { account_id: AccountId, guarantor: AccountId },
+    /// The members cleared a guarantor's marks.
+    #[event_version("1.0.0")]
+    GuaranteeCleared { account_id: AccountId },
+    /// The members voted the loan rule and the fund.
+    #[event_version("1.0.0")]
+    LoanRuleSet { max_loan: U128, rate_bps: u16, term_days: u32, fund: U128 },
+    /// A member borrowed from the loan fund.
+    #[event_version("1.0.0")]
+    LoanRequested { account_id: AccountId, amount: U128, due: U64 },
+    /// The contract filed the loan as a DAO Transfer.
+    #[event_version("1.0.0")]
+    LoanFiled { account_id: AccountId, proposal_id: u64 },
+    /// A loan was repaid into the treasury.
+    #[event_version("1.0.0")]
+    LoanRepaid { account_id: AccountId, amount: U128 },
+    /// A loan was called late.
+    #[event_version("1.0.0")]
+    LoanLate { account_id: AccountId },
     /// The members voted the mandatory dues (amount 0: none).
     #[event_version("1.0.0")]
     DuesSet { amount: U128, every_days: u32 },

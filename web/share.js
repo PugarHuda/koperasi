@@ -76,7 +76,7 @@ export const EVENTS = ["join_requested", "join_cancelled", "member_added", "memb
   "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "veto_window_set", "task_held", "task_vetoed", "task_approved",
   "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited",
-  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
+  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "share_funds_set", "fund_paid", "guaranteed", "guarantee_withdrawn", "guarantee_called", "guarantee_cleared", "loan_rule_set", "loan_requested", "loan_filed", "loan_repaid", "loan_late", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
 /**
@@ -139,6 +139,17 @@ export function describeEvent({ event: e, data: d }) {
     case_appealed: () => `${short(d.claimant)} appealed court case #${d.id} to the members: DAO proposal #${d.proposal_id}`,
     appeal_settled: () => `The members ${d.upheld ? "overturned the jury: the buyer of case #" + d.id + " is refunded" : "kept the jury's ruling on case #" + d.id}`,
     payout_route_set: () => `${short(d.account_id)} wants payouts on ${d.chain === "near" ? "NEAR" : { base: "Base", arb: "Arbitrum", eth: "Ethereum" }[d.chain] ?? "?"}`,
+    share_funds_set: () => `The members set ${d.funds} fund(s) paid from every profit share's reserve`,
+    fund_paid: () => `The ${d.name} fund got ${usdcOf(d.amount)} from a profit share`,
+    guaranteed: () => `${short(d.guarantor)} stands surety for ${short(d.account_id)}`,
+    guarantee_withdrawn: () => `${short(d.guarantor)} no longer stands surety for ${short(d.account_id)}`,
+    guarantee_called: () => `${short(d.account_id)} fell out of good standing: ${short(d.guarantor)}, who stood surety, answers for it`,
+    guarantee_cleared: () => `The members cleared ${short(d.account_id)}'s surety marks`,
+    loan_rule_set: () => `The members set loans: up to ${Number(BigInt(d.max_loan) / 10n ** 21n) / 1000} NEAR, ${d.rate_bps / 100}% flat, ${d.term_days} days`,
+    loan_requested: () => `${short(d.account_id)} borrowed ${Number(BigInt(d.amount) / 10n ** 21n) / 1000} NEAR from the loan fund`,
+    loan_filed: () => `The contract filed the loan to ${short(d.account_id)} as DAO proposal #${d.proposal_id}`,
+    loan_repaid: () => `${short(d.account_id)} repaid ${Number(BigInt(d.amount) / 10n ** 21n) / 1000} NEAR into the treasury`,
+    loan_late: () => `${short(d.account_id)}'s loan is late: they and their guarantors lose good standing`,
     dues_set: () => (BigInt(d.amount) === 0n ? "The members voted no mandatory dues" : `The members set mandatory dues: ${Number(BigInt(d.amount) / 10n ** 21n) / 1000} NEAR every ${d.every_days} days`),
     dues_paid: () => `${short(d.account_id)} paid ${d.periods} period(s) of dues into the treasury`,
     agenda_proposed: () => `${short(d.by)} put an item on the ${d.year} annual meeting's agenda`,

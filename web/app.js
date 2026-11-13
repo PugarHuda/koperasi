@@ -569,12 +569,16 @@ if (lastRat) {
 }
 
 // contract 0.2.9: the agent as a defendant, the mandatory dues, and this year's agenda
-Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_dues"), view(dep.contract, "get_agenda", { year: new Date().getUTCFullYear() })])
-  .then(([agent, dues, agenda]) => {
+Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_dues"), view(dep.contract, "get_agenda", { year: new Date().getUTCFullYear() }),
+  view(dep.contract, "get_share_funds").catch(() => []), view(dep.contract, "get_loan_rule").catch(() => null)])
+  .then(([agent, dues, agenda, funds, loans]) => {
     const parts = [`<b>The agent answers to the court.</b> ${agent.strikes.length
       ? `${agent.strikes.length} case(s) upheld against its jobs in 90 days (${agent.strikes.map(([id]) => `#${esc(id)}`).join(", ")}): its daily inference budget is divided by ${2 ** agent.strikes.length}`
       : "No case upheld against its jobs in 90 days"}${agent.suspended ? "; <strong>suspended</strong> until the members reinstate it" : "; at 3 the contract suspends it"}.`];
     if (dues && BigInt(dues.amount) > 0n) parts.push(`<b>Mandatory dues:</b> ${nearAmt(dues.amount)} NEAR every ${esc(dues.every_days)} days into the treasury, voted by the members; 7 days behind and a member loses good standing.`);
+    // contract 0.3.0: funds from the surplus, and the savings-and-loan fund
+    if (funds.length) parts.push(`<b>Funds from every profit share:</b> ${funds.map((f) => `${esc(f.name)} ${f.bps / 100}% to <a href="${explorer(f.to)}">${esc(f.to)}</a>`).join("; ")}, out of the reserve.`);
+    if (loans) parts.push(`<b>Savings and loans:</b> a member in good standing with a guarantor borrows up to ${nearAmt(loans[0].max_loan)} NEAR for ${esc(loans[0].term_days)} days at ${loans[0].rate_bps / 100}% flat; the fund can lend ${nearAmt(loans[1])} NEAR now. A late loan costs the borrower and their guarantors good standing.`);
     if (agenda.length) parts.push(`<b>This year's agenda:</b> ${agenda.map(([by, item]) => `“${esc(item)}” (${esc(by.split(".")[0])})`).join("; ")}.`);
     $("duties").hidden = false;
     $("duties").innerHTML = parts.join("<br>");

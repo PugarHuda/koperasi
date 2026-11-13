@@ -747,6 +747,8 @@ impl Koperasi {
 
     fn share_now(&mut self, amount: u128) -> u128 {
         let reserve = self.distribute(amount);
+        // 0.3.0: the education and social funds the members voted come out of the reserve part
+        let reserve = self.pay_funds(amount, reserve);
         if reserve > 0 {
             self.forward_to_dao(reserve);
         }
@@ -962,5 +964,6 @@ mod tasks;
 mod commons;
 mod reach;
 mod meeting;
+mod lending;
 pub use commons::*;
 pub use tasks::*;

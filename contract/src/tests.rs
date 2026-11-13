@@ -2496,3 +2496,90 @@ fn upheld_cases_strike_the_agent_and_three_suspend_it_until_the_members_reinstat
     at(&agent(), 5 * DAY + meeting::STRIKE_DAYS * DAY + 1);
     assert!(k.get_agent_standing().strikes.is_empty());
 }
+
+/// 0.3.0: the education and social funds are paid from every profit share's reserve part, never more than it.
+#[test]
+fn the_funds_the_members_voted_are_paid_from_each_shares_reserve() {
+    let mut k = setup(); // 20% reserve
+    with_members(&mut k, &["alice.testnet"]);
+    let fund = |name: &str, bps: u16, to: &str| lending::ShareFund { name: name.into(), bps, to: acc(to) };
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_share_funds(vec![fund("education", 500, "edu.testnet")]); }), "only the DAO");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_share_funds(vec![fund("education", 1500, "edu.testnet"), fund("social", 600, "soc.testnet")]); }), "within the reserve");
+    as_(&dao(), near(0));
+    k.set_share_funds(vec![fund("education", 500, "edu.testnet"), fund("social", 250, "soc.testnet")]);
+    as_(&usdc(), near(0));
+    let _ = k.ft_on_transfer(dao(), U128(1_000_000), "share".into());
+    assert!(logs_have("\"fund_paid\"") && logs_have("\"amount\":\"50000\"") && logs_have("\"amount\":\"25000\""));
+    assert_eq!(k.get_share_funds().len(), 2);
+}
+
+/// 0.3.0: a guarantor answers for the account they guaranteed (tanggung renteng), until the members clear it.
+#[test]
+fn a_guarantor_loses_good_standing_when_the_guaranteed_account_falls() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet", "carol.testnet", "dave.testnet"]);
+    let (alice, bob, carol) = (acc("alice.testnet"), acc("bob.testnet"), acc("carol.testnet"));
+    assert!(fails(|| { at_paying(&alice, DAY, commons::PLEDGE_FEE); k.guarantee(alice.clone()); }), "not yourself");
+    assert!(fails(|| { at(&alice, DAY); k.guarantee(bob.clone()); }), "pays for storage");
+    at_paying(&alice, DAY, commons::PLEDGE_FEE);
+    k.guarantee(bob.clone());
+    at_paying(&carol, DAY, commons::PLEDGE_FEE);
+    k.guarantee(bob.clone());
+    assert!(fails(|| { at_paying(&alice, DAY, commons::PLEDGE_FEE); k.guarantee(bob.clone()); }), "once each");
+    assert_eq!(k.get_guarantors(bob.clone()).len(), 2);
+    assert!(k.get_standing(alice.clone()).1);
+    commons::mark(&bob, |s| s.pledges_broken += 1); // bob breaks a pledge
+    assert!(logs_have("guarantee_called"));
+    assert!(!k.get_standing(alice.clone()).1 && !k.get_standing(carol.clone()).1, "both guarantors answer");
+    commons::mark(&bob, |s| s.pledges_broken += 1); // already fallen: no second mark
+    assert_eq!(k.get_guarantee_failures(alice.clone()), 1);
+    assert!(fails(|| { at(&alice, DAY); k.clear_guarantee_failures(alice.clone()); }), "only the DAO");
+    as_(&dao(), near(0));
+    k.clear_guarantee_failures(alice.clone());
+    assert!(k.get_standing(alice.clone()).1);
+    at(&carol, DAY);
+    k.withdraw_guarantee(bob.clone());
+    assert_eq!(k.get_guarantors(bob), vec![alice]);
+}
+
+/// 0.3.0: savings and loans: a guaranteed member borrows from the fund the members voted, repays with interest into
+/// the treasury, and the fund revolves; a loan left late marks the borrower and the guarantor.
+#[test]
+fn a_member_borrows_from_the_voted_fund_repays_with_interest_and_a_late_loan_marks_the_guarantor() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let (alice, bob) = (acc("alice.testnet"), acc("bob.testnet"));
+    let rule = lending::LoanRule { max_loan: U128(near(1).as_yoctonear()), rate_bps: 200, term_days: 30 };
+    assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(near(1).as_yoctonear())); }), "no loans voted");
+    as_(&dao(), near(0));
+    k.set_loan_rule(rule.clone(), U128(near(2).as_yoctonear()));
+    assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(near(1).as_yoctonear())); }), "needs a guarantor");
+    at_paying(&alice, DAY, commons::PLEDGE_FEE);
+    k.guarantee(bob.clone());
+    assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(near(2).as_yoctonear())); }), "at most the largest loan");
+    assert!(fails(|| { at(&acc("outsider.testnet"), DAY); let _ = k.request_loan(U128(1)); }), "members only");
+    at(&bob, DAY);
+    let _ = k.request_loan(U128(near(1).as_yoctonear()));
+    assert!(logs_have("loan_requested"));
+    assert_eq!(k.get_loan_rule().unwrap().1, U128(near(1).as_yoctonear()), "the fund lent 1 of 2");
+    assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(1)); }), "one loan at a time");
+    assert!(fails(|| { at(&alice, DAY); k.withdraw_guarantee(bob.clone()); }), "not while the loan is open");
+    at(&me(), DAY);
+    let _ = k.on_loan_filed(bob.clone(), Value::Null, Ok(55));
+    assert_eq!(k.get_loan(bob.clone()).unwrap().proposal, Some(55));
+    // repaid with 2% interest: the principal goes back to the fund
+    assert!(fails(|| { at_paying(&bob, 2 * DAY, near(1)); k.repay_loan(); }), "principal plus interest");
+    at_paying(&bob, 2 * DAY, NearToken::from_millinear(1020));
+    k.repay_loan();
+    assert_eq!(k.get_loan(bob.clone()).unwrap().status, lending::LoanStatus::Repaid);
+    assert_eq!(k.get_loan_rule().unwrap().1, U128(near(2).as_yoctonear()));
+    // a second loan, left late: anyone calls it after the term and 7 days; bob and alice lose good standing
+    at(&bob, 3 * DAY);
+    let _ = k.request_loan(U128(near(1).as_yoctonear()));
+    assert!(fails(|| { at(&acc("anyone.testnet"), 3 * DAY + 30 * DAY); k.call_loan_late(bob.clone()); }), "not late yet");
+    at(&acc("anyone.testnet"), 3 * DAY + 38 * DAY);
+    k.call_loan_late(bob.clone());
+    assert!(!k.get_standing(bob.clone()).1 && !k.get_standing(alice.clone()).1);
+    // a filed loan that the DAO did not take is undone
+    at(&me(), 50 * DAY);
+}

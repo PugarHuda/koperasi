@@ -189,7 +189,10 @@ async function load() {
     .map((x) => x.catch(() => undefined)));
   // contract 0.2.9: the dues the members voted and where this member stands on them (null on older code or no dues)
   const duesStatus = member ? await view(dep.contract, "get_dues_status", { account_id: me }).catch(() => null) : null;
-  return { duesStatus, appeals, routes, token, onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
+  // contract 0.3.0: the loan rule and fund, this member's loan and guarantors (null on older code)
+  const [loanRule, loan, guarantors] = await Promise.all([view(dep.contract, "get_loan_rule"), view(dep.contract, "get_loan", { account_id: me }),
+    view(dep.contract, "get_guarantors", { account_id: me })].map((x) => x.catch(() => null)));
+  return { loanRule, loan, guarantors, duesStatus, appeals, routes, token, onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
     board, tasks, dues, records: Object.fromEntries(recs), pledges, pclaims, cases, standing, receipts };
 }
 
@@ -365,6 +368,25 @@ function commonsPanel(s) {
     <label>times <input id="w-pl-units" type="number" min="1" max="20" value="1" aria-label="How many times"></label>
     <button type="button" class="btn" id="w-pl-post">Pledge</button></div>
     <p class="small">Another member calls it in and says if you kept it. Kept and broken pledges are your standing, not profit-share points.</p>`;
+  // contract 0.3.0: stand surety for another account, and the savings-and-loan fund
+  if (s.loanRule !== null && s.loanRule !== undefined) {
+    html += `<h3 class="jh">Surety and loans</h3>
+      <p class="small">Your guarantors: ${s.guarantors?.length ? s.guarantors.map(esc).join(", ") : "none yet (a loan needs one)"}.
+        If an account you stand surety for falls out of good standing, so do you, until the members clear it.</p>
+      <div class="stake-row"><label>Stand surety for <input id="w-g-who" type="text" autocomplete="off" aria-label="The account you stand surety for"></label>
+        <button type="button" class="btn ghost" id="w-g-go">Stand surety (0.01 NEAR)</button></div>`;
+    if (s.loanRule) {
+      const [r, fund] = s.loanRule;
+      const open = s.loan && s.loan.status !== "Repaid";
+      html += open
+        ? `<p class="small">Your loan: ${nearAmt(s.loan.principal)} NEAR plus ${nearAmt(s.loan.interest)} NEAR interest, due ${new Date(nsMs(s.loan.due)).toLocaleDateString()}${s.loan.status === "Late" ? " (<strong>late</strong>)" : ""}.</p>
+           <button type="button" class="btn" id="w-l-repay">Repay ${nearAmt(BigInt(s.loan.principal) + BigInt(s.loan.interest))} NEAR</button>`
+        : `<div class="stake-row"><label>Borrow <input id="w-l-amt" type="number" min="0.01" step="0.01" aria-label="NEAR to borrow"> NEAR</label>
+             <button type="button" class="btn" id="w-l-go">Borrow</button></div>
+           <p class="small">Up to ${nearAmt(r.max_loan)} NEAR for ${esc(r.term_days)} days at ${r.rate_bps / 100}% flat; the fund can lend ${nearAmt(fund)} NEAR now.
+             The contract files the payment as a DAO proposal and approves it with its role; repaying sends it all to the treasury.</p>`;
+    }
+  }
   const paid = (s.receipts ?? []).filter((r) => r.status === "Paid");
   if (good && paid.length) {
     html += `<details class="court"><summary>Take a buyer's dispute to the co-op court (0.5 NEAR bond)</summary>
@@ -702,6 +724,21 @@ async function render() {
     }
     act(`Stake ${n} NEAR`, () => send(s.pool, "deposit_and_stake", {}, { deposit: BigInt(n) * 10n ** 24n, tgas: 100 }));
   };
+  const gGo = $("w-g-go");
+  if (gGo) gGo.onclick = () => {
+    const who = $("w-g-who").value.trim();
+    if (!/^[a-z0-9._-]{2,64}$/.test(who)) { say(`<span class="err">Surety: a NEAR account id.</span>`); return; }
+    act(`Stand surety for ${who}`, () => send(dep.contract, "guarantee", { account_id: who }, { deposit: PLEDGE_FEE, tgas: 30 }));
+  };
+  const lGo = $("w-l-go");
+  if (lGo) lGo.onclick = () => {
+    const n = Number($("w-l-amt").value);
+    if (!(n > 0)) { say(`<span class="err">Borrow: an amount of NEAR.</span>`); return; }
+    act(`Borrow ${n} NEAR`, () => send(dep.contract, "request_loan", { amount: (BigInt(Math.round(n * 1000)) * 10n ** 21n).toString() }, { tgas: 200 }));
+  };
+  const lRepay = $("w-l-repay");
+  if (lRepay) lRepay.onclick = () => act("Repay the loan", () => send(dep.contract, "repay_loan", {},
+    { deposit: BigInt(s.loan.principal) + BigInt(s.loan.interest), tgas: 30 }));
   const notify = $("w-notify");
   if (notify) notify.onclick = () => Notification.requestPermission().then(() => render());
   on("w-sync-sav", "Savings sync", () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
