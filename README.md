@@ -3,6 +3,12 @@
 **A shared treasury for a community that owns an AI agent, built on an unmodified Sputnik DAO.
 One member, one vote. Small payouts on earned trust, large ones by vote. Profit shared by a rule everyone voted.**
 
+Beyond tiers by reputation: trust earned in one co-op counts in a sister co-op the members recognise (the passport);
+a buyer's dispute goes to a jury of members drawn at random, then on appeal to all of them; before every job the agent
+proves on-chain, inside an Intel TDX enclave, that it runs the by-laws the members voted and that the job is one they
+allow; each member is paid on the chain they chose; and 19 attacks sent to the live co-op were refused on-chain.
+Check every claim in one command, no clone: `curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs`.
+
 A group that pools money gets the same vote for a 5 USDC tip as for a 5,000 USDC grant. So every small payment
 waits for a quorum, or one person starts paying out of pocket and settling later. And when the money comes from work
 done for the group (here, an AI agent's work), only the person running it can see where it went.

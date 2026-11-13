@@ -122,8 +122,9 @@ test("an open profit-share proposal shows what each member would receive", async
 test("the comparison with other ways to own an agent is on the page, readable on a phone", async ({ page }) => {
   await go(page);
   const t = page.locator("#versus");
-  await expect(t.locator("tbody tr")).toHaveCount(4);
+  await expect(t.locator("tbody tr")).toHaveCount(6);
   await expect(t).toContainText("with your own nonce");
+  await expect(t).toContainText("the passport");
   // the wide table scrolls inside its box; the page itself never scrolls sideways
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });
