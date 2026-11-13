@@ -2750,7 +2750,7 @@ fn anyone_may_submit_the_agents_signed_proposal() {
     let pk: Vec<u8> = [vec![0u8], sk.verifying_key().to_bytes().to_vec()].concat();
     let relayer = acc("relayer.testnet");
     let (uri, why) = ("config/config.v2.yaml", "price up: no refunds in 20 jobs");
-    let sig = |sk: &SigningKey| { let m = meeting::agent_proposal_message(&me(), 2, H2, uri, why);
+    let sig = |sk: &SigningKey| { let m = meeting::agent_proposal_message(&me(), 0, 2, H2, uri, why);
         near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, sk.sign(m.as_bytes()).to_bytes()) };
     let submit = |k: &mut Koperasi, s: Option<String>| { let _ = k.agent_propose_bylaws(2, H2.into(), uri.into(), why.into(), s); };
     assert!(fails(|| { at(&relayer, DAY); submit(&mut k, Some(sig(&sk))); }), "no receipt signed yet: no key known");
@@ -2766,4 +2766,13 @@ fn anyone_may_submit_the_agents_signed_proposal() {
     at(&relayer, DAY);
     submit(&mut k, Some(sig(&sk)));
     assert_eq!(k.get_agent_proposals().len(), 1);
+    // a signature counts once: replayed a week later, it signs proposal #0, not #1
+    assert!(fails(|| { at(&relayer, 9 * DAY); submit(&mut k, Some(sig(&sk))); }), "replayed");
+    // nor once the members appoint another agent, nor while the co-op is paused
+    as_(&dao(), near(0));
+    k.set_agent(acc("agent2.testnet"));
+    assert!(fails(|| { at(&relayer, 9 * DAY); let _ = k.agent_propose_bylaws(2, H2.into(), uri.into(), why.into(), Some(sig(&sk))); }), "an earlier agent's key");
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| { at(&acc("agent2.testnet"), 9 * DAY); let _ = k.agent_propose_bylaws(2, H2.into(), uri.into(), why.into(), None); }), "paused");
 }

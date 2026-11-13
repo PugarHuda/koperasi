@@ -26,8 +26,9 @@ const KEY_MEETINGS: &[u8] = b"annual_meetings";
 const KEY_STRIKES: &[u8] = b"agent_strikes";
 const KEY_REINSTATED: &[u8] = b"agent_reinstated";
 const KEY_AGENT_PROPOSALS: &[u8] = b"agent_proposals";
-/// The public key the founding agent last signed a receipt with (ed25519 only: curve byte 0, then 32 bytes).
-pub(crate) const KEY_AGENT_PK: &[u8] = b"agent_pk";
+/// The founding agent and the public key it last signed a receipt with (ed25519 only: curve byte 0, then 32 bytes).
+/// A key noted for an earlier agent no longer counts once the members appoint another.
+pub(crate) const KEY_AGENT_PK: &[u8] = b"agent_signing_key"; // 0.3.2 live kept a bare key under "agent_pk"
 /// The agent may put new by-laws to the members at most once in this many days.
 pub const AGENT_PROPOSE_EVERY_DAYS: u64 = 7;
 const MAX_REASON: usize = 500;
@@ -44,8 +45,8 @@ const MAX_AGENDA_EACH: usize = 3;
 const MAX_ITEM: usize = 280;
 
 /// What the agent signs to put new by-laws to the members (bound to this contract and to the next version).
-pub fn agent_proposal_message(contract: &AccountId, version: u32, hash: &str, uri: &str, reason: &str) -> String {
-    format!("{contract} agent_propose_bylaws v{version} {hash} {uri}
+pub fn agent_proposal_message(contract: &AccountId, nonce: u32, version: u32, hash: &str, uri: &str, reason: &str) -> String {
+    format!("{contract} agent_propose_bylaws #{nonce} v{version} {hash} {uri}
 {reason}")
 }
 
@@ -53,8 +54,9 @@ pub fn agent_proposal_message(contract: &AccountId, version: u32, hash: &str, ur
 pub(crate) fn note_agent_key(agent: &AccountId) {
     if env::signer_account_id() == *agent && env::predecessor_account_id() == *agent {
         let pk: Vec<u8> = env::signer_account_pk().into_bytes();
-        if pk.first() == Some(&0) && load::<Vec<u8>>(KEY_AGENT_PK).as_ref() != Some(&pk) {
-            save(KEY_AGENT_PK, &pk);
+        let now = (agent.clone(), pk);
+        if now.1.first() == Some(&0) && load::<(AccountId, Vec<u8>)>(KEY_AGENT_PK).as_ref() != Some(&now) {
+            save(KEY_AGENT_PK, &now);
         }
     }
 }
@@ -250,11 +252,15 @@ impl Koperasi {
     /// proposal with the agent's ed25519 signature of `agent_proposal_message(...)`, checked against the key the agent
     /// last signed a receipt with (the contract keeps it then). The agent itself may also call directly.
     pub fn agent_propose_bylaws(&mut self, version: u32, hash: String, uri: String, reason: String, signature: Option<String>) -> Promise {
+        require!(!self.paused, "koperasi is paused");
+        let mut all: Vec<AgentProposal> = load(KEY_AGENT_PROPOSALS).unwrap_or_default();
         if env::predecessor_account_id() != self.agent_id {
-            let pk: Vec<u8> = load(KEY_AGENT_PK).unwrap_or_else(|| env::panic_str("only the co-op's agent: it has signed no receipt under this code yet"));
+            let pk = load::<(AccountId, Vec<u8>)>(KEY_AGENT_PK).filter(|(a, _)| *a == self.agent_id).map(|(_, pk)| pk)
+                .unwrap_or_else(|| env::panic_str("only the co-op's agent: it has signed no receipt under this code yet"));
             let sig = signature.as_deref().and_then(|s| near_sdk::base64::Engine::decode(&near_sdk::base64::engine::general_purpose::STANDARD, s).ok())
                 .and_then(|b| <[u8; 64]>::try_from(b).ok()).unwrap_or_else(|| env::panic_str("only the co-op's agent, or its signature (base64, 64 bytes)"));
-            let msg = agent_proposal_message(&env::current_account_id(), version, &hash, &uri, &reason);
+            // bound to this contract, to the next version and to the count of proposals so far: a signature counts once
+            let msg = agent_proposal_message(&env::current_account_id(), all.len() as u32, version, &hash, &uri, &reason);
             require!(pk.len() == 33 && pk[0] == 0 && env::ed25519_verify(&sig, msg.as_bytes(), &pk[1..].try_into().unwrap()), "not the agent's signature");
         }
         require!(!agent_suspended(), "the agent is suspended");
@@ -262,7 +268,6 @@ impl Koperasi {
         require!(valid_hash(&hash), "hash must be 64 lowercase hex chars");
         require!(!uri.is_empty() && uri.len() <= 200, "uri: 1 to 200 characters");
         require!(!reason.trim().is_empty() && reason.len() <= MAX_REASON, "reason: 1 to 500 characters");
-        let mut all: Vec<AgentProposal> = load(KEY_AGENT_PROPOSALS).unwrap_or_default();
         let now = env::block_timestamp();
         require!(all.last().is_none_or(|p| now >= p.at.0 + AGENT_PROPOSE_EVERY_DAYS * DAY_NS), "one proposal every 7 days");
         all.push(AgentProposal { version, hash: hash.clone(), uri: uri.clone(), reason: reason.clone(), proposal: None, at: U64(now) });
@@ -297,9 +302,10 @@ impl Koperasi {
         save(KEY_AGENT_PROPOSALS, &all);
     }
 
-    /// The exact text the agent signs for `agent_propose_bylaws`.
+    /// The exact text the agent signs for its next `agent_propose_bylaws`.
     pub fn get_agent_proposal_message(&self, version: u32, hash: String, uri: String, reason: String) -> String {
-        agent_proposal_message(&env::current_account_id(), version, &hash, &uri, &reason)
+        let n = load::<Vec<AgentProposal>>(KEY_AGENT_PROPOSALS).map_or(0, |v| v.len()) as u32;
+        agent_proposal_message(&env::current_account_id(), n, version, &hash, &uri, &reason)
     }
 
     pub fn get_agent_proposals(&self) -> Vec<AgentProposal> {
