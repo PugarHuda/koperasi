@@ -71,7 +71,7 @@ export async function agentPropose({ dep, log = console.log, relayer = `kop-rela
   const minP = changes["job_filter.min_price_usdc"] ?? config.job_filter.min_price_usdc, price = changes["bid.price_usdc"] ?? config.bid.price_usdc;
   if (minP > price) delete changes["job_filter.min_price_usdc"];
   const version = cfg.version + 1, factsSha = sha256(factsText);
-  const base = { version, changes, dropped, evaluation: out.evaluation, factsSha, inference: done.proof.inference_id, model: done.proof.model,
+  const base = { version, changes, dropped, evaluation: out.evaluation, factsSha, costMicroUsd: done.costMicroUsd, inference: done.proof.inference_id, model: done.proof.model,
     tee_signer: done.proof.tee_signer, at: new Date().toISOString() };
   fs.mkdirSync(path.join(ROOT, "web/agent-proposals"), { recursive: true });
   fs.writeFileSync(path.join(ROOT, `web/agent-proposals/v${version}.facts.json`), factsText);
@@ -121,8 +121,18 @@ export async function maybePropose({ dep, log, state, save }) {
     log(`not thinking about the by-laws yet: ${settledUnder} job(s) settled under them (3 needed, new since last time)`);
     return null;
   }
+  // within the day's inference budget the by-laws set, like any job; the attempt is noted first, so a failure waits
+  // for the next interval instead of asking the model again on every pass
+  const cap = Math.round(config.limits.max_inference_per_job_usd * 1e6);
+  if ((state.spentMicroUsd ?? 0) + cap > config.limits.max_inference_per_day_usd * 1e6) {
+    log("not thinking about the by-laws today: the day's inference budget is spent");
+    return null;
+  }
+  state.lastPropose = { at: Date.now(), settled: settledUnder };
+  save(state);
   const r = await agentPropose({ dep, log });
-  state.lastPropose = { at: Date.now(), settled: settledUnder, version: r.version, proposed: r.proposed };
+  state.spentMicroUsd = (state.spentMicroUsd ?? 0) + (r.costMicroUsd ?? cap);
+  state.lastPropose = { ...state.lastPropose, version: r.version, proposed: r.proposed };
   save(state);
   return r;
 }
