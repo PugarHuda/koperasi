@@ -2690,9 +2690,10 @@ fn a_further_agent_runs_the_by_laws_the_members_voted_for_it() {
 #[test]
 fn a_reputation_dividend_follows_credit_scores_and_the_card_shows_them() {
     let mut k = setup(); // 20% reserve
-    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
-    let (alice, bob) = (acc("alice.testnet"), acc("bob.testnet"));
+    with_members(&mut k, &["alice.testnet", "bob.testnet", "carol.testnet"]);
+    let (alice, bob, carol) = (acc("alice.testnet"), acc("bob.testnet"), acc("carol.testnet"));
     assert!(fails(|| { as_(&dao(), near(0)); k.set_reputation_share(2500); }), "within the reserve");
+    commons::mark(&carol, |s| { s.pledges_honored += 9; s.pledges_broken += 1 }); // out of good standing: no dividend
     as_(&dao(), near(0));
     k.set_reputation_share(1000); // 10% of each share
     commons::mark(&alice, |s| s.pledges_honored += 3); // alice 3 of 10
@@ -2702,6 +2703,7 @@ fn a_reputation_dividend_follows_credit_scores_and_the_card_shows_them() {
     assert!(logs_have("reputation_dividend"));
     assert_eq!(k.get_claimable(alice.clone()).0, 300_000);
     assert_eq!(k.get_claimable(bob.clone()).0, 100_000);
+    assert_eq!(k.get_claimable(carol.clone()).0, 0);
     // the card: credit and dues on the token, live
     at_paying(&alice, DAY, commons::PLEDGE_FEE);
     k.mint_work_record();

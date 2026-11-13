@@ -25,7 +25,7 @@
 //! - **Credit from the record** (0.3.2): a loan is at most the voted largest loan times the borrower's score out of 10:
 //!   finished tasks and bounties, pledges kept, juries served, and two points for each guarantor in good standing.
 //! - **A reputation dividend** (0.3.2): the members may vote a share of every profit share (out of the reserve part)
-//!   that is split by each member's credit score: work done, pledges kept, juries served, guarantors.
+//!   that is split among members in good standing by their record: work done, pledges kept, juries served.
 //! - **An agent's own by-laws** (0.3.2): the members can vote a further agent its own by-laws (`set_agent_config`); its
 //!   receipts must then carry that hash, and the OutLayer gate checks that file.
 //!
@@ -155,7 +155,13 @@ impl Koperasi {
         if pool == 0 {
             return reserve;
         }
-        let scores: Vec<(AccountId, u128)> = self.members.keys().map(|a| (a.clone(), self.get_credit(a.clone()).0 as u128)).collect();
+        // Only members in good standing, and only the record: work done, pledges kept, juries served. Guarantors are
+        // left out here (two members can stand surety for each other at no cost); the cap of 10 bounds the rest.
+        let scores: Vec<(AccountId, u128)> = self.members.keys().filter(|a| self.in_good_standing(a)).map(|a| {
+            let done = self.get_record(a.clone()).map_or(0, |r| r.done);
+            let s = crate::commons::standing_of(a);
+            (a.clone(), (done + s.pledges_honored + s.juries_served).min(10) as u128)
+        }).collect();
         let total: u128 = scores.iter().map(|(_, s)| s).sum();
         if total == 0 {
             return reserve;
