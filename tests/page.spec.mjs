@@ -239,3 +239,16 @@ test("a member can take a task from the wallet panel", async ({ page }, testInfo
   await expect(panel).toContainText("Tasks the co-op pays for");
   await expect(panel.locator("[data-claim]").first()).toHaveText(/Take this task \(0\.1 NEAR bond\)/);
 });
+
+test("the page reads in Bahasa Indonesia, and back in English", async ({ page }) => {
+  await page.goto("/");
+  const toggle = page.getByRole("button", { name: /Bahasa Indonesia/ });
+  await toggle.click();
+  await expect(page.locator(".hero .lede")).toContainText("Desa-desa di Indonesia");
+  await expect(page.locator("#panel-q")).toHaveText("Siapa yang mengendalikan agen AI ini?");
+  await expect(page.locator("html")).toHaveAttribute("lang", "id");
+  await page.reload();
+  await expect(page.locator("#panel-q")).toHaveText("Siapa yang mengendalikan agen AI ini?"); // remembered
+  await page.getByRole("button", { name: /English/ }).click();
+  await expect(page.locator("#panel-q")).toHaveText("Who controls this AI agent?");
+});

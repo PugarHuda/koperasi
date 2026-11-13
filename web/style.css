@@ -463,3 +463,7 @@ h2 .dim { color: var(--grey); }
 .inbox ul { margin: 6px 0; padding-left: 18px; }
 .inbox li { margin: 4px 0; }
 
+
+/* the language switch (web/lang.js) */
+.top .lang-btn { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; opacity: .85; padding: .2rem 0; }
+.top .lang-btn:hover { opacity: 1; text-decoration: underline; }
