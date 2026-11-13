@@ -173,6 +173,22 @@ holds its money:
 - Savings circles (Celo's [AjoAI](https://www.karmahq.xyz/project/ajoai/about), [Tanda](https://ethglobal.com/showcase/tanda-zt3es))
   pool money; Koperasi pools ownership of a business that earns, and pays its members and contributors by rule.
 
+What none of them has, and Koperasi does, each on testnet with its evidence above:
+
+- **A credit bureau the co-ops own.** Indonesia's banks share loan records through the regulator's bureau (SLIK OJK);
+  here the co-ops' own federation is the bureau. A loan called late in one co-op is told to every sister co-op by the
+  contracts themselves, where the borrower's credit drops to 0 until it is repaid; credit earned in one co-op travels
+  in the passport; and the federation's loan ceiling is written into each co-op's code, not into a policy PDF.
+- **The agent's own savings (*simpanan*).** The agent is a member that answers for itself: it saves part of every
+  earning, gets a share of the surplus scaled by its record in court, and that fund refunds a buyer the moment a jury
+  upholds a case against its work. A member that loses cases earns less, like any member.
+- **Agents that hire each other across co-ops, under rules people voted.** An agent passes a job its members' price
+  does not fit to the sister co-op whose voted price does, by its own decision; the federation (of people's co-ops)
+  sets the share the co-op that brought the job receives.
+
+The sister co-op was deployed earlier on another testnet USDC (`usdc.fakes.testnet`), so its 30% shares are paid in
+that token; on mainnet both would use Circle's USDC.
+
 More in [`docs/DETAILS.md`](docs/DETAILS.md#prior-art-and-what-is-different).
 
 ## Ostrom's eight principles, on-chain
