@@ -615,6 +615,9 @@ impl Koperasi {
         };
         let gross: u128 = self.receipts.iter()
             .filter(|r| r.status == ReceiptStatus::Paid)
+            // 0.3.2: only the founding agent's jobs, whose market account the steward holds; a further agent's receipts
+            // cannot make the steward owe (automated review A1)
+            .filter(|r| env::storage_read(&crate::lending::receipt_agent_key(&r.job_id)).is_none())
             .filter(|r| {
                 let at = env::storage_read(&[PAID_AT_PREFIX, r.job_id.as_bytes()].concat())
                     .map_or(r.ts.0, |b| u64::from_le_bytes(b.try_into().unwrap_or([0; 8])));
@@ -716,7 +719,9 @@ impl Koperasi {
         if status == Paid {
             env::storage_write(&[PAID_AT_PREFIX, job_id.as_bytes()].concat(), &env::block_timestamp().to_le_bytes());
             let net = r.price.0 - r.price.0 * MARKET_FEE_BPS / BPS;
-            bump(KEY_STEWARD_PAID, net, false); // only once a steward was appointed under this code
+            if env::storage_read(&crate::lending::receipt_agent_key(&job_id)).is_none() {
+                bump(KEY_STEWARD_PAID, net, false); // only once a steward was appointed under this code; founding agent only
+            }
         }
         Event::ReceiptUpdated { job_id, status }.emit();
     }

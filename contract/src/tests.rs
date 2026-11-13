@@ -2611,3 +2611,19 @@ fn a_further_agent_the_members_voted_records_its_own_receipts() {
     k.set_agents(vec![]);
     assert!(fails(|| { as_(&tr, near(0)); k.record_receipt("t-2".into(), U128(1), U128(0), H1.into(), "00".into(), None); }));
 }
+
+/// 0.3.2 (automated review A1): a further agent's paid jobs never make the steward owe, so they cannot make the bond
+/// slashable; the founding agent's still do.
+#[test]
+fn a_further_agents_paid_jobs_do_not_count_toward_what_the_steward_owes() {
+    let mut k = owing_steward(); // job-1 by the founding agent, paid on day 1: 9.5 USDC owed after the grace
+    let tr = acc("translator.testnet");
+    as_(&dao(), near(0));
+    k.set_agents(vec![lending::AgentSkill { account: tr.clone(), tags: vec!["translation".into()] }]);
+    as_(&tr, near(0));
+    k.record_receipt("t-1".into(), U128(50_000_000), U128(0), H1.into(), "00".into(), None);
+    at(&tr, DAY);
+    k.update_receipt("t-1".into(), ReceiptStatus::Paid);
+    at(&acc("anyone.testnet"), 9 * DAY);
+    assert_eq!(k.get_overdue().0, 9_500_000, "only job-1; the translator's 50 USDC job is not the steward's to pass on");
+}
