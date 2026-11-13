@@ -328,6 +328,13 @@ if (d.passport) {
     "a work record from a sister co-op the members voted counts here as a trust source, read by the contract from that co-op's token",
     `${who}: ${stamp?.done} finished at ${sister} (now ${extra.done}, ${extra.good_standing ? "good standing" : "NOT in good standing"}), `
     + `same code as this co-op (${String(code.global_contract_hash ?? code.code_hash).slice(0, 10)}…); trust sources here: ${sources}`);
+  if (d.passport.back) { // and the other way: the sister recognises this co-op and counts a record from here
+    const b = d.passport.back;
+    const [theirs, back] = await Promise.all([view(sister, "get_sister_coops"), view(sister, "get_passport", { account_id: b.account })]);
+    const st = back.find((s) => s.coop === d.contract);
+    check(theirs.includes(d.contract) && st?.done > 0, "the recognition is mutual: the sister co-op voted this one a sister and counts a record from here",
+      `${sister} recognises ${d.contract} (its vote #${b.vote}); ${b.account}: ${st?.done} finished here, stamped there`);
+  }
 }
 
 // both sides heard (0.2.8): every piece of evidence in a case came from its claimant or the steward, at most 3 each
@@ -359,6 +366,45 @@ for (const r of d.rat ?? []) {
   const ok = p.status === "Approved" && bound && Boolean(r.proof?.model && r.proof?.tee_signer);
   check(ok, `the members approved the ${r.year} annual report by vote, and the report is the one the co-op's agent wrote in a TEE from the chain's facts`,
     `proposal #${r.proposal} ${p.status}${held ? ", recorded by the contract" : ""}${call && argsOf(p).length > 1 ? ` with the meeting's decisions (${argsOf(p).slice(1).map((x) => x.method).join(", ")})` : ""}: report sha256 ${sha256(report).slice(0, 12)}…, facts ${sha256(facts).slice(0, 12)}…; model ${r.proof?.model}, TEE key ${r.proof?.tee_signer}`);
+}
+
+// 0.2.9: mandatory dues the members voted, and who is up to date; the agent's strikes are exactly its upheld cases
+{
+  const dues = await view(d.contract, "get_dues").catch(() => null);
+  if (dues && BigInt(dues.amount) > 0n) {
+    const ms = (await view(d.contract, "get_members", { from: 0, limit: 100 })).map(([a]) => a);
+    const st = await Promise.all(ms.map((m) => view(d.contract, "get_dues_status", { account_id: m })));
+    const voted = approvedCall("set_dues", (a) => a.amount === dues.amount && a.every_days === dues.every_days);
+    check(Boolean(voted), "mandatory dues were set by a members' vote, and each member's standing reads them",
+      `${near(dues.amount)} NEAR every ${dues.every_days} days by #${voted?.id}; `
+      + ms.map((m, i) => `${m.split(".")[0]} ${st[i]?.[1] ? "up to date" : "BEHIND"}`).join(", "));
+  }
+  const agent = await view(d.contract, "get_agent_standing").catch(() => null);
+  if (agent) {
+    const cs = await view(d.contract, "get_cases", { from: 0, limit: 100 });
+    const ok = agent.strikes.every(([id]) => cs.find((c) => c.id === id)?.status === "Upheld") && agent.suspended === (agent.strikes.length >= 3);
+    check(ok, "the agent answers to the court: each strike is a case upheld against its job; 3 in 90 days suspend it",
+      `${agent.strikes.length} strike(s) (${agent.strikes.map(([id]) => `case #${id}`).join(", ") || "none"}); ${agent.suspended ? "SUSPENDED" : "not suspended"}; the runtime's daily inference budget is divided by ${2 ** agent.strikes.length}`);
+  }
+}
+
+// the federation (scripts/federation.mjs): a DAO whose only members are co-ops' DAOs; its resolution passed by both,
+// and each co-op's vote was cast by a proposal its own members approved
+if (d.federation) {
+  const f = d.federation;
+  const [policy, res] = await Promise.all([view(f.dao, "get_policy"), view(f.dao, "get_proposal", { id: f.resolution.id })]);
+  const members = policy.roles.find((r) => r.name === "member")?.kind?.Group ?? [];
+  const behind = await Promise.all(f.resolution.votes.map(async (v) => {
+    const p = await view(v.dao, "get_proposal", { id: v.proposal });
+    return p.status === "Approved" && argsOf(p).some((a) => a.method === "act_proposal" && a.args.id === f.resolution.id && a.args.action === "VoteApprove")
+      && p.kind.FunctionCall.receiver_id === f.dao && res.votes[v.dao] === "Approve";
+  }));
+  const onlyCoops = members.length === f.members.length && f.members.every((m) => members.includes(m))
+    && policy.roles.every((r) => r.name !== "member" ? !(r.permissions ?? []).some((x) => /Vote/.test(x)) : true);
+  check(onlyCoops && res.status === "Approved" && behind.every(Boolean),
+    "a secondary co-op: a federation whose members are co-ops, and each co-op voted only by its own members' decision",
+    `${f.dao}: members ${members.join(", ")}; resolution #${f.resolution.id} ${res.status}; `
+    + f.resolution.votes.map((v, i) => `${v.dao.split(".")[0]} voted by its proposal #${v.proposal} (${behind[i] ? "approved by its members" : "NOT FOUND"})`).join("; "));
 }
 
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with

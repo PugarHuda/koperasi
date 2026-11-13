@@ -2,7 +2,7 @@
   "co_op": "koperasi-mw4i2iwk.testnet",
   "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
   "year": 2026,
-  "read_at": "2026-11-13T05:00:13.911Z",
+  "read_at": "2026-11-13T05:55:19.069Z",
   "network": "NEAR testnet",
   "by_laws": {
     "version": 4,
@@ -50,8 +50,8 @@
   },
   "audit_usdc": {
     "expected": 25.84,
-    "deposited": 8.74,
-    "owed": 17.1
+    "deposited": 18.24,
+    "owed": 7.6
   },
   "profit_shares": [
     {
@@ -124,25 +124,20 @@
     "paid_near": 0.7000000000000002,
     "budget_left_near": 0.43
   },
-  "treasury_usdc": 9.550009,
+  "treasury_usdc": 19.050009,
+  "agenda": [
+    {
+      "by": "kop-alice-mw4i3w8f.testnet",
+      "item": "Should every member pay small monthly dues, so the treasury has income that does not depend on the agent's jobs?"
+    },
+    {
+      "by": "kop-bob-mw4i3w8f.testnet",
+      "item": "Why does the audit still show 7.60 USDC owed, and can anyone be held to it?"
+    }
+  ],
   "dao_proposals": {
-    "filed": 86,
+    "filed": 89,
     "last": [
-      {
-        "id": 78,
-        "status": "Rejected",
-        "what": "Koperasi court case #1 on appeal to the members: refund 0.1 USDC (6 decimals: 100000) to kop-publisher-mw5tkpfo.testnet "
-      },
-      {
-        "id": 79,
-        "status": "Approved",
-        "what": "Koperasi court case #3: refund 0.5 USDC (6 decimals: 500000) to kop-publisher-mw5tkpfo.testnet for job demo-court-mwdvxl"
-      },
-      {
-        "id": 80,
-        "status": "Approved",
-        "what": "NEAR Intents (Tidepool testnet): the agent's wallet pays the 5 members on NEAR, or on the route each set on the contract"
-      },
       {
         "id": 81,
         "status": "Approved",
@@ -167,6 +162,21 @@
         "id": 85,
         "status": "Approved",
         "what": "Annual members' meeting 2026: approve the accountability report https://koperasi-kohl.vercel.app/rat/2026.md (sha256 dc1"
+      },
+      {
+        "id": 86,
+        "status": "Approved",
+        "what": "Annual members' meeting 2026: approve the accountability report https://koperasi-kohl.vercel.app/rat/2026.md (sha256 fae"
+      },
+      {
+        "id": 87,
+        "status": "Approved",
+        "what": "Vote for our co-op in the federation kop-federation-mwejskze.sputnik-v2.testnet: approve its proposal #0 (\"Resolution 1:"
+      },
+      {
+        "id": 88,
+        "status": "Approved",
+        "what": "Upgrade the Koperasi contract to code 7Y3Eby6BznqQ4eZRHWQF4Gi8MobpABm9UqEvxdAEbg7U (sha256 6119a73a4c36849bae148cd1dae81"
       }
     ]
   }

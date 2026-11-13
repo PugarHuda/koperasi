@@ -213,3 +213,13 @@ the agent records a job under by-laws nobody voted, or the same job twice; an ac
 outsider routes payouts, opens a case, stamps a passport from a co-op nobody voted, files evidence, or votes in the DAO.
 The agent's key cannot even ask for anything but `record_receipt` and `update_receipt` (refused before the chain).
 
+## Round 10 (13 Nov): contract 0.2.9 (dues, the annual meeting, the agent as a defendant), the federation
+
+| ID | Component | Severity | Risk | Evidence / test | Status |
+|---|---|---|---|---|---|
+| M1 | `pay_dues`, `dues_ok` (automated review) | Medium | A paid-until date from earlier dues (voted off, then on again) made a member owe for the time no dues were voted, out of good standing at once. | Dues are owed from the latest of what was paid, the vote that set them, and joining; test *a member behind on dues …* covers a re-vote | **Fixed before the upgrade** |
+| M2 | `scripts/rat.mjs` (automated review) | Medium | Agenda items and proposal descriptions are members' own words in the model's prompt: "ignore the facts" could steer the report. | They reach the model in a fenced block as untrusted questions only; the report's header names every figure not found in the facts; the members vote on the report itself | **Fixed** |
+| M3 | `strike`, `record_receipt` | Low (design) | A suspended agent cannot record receipts, so a job finished just before the third strike cannot be booked. | By design: the members reinstate by vote, after which the receipt goes through; strikes count once per case | Accepted |
+| M4 | `record_annual_meeting` | Low | Once a year: a report approved by mistake cannot be replaced on-chain. | The DAO vote is the check; a correction is a new year's agenda item | Accepted |
+| F1 | the federation DAO | Info | Its founder account pays the DAO's storage and holds no role; only the co-ops' DAOs vote. | `npm run verify` checks no other role can vote and each co-op's vote came from its own approved proposal | By design |
+

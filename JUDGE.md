@@ -39,14 +39,15 @@ every day (`.github/workflows/tests.yml`).
 | 13d | Trust that travels between co-ops | `/cert.html?who=kop-carol-mw80aczw.testnet` → *Passport* | "2 finished at koperasi-mw80aczw.testnet … counts as one trust source here": the contract read her token on the sister co-op the members voted (#83) |
 | 13e | Attacks are refused on-chain | *Don't trust us* → *Attacks are refused on-chain* | green: "19 of 19 attacks on this co-op failed on-chain", each re-read by your browser, with the refusal and the transaction |
 | 13f | The annual members' meeting | *Commons* → *Annual members' meeting 2026*, or `/rat/2026.md` | the report the co-op's agent wrote in a TEE from the chain's facts, approved by DAO vote #86, whose description carries the report's and the facts' sha256 |
+| 13g | Dues, the agent's strikes, the agenda, the federation | *Commons* (the lines under the court) and `npm run verify` | 0.01 NEAR dues voted by #89 and paid by all five; 1 strike (case #5); the 2026 agenda; the federation's resolution passed by both co-ops' votes (#87, #9) |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source
 
 | # | Check | Command | You should see |
 |---|---|---|---|
-| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `61f1fa38d4c09a30b125afd561f56230e6c19a849afecb4290223a8ae8a0c358`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
-| 15 | The tests | `npm test` | lint, typecheck, unit tests and 143 contract tests (unit, fuzz, invariant) pass |
+| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `6119a73a4c36849bae148cd1dae81117bdcc205290ddf3d728f6688fb8746933`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
+| 15 | The tests | `npm test` | lint, typecheck, unit tests and 146 contract tests (unit, fuzz, invariant) pass |
 | 16 | Against the real Sputnik DAO code, not a mock | `cd contract && cargo test --test sputnik_sandbox` (Linux/macOS) | a task paid out of the treasury of a local DAO running the showcase DAO's own wasm |
 
 ## What is not real yet (said plainly)
@@ -57,7 +58,6 @@ every day (`.github/workflows/tests.yml`).
   `demo-` receipt. Three were done by a real model on NEAR AI Cloud, with its TEE proof on-chain, the last two also
   gated in an OutLayer enclave; `npm run verify` prints "0 from Agent Market".
 - The sister co-op of the passport (`koperasi-mw80aczw`) is a second co-op from this repo with the builder's accounts.
-- The audit is red (17.10 USDC): 7.60 from before the current steward (not slashable), and 9.50 that the demo jobs of
-  12–13 Nov "earned" from the stand-in market, which pays nothing real. Unless the steward passes that on, anyone can
-  slash the steward's bond 7 days after each, as the by-laws say.
+- The audit is red (7.60 USDC), from before the current steward, so not slashable. The 9.50 USDC the demo jobs of
+  12–13 Nov "earned" from the stand-in market was passed on by the steward.
 - Testnet only. The path to mainnet is in the README, under *Sustainability and the path to mainnet*.

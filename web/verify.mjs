@@ -12468,6 +12468,16 @@ var init_verify = __esm({
         "a work record from a sister co-op the members voted counts here as a trust source, read by the contract from that co-op's token",
         `${who}: ${stamp?.done} finished at ${sister} (now ${extra.done}, ${extra.good_standing ? "good standing" : "NOT in good standing"}), same code as this co-op (${String(code2.global_contract_hash ?? code2.code_hash).slice(0, 10)}\u2026); trust sources here: ${sources}`
       );
+      if (d2.passport.back) {
+        const b2 = d2.passport.back;
+        const [theirs, back] = await Promise.all([view2(sister, "get_sister_coops"), view2(sister, "get_passport", { account_id: b2.account })]);
+        const st = back.find((s) => s.coop === d2.contract);
+        check(
+          theirs.includes(d2.contract) && st?.done > 0,
+          "the recognition is mutual: the sister co-op voted this one a sister and counts a record from here",
+          `${sister} recognises ${d2.contract} (its vote #${b2.vote}); ${b2.account}: ${st?.done} finished here, stamped there`
+        );
+      }
     }
     {
       const cs = await view2(d2.contract, "get_cases", { from: 0, limit: 100 });
@@ -12494,6 +12504,44 @@ var init_verify = __esm({
         ok,
         `the members approved the ${r2.year} annual report by vote, and the report is the one the co-op's agent wrote in a TEE from the chain's facts`,
         `proposal #${r2.proposal} ${p2.status}${held ? ", recorded by the contract" : ""}${call2 && argsOf(p2).length > 1 ? ` with the meeting's decisions (${argsOf(p2).slice(1).map((x2) => x2.method).join(", ")})` : ""}: report sha256 ${sha2562(report).slice(0, 12)}\u2026, facts ${sha2562(facts).slice(0, 12)}\u2026; model ${r2.proof?.model}, TEE key ${r2.proof?.tee_signer}`
+      );
+    }
+    {
+      const dues = await view2(d2.contract, "get_dues").catch(() => null);
+      if (dues && BigInt(dues.amount) > 0n) {
+        const ms = (await view2(d2.contract, "get_members", { from: 0, limit: 100 })).map(([a]) => a);
+        const st = await Promise.all(ms.map((m2) => view2(d2.contract, "get_dues_status", { account_id: m2 })));
+        const voted = approvedCall("set_dues", (a) => a.amount === dues.amount && a.every_days === dues.every_days);
+        check(
+          Boolean(voted),
+          "mandatory dues were set by a members' vote, and each member's standing reads them",
+          `${near(dues.amount)} NEAR every ${dues.every_days} days by #${voted?.id}; ` + ms.map((m2, i) => `${m2.split(".")[0]} ${st[i]?.[1] ? "up to date" : "BEHIND"}`).join(", ")
+        );
+      }
+      const agent = await view2(d2.contract, "get_agent_standing").catch(() => null);
+      if (agent) {
+        const cs = await view2(d2.contract, "get_cases", { from: 0, limit: 100 });
+        const ok = agent.strikes.every(([id2]) => cs.find((c) => c.id === id2)?.status === "Upheld") && agent.suspended === agent.strikes.length >= 3;
+        check(
+          ok,
+          "the agent answers to the court: each strike is a case upheld against its job; 3 in 90 days suspend it",
+          `${agent.strikes.length} strike(s) (${agent.strikes.map(([id2]) => `case #${id2}`).join(", ") || "none"}); ${agent.suspended ? "SUSPENDED" : "not suspended"}; the runtime's daily inference budget is divided by ${2 ** agent.strikes.length}`
+        );
+      }
+    }
+    if (d2.federation) {
+      const f = d2.federation;
+      const [policy2, res] = await Promise.all([view2(f.dao, "get_policy"), view2(f.dao, "get_proposal", { id: f.resolution.id })]);
+      const members2 = policy2.roles.find((r2) => r2.name === "member")?.kind?.Group ?? [];
+      const behind = await Promise.all(f.resolution.votes.map(async (v) => {
+        const p2 = await view2(v.dao, "get_proposal", { id: v.proposal });
+        return p2.status === "Approved" && argsOf(p2).some((a) => a.method === "act_proposal" && a.args.id === f.resolution.id && a.args.action === "VoteApprove") && p2.kind.FunctionCall.receiver_id === f.dao && res.votes[v.dao] === "Approve";
+      }));
+      const onlyCoops = members2.length === f.members.length && f.members.every((m2) => members2.includes(m2)) && policy2.roles.every((r2) => r2.name !== "member" ? !(r2.permissions ?? []).some((x2) => /Vote/.test(x2)) : true);
+      check(
+        onlyCoops && res.status === "Approved" && behind.every(Boolean),
+        "a secondary co-op: a federation whose members are co-ops, and each co-op voted only by its own members' decision",
+        `${f.dao}: members ${members2.join(", ")}; resolution #${f.resolution.id} ${res.status}; ` + f.resolution.votes.map((v, i) => `${v.dao.split(".")[0]} voted by its proposal #${v.proposal} (${behind[i] ? "approved by its members" : "NOT FOUND"})`).join("; ")
       );
     }
     if (d2.redteam?.length) {

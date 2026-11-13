@@ -565,3 +565,15 @@ if (lastRat) {
     <a href="${explorer(dep.dao)}">DAO vote #${esc(lastRat.proposal)}</a> (sha256 ${esc(lastRat.report_sha256.slice(0, 12))}…).`;
 }
 
+// contract 0.2.9: the agent as a defendant, the mandatory dues, and this year's agenda
+Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_dues"), view(dep.contract, "get_agenda", { year: new Date().getUTCFullYear() })])
+  .then(([agent, dues, agenda]) => {
+    const parts = [`<b>The agent answers to the court.</b> ${agent.strikes.length
+      ? `${agent.strikes.length} case(s) upheld against its jobs in 90 days (${agent.strikes.map(([id]) => `#${esc(id)}`).join(", ")}): its daily inference budget is divided by ${2 ** agent.strikes.length}`
+      : "No case upheld against its jobs in 90 days"}${agent.suspended ? "; <strong>suspended</strong> until the members reinstate it" : "; at 3 the contract suspends it"}.`];
+    if (dues && BigInt(dues.amount) > 0n) parts.push(`<b>Mandatory dues:</b> ${nearAmt(dues.amount)} NEAR every ${esc(dues.every_days)} days into the treasury, voted by the members; 7 days behind and a member loses good standing.`);
+    if (agenda.length) parts.push(`<b>This year's agenda:</b> ${agenda.map(([by, item]) => `“${esc(item)}” (${esc(by.split(".")[0])})`).join("; ")}.`);
+    $("duties").hidden = false;
+    $("duties").innerHTML = parts.join("<br>");
+  }, () => {});
+

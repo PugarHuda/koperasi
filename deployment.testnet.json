@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "4e28de45f843b798bb3f58973d19045473f5972b4ff1e3eb3bf1735c473eb395",
   "configUri": "config/config.v4.yaml",
-  "codeSha256": "61f1fa38d4c09a30b125afd561f56230e6c19a849afecb4290223a8ae8a0c358",
+  "codeSha256": "6119a73a4c36849bae148cd1dae81117bdcc205290ddf3d728f6688fb8746933",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -426,25 +426,55 @@
     "account": "kop-carol-mw80aczw.testnet",
     "vote": 83,
     "mint_tx": "AKd9P8GXeMRtUoWb5uGWBnKV16tbtjkVmpnwuvp6nfeq",
-    "stamp_tx": "A6fSvb3KzZxeJLjXRkkxiNwYNnafjw9rP9DDnoeU2Kiz"
+    "stamp_tx": "A6fSvb3KzZxeJLjXRkkxiNwYNnafjw9rP9DDnoeU2Kiz",
+    "back": {
+      "account": "kop-carol-mw4i2iwk.testnet",
+      "vote": 8,
+      "stamp_tx": "B2AoGjkjjdnjg4pGzsTNJ7Gibwe9E25vL5hVphfhtJEK"
+    }
   },
   "rat": [
     {
       "year": 2026,
+      "decided": {
+        "dues": "0.01/30"
+      },
       "report": "rat/2026.md",
-      "report_sha256": "fae4927eceff170782cf1f5dbe43a8f6e3762d97534f363bc1ffa748efbab765",
+      "report_sha256": "a64434f5b3ecda03f0ec37c6ad6b157edd10ea0fb94b1a507fd1eae86c601c4b",
       "facts": "rat/2026.facts.json",
-      "facts_sha256": "a8ea39e1f855e2b47ef22f57db7caedded33995f45cef6f080d3b233c820d18a",
-      "proposal": 86,
+      "facts_sha256": "0c502c8ed487a407fe4a1a4db0c5ed00b0d944bea5b1390429c3ba07cc8e1360",
+      "proposal": 89,
       "proof": {
         "model": "z-ai/glm-5.3-flash",
-        "inference_id": "b0e47485-2d08-5348-8c6a-058d0e7050a1",
-        "chat_id": "4dc98dc1307a4da8aaa252f0ad0ce720",
+        "inference_id": "4c92a5e5-463e-5665-8236-53118e3838e7",
+        "chat_id": "8e9aca58b51a4c6d842bc7f71c18c0f3",
         "tee_signer": "0x3b753b4406613c5e70ae640508632b600424fa0c",
-        "tee_checked_at": "2026-11-13T05:00:14.163Z",
+        "tee_checked_at": "2026-11-13T05:55:20.400Z",
         "billed": true
       },
-      "at": "2026-11-13T05:03:45.554Z"
+      "at": "2026-11-13T06:02:26.205Z"
     }
-  ]
+  ],
+  "federation": {
+    "dao": "kop-federation-mwejskze.sputnik-v2.testnet",
+    "factory": "sputnik-v2.testnet",
+    "members": [
+      "koperasi-mw4i2iwk.sputnik-v2.testnet",
+      "koperasi-mw80aczw.sputnik-v2.testnet"
+    ],
+    "resolution": {
+      "id": 0,
+      "text": "Resolution 1: the member co-ops recognise each other's work records (the passport): good standing and finished work earned in one count as a trust source in the other",
+      "votes": [
+        {
+          "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+          "proposal": 87
+        },
+        {
+          "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+          "proposal": 9
+        }
+      ]
+    }
+  }
 }

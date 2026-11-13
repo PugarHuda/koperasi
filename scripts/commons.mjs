@@ -14,6 +14,8 @@
 //   --passport  (0.2.8) carol, who did paid tasks in another co-op (koperasi-mw80aczw), mints her record there; the
 //               members vote that co-op a sister; the contract reads her token there and stamps her passport here,
 //               one more trust source for payouts on trust
+//   --agenda    (0.2.9) alice and bob put items on this year's annual meeting agenda (then: scripts/rat.mjs)
+//   --dues      (0.2.9) every member pays the mandatory dues the members voted (two periods each)
 //   --passport-back  (0.2.8) the other way: the sister co-op's members vote the showcase a sister; its contract reads
 //               carol's record here (9 paid tasks) and stamps her passport there, so the recognition is mutual
 import fs from "node:fs";
@@ -144,5 +146,23 @@ if (process.argv.includes("--passport-back")) {
   say(`${sis.contract} read ${WHO}'s record here and stamped it: ${value(r)}`, r);
   console.log(`trust sources there: ${await view(sis.contract, "get_trust_sources", { account_id: WHO })};`,
     JSON.stringify(await view(sis.contract, "get_passport", { account_id: WHO })));
+}
+
+if (process.argv.includes("--agenda")) {
+  const year = new Date().getUTCFullYear();
+  for (const [who, item] of [[A, "Should every member pay small monthly dues, so the treasury has income that does not depend on the agent's jobs?"],
+    [B, "Why does the audit still show 7.60 USDC owed, and can anyone be held to it?"]]) {
+    say(`${who.split("-")[1]} put on the ${year} agenda: ${item}`, await callRaw(account(who), dep.contract, "propose_agenda", { year, item }, { deposit: NEAR / 100n, tgas: 30 }));
+  }
+}
+
+if (process.argv.includes("--dues")) {
+  const d = await view(dep.contract, "get_dues");
+  if (!d || BigInt(d.amount) === 0n) throw new Error("the members voted no dues yet");
+  const members = (await view(dep.contract, "get_members", { from: 0, limit: 100 })).map(([a]) => a);
+  for (const m of members) {
+    say(`${m.split(".")[0]} paid two periods of dues`, await callRaw(account(m), dep.contract, "pay_dues", {}, { deposit: 2n * BigInt(d.amount), tgas: 30 }));
+    console.log("   ", JSON.stringify(await view(dep.contract, "get_dues_status", { account_id: m })));
+  }
 }
 

@@ -50,6 +50,7 @@ test("0.2.8: the passport stamp from a sister co-op is shown on the work record,
   await expect(page.locator("#ck-attacks")).toContainText(/(\d+) of \1 attacks on this co-op failed on-chain/, { timeout: 30_000 });
   await expect(page.locator("#ck-attacks")).toHaveClass(/pass/);
   await page.goto("/#commons");
+  await expect(page.locator("#duties")).toContainText(/The agent answers to the court[\s\S]*Mandatory dues/);
   await expect(page.locator("#rat")).toContainText(/Annual members' meeting \d{4}[\s\S]*DAO vote #\d+/);
 });
 
