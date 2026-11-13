@@ -21,7 +21,13 @@ const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 const API = "https://taskbond-iota.vercel.app/api";
 const RAW = "https://raw.githubusercontent.com/demir-sama/taskbond/HEAD/sources";
 const PACK = [["account-model", "account-model.txt"], ["access-keys", "access-keys.txt"], ["faucet", "faucet.txt"]];
-const BUYER = "kop-publisher-mw5tkpfo.testnet"; // not a member: the court demos' buyer
+// who posts the job when none is given: an account outside the co-op (KOP_TB_POSTER: another wallet, e.g. another project's)
+const BUYER = process.env.KOP_TB_POSTER ?? "kop-publisher-mw5tkpfo.testnet"; // not a member: the court demos' buyer
+const TOPICS = [
+  ["How function-call access keys bound an agent", "Explain how a NEAR function-call access key limits what an AI agent's account can do (which contract, which methods, how much gas allowance), how that differs from a full-access key, and where a newcomer gets testnet NEAR. Cite the pinned sources."],
+  ["Named and implicit accounts for a new member", "A new co-op member has no NEAR account yet. Explain the difference between named and implicit accounts, how an account holds several keys, and how to get testnet NEAR to start. Cite the pinned sources."],
+];
+const topic = TOPICS[Number(process.env.KOP_TB_TOPIC ?? 0)];
 const OWNER = dep.steward;
 
 const { config, hash, version } = await loadApprovedConfig(dep);
@@ -37,8 +43,7 @@ let jobId = process.argv[2] ? Number(process.argv[2]) : null;
 if (jobId === null) {
   const reward = BigInt(Math.round(rules.min_reward_near * 1000)) * (NEAR / 1000n);
   const r = await callRaw(account(BUYER), ESCROW, "create_job", {
-    title: "How function-call access keys bound an agent",
-    topic: "Explain how a NEAR function-call access key limits what an AI agent's account can do (which contract, which methods, how much gas allowance), how that differs from a full-access key, and where a newcomer gets testnet NEAR. Cite the pinned sources.",
+    title: topic[0], topic: topic[1],
     source_pack_hash: packHash, deadline_ns: String(BigInt(Date.now() + 6 * 3600_000) * 1_000_000n),
   }, { deposit: reward + 3n * NEAR / 100n, tgas: 100 });
   jobId = JSON.parse(Buffer.from(r.status.SuccessValue, "base64").toString());
@@ -76,11 +81,12 @@ if (me.status !== "Approved") throw new Error(`Taskbond's guard did not approve 
 // the work, by the co-op's agent, from the pinned sources only
 let done = null;
 if (me.review === "None") {
-  // the reasoning model the by-laws name ran out of time on all three sources (12 KB); the topic needs two of them
+  // the reasoning model the by-laws name ran out of time on all three sources (12 KB): the two the brief is about
+  const use = /named and implicit|accounts? hold/i.test(job.topic) ? ["account-model", "faucet"] : ["access-keys", "faucet"];
   done = await infer(config, {
     title: job.title,
-    description: `${job.topic}\n\nAnswer ONLY from the two sources below. Reply with JSON only, no prose around it: {"summary": "at most 900 characters", "steps": ["at most 6 steps, each under 180 characters"], "citations": [{"sourceId": "access-keys or faucet", "quote": "an EXACT sentence copied character for character from that source, under 200 characters"}]} with 3 or 4 citations.\n\n${sources.filter((s) => s.id !== "account-model").map((s) => `=== ${s.id} ===\n${s.body}`).join("\n\n")}`,
-  }, Math.round(config.limits.max_inference_per_job_usd * 1e6), { maxTokens: 6000, brief: true });
+    description: `${job.topic}\n\nAnswer ONLY from the two sources below. Keep your reasoning short: pick the quotes, then answer. Reply with JSON only, no prose around it: {"summary": "at most 900 characters", "steps": ["at most 6 steps, each under 180 characters"], "citations": [{"sourceId": "${use.join(" or ")}", "quote": "an EXACT sentence copied character for character from that source, under 200 characters"}]} with 3 or 4 citations.\n\n${sources.filter((s) => use.includes(s.id)).map((s) => `=== ${s.id} ===\n${s.body}`).join("\n\n")}`,
+  }, Math.round(config.limits.max_inference_per_job_usd * 1e6), { maxTokens: 8000, brief: true });
   const out = JSON.parse(done.text.slice(done.text.indexOf("{"), done.text.lastIndexOf("}") + 1));
   // keep only quotes that are really in the sources: Taskbond's reviewer rejects any other
   const citations = (out.citations ?? []).filter((c) => sources.find((s) => s.id === c.sourceId)?.body.includes(c.quote)).slice(0, 4);

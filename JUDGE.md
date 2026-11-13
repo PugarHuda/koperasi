@@ -40,7 +40,7 @@ every day (`.github/workflows/tests.yml`).
 | 13e | Attacks are refused on-chain | *Don't trust us* → *Attacks are refused on-chain* | green: "19 of 19 attacks on this co-op failed on-chain", each re-read by your browser, with the refusal and the transaction |
 | 13f | The annual members' meeting | *Commons* → *Annual members' meeting 2026*, or `/rat/2026.md` | the report the co-op's agent wrote in a TEE from the chain's facts, approved by DAO vote #86, whose description carries the report's and the facts' sha256 |
 | 13g | Dues, the agent's strikes, the agenda, the federation | *Commons* (the lines under the court) and `npm run verify` | 0.01 NEAR dues voted by #89 and paid by all five; 1 strike (case #5); the 2026 agenda; the federation's resolution passed by both co-ops' votes (#87, #9) |
-| 13h | A job won on a third-party testnet market | *The agent* (section 03) → "On Taskbond … scored 95/100", or `npm run verify` | Taskbond job #13: Paid, the winner is the co-op's agent, its reviewer's reason quoted; receipt `taskbond-13` with the TEE proof |
+| 13h | A job won on a third-party testnet market | *The agent* (section 03) → "On Taskbond … scored 95/100", or `npm run verify` | Taskbond jobs #13 and #14: Paid, the winner is the co-op's agent (95/100 each), the reviewer's reason quoted; receipts `taskbond-13`, `taskbond-14` with the TEE proof |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source
@@ -56,8 +56,8 @@ every day (`.github/workflows/tests.yml`).
 - The members are the builder's demo accounts (plus one who joined with a signed vouch). They show the mechanism works;
   they are not independent people.
 - The agent has done **no paid Agent Market job**: Agent Market has no testnet, so receipts are from the demo market,
-  `demo-` receipts, and one job won on Taskbond, another team's testnet market (posted by a non-member account of the
-  builder's; judged and paid by Taskbond's own reviewer AI and escrow, in testnet NEAR). Three were done by a real model on NEAR AI Cloud, with its TEE proof on-chain, the last two also
+  `demo-` receipts, and two jobs won on Taskbond, another team's testnet market (posted by accounts of the builder's outside the co-op;
+  judged and paid by Taskbond's own reviewer AI and escrow, in testnet NEAR). Three were done by a real model on NEAR AI Cloud, with its TEE proof on-chain, the last two also
   gated in an OutLayer enclave; `npm run verify` prints "0 from Agent Market".
 - The sister co-op of the passport (`koperasi-mw80aczw`) is a second co-op from this repo with the builder's accounts.
 - The audit is red (7.60 USDC), from before the current steward, so not slashable. The 9.50 USDC the demo jobs of

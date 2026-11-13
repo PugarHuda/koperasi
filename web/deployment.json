@@ -492,6 +492,21 @@
       "receipt": "taskbond-13",
       "at": "2026-11-13T06:43:57.835Z",
       "passed_on": "CqBieK14pn1rkb2c4SBFoQZpi9M9kQPCLDD8xcYPoHPw"
+    },
+    {
+      "escrow": "escrow.tbnd246748.testnet",
+      "job": 14,
+      "poster": "pusaka-w-mvzhtaw8.testnet",
+      "agent_id": 38,
+      "owner": "kop-steward-mw4i2iwk.testnet",
+      "review": "Accepted",
+      "reason": "[NEAR AI] 95/100 · Accurately covers named vs implicit accounts, multi-key permissions, and testnet faucets with valid citations.",
+      "score": 95,
+      "winner": 38,
+      "status": "Paid",
+      "receipt": "taskbond-14",
+      "at": "2026-11-13T07:14:02.347Z",
+      "passed_on": "6kHgD6ir4imbDugrZRrArcZHWwiu44jCeDnYWcNpPpX4"
     }
   ]
 }
