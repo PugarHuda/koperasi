@@ -144,7 +144,8 @@ impl Koperasi {
     /// With `commit`, the weights are kept as the new baseline (a dividend was paid by them).
     pub(crate) fn reputation_weights(&self, commit: bool) -> Vec<(AccountId, u128)> {
         let mut out = vec![];
-        let cases = self.get_cases(Some(0), Some(500));
+        // ponytail: every case, read once per dividend; a co-op with thousands of cases would keep running counters
+        let cases = self.get_cases(Some(0), Some(u32::MAX));
         for a in self.members.keys() {
             let done = self.get_record(a.clone()).map_or(0, |r| r.done);
             let s = crate::commons::standing_of(a);
@@ -280,6 +281,13 @@ impl Koperasi {
         require!(compose_hash.len() <= 64, "compose hash: 64 hex");
         save(&attested_key(&account_id), &(until, compose_hash.clone()));
         Event::AgentAttested { account_id, until, compose_hash }.emit();
+    }
+
+    /// DAO only: drop an agent's attestation at once (code or a machine the members no longer trust).
+    pub fn revoke_attestation(&mut self, account_id: AccountId) {
+        self.assert_dao();
+        env::storage_remove(&attested_key(&account_id));
+        Event::AgentAttested { account_id, until: U64(0), compose_hash: String::new() }.emit();
     }
 
     /// (TEE-only?, attested until, compose hash) for an agent; and the registry.

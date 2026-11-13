@@ -17,6 +17,7 @@
     "web:files": "node -e \"for (const d of ['config', 'evidence']) require('fs').cpSync(d, 'web/' + d, { recursive: true })\""
   },
   "dependencies": {
+    "@neardefi/shade-agent-js": "^2.2.0",
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
     "@phala/dcap-qvl": "^0.7.1",

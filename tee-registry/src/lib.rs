@@ -76,7 +76,8 @@ impl Registry {
         }
     }
 
-    /// The co-op's DAO: forget all approved code and machines (a worker then attests no more).
+    /// The co-op's DAO: forget all approved code and machines (no worker registers again). An attestation already
+    /// noted at the co-op holds until it expires (7 days) unless the members also call its `revoke_attestation`.
     pub fn revoke_all(&mut self) {
         self.assert_owner();
         self.measurements.clear();
