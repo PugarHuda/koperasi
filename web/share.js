@@ -76,7 +76,7 @@ export const EVENTS = ["join_requested", "join_cancelled", "member_added", "memb
   "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "veto_window_set", "task_held", "task_vetoed", "task_approved",
   "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited",
-  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "agent_saves_set", "agent_saved", "reputation_share_set", "reputation_dividend", "agent_proposed", "refund_from_risk_fund", "risk_refund_failed", "agent_config_set", "agents_set", "share_funds_set", "fund_paid", "guaranteed", "guarantee_withdrawn", "guarantee_called", "guarantee_cleared", "loan_rule_set", "loan_requested", "loan_filed", "loan_repaid", "loan_late", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
+  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "agent_saves_set", "agent_saved", "reputation_share_set", "reputation_dividend", "agent_proposed", "agent_share_set", "agent_share", "federation_set", "federation_rules_set", "late_elsewhere", "agent_propose_every_set", "refund_from_risk_fund", "risk_refund_failed", "agent_config_set", "agents_set", "share_funds_set", "fund_paid", "guaranteed", "guarantee_withdrawn", "guarantee_called", "guarantee_cleared", "loan_rule_set", "loan_requested", "loan_filed", "loan_repaid", "loan_late", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
 /**
@@ -143,6 +143,12 @@ export function describeEvent({ event: e, data: d }) {
     agent_saved: () => `The agent saved ${usdcOf(d.amount)} of its earnings into the risk fund`,
     reputation_share_set: () => `The members set ${d.bps / 100}% of every profit share to be split by credit score`,
     reputation_dividend: () => `A reputation dividend of ${usdcOf(d.amount)} was credited to members by credit score`,
+    agent_share_set: () => `The members gave the agent ${d.bps / 100}% of every profit share, into the risk fund`,
+    agent_share: () => `The agent's share, ${usdcOf(d.amount)}, went into the risk fund (standing ${d.standing_bps / 100}%)`,
+    federation_set: () => (d.federation ? `The members joined the federation ${short(d.federation)}: its rules bind the co-op` : "The members left the federation"),
+    federation_rules_set: () => `The federation set the loan ceiling: at most ${d.max_rate_bps / 100}% for ${d.max_term_days} days`,
+    late_elsewhere: () => (d.late ? `${short(d.coop)} says ${short(d.account_id)}'s loan there is late` : `${short(d.account_id)}'s late loan at ${short(d.coop)} is settled`),
+    agent_propose_every_set: () => `The members let the agent propose by-laws every ${d.days} day(s)`,
     agent_proposed: () => `The agent put by-laws v${d.version} to the members: DAO proposal #${d.proposal_id}`,
     refund_from_risk_fund: () => `Court case #${d.id}: the buyer was refunded ${usdcOf(d.amount)} from the risk fund at once`,
     risk_refund_failed: () => `Court case #${d.id}: the refund from the risk fund bounced; ${usdcOf(d.amount)} went back to the fund`,

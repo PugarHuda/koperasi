@@ -2785,3 +2785,159 @@ fn anyone_may_submit_the_agents_signed_proposal() {
     k.pause();
     assert!(fails(|| { at(&acc("agent2.testnet"), 9 * DAY); let _ = k.agent_propose_bylaws(2, H2.into(), uri.into(), why.into(), None); }), "paused");
 }
+
+/// 0.3.3: the agent as a member: a voted share of every profit share goes into the risk fund, halved per live strike,
+/// nothing while suspended.
+#[test]
+fn the_agent_gets_a_share_of_the_surplus_by_its_standing() {
+    let mut k = setup(); // 20% reserve
+    with_members(&mut k, &["alice.testnet"]);
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_agent_share(2500); }), "within the reserve");
+    as_(&dao(), near(0));
+    k.set_agent_share(1000);
+    assert_eq!(k.get_agent_member().standing_bps, 10_000);
+    as_(&usdc(), near(0));
+    let _ = k.ft_on_transfer(dao(), U128(4_000_000), "share".into());
+    assert!(logs_have("agent_share"));
+    assert_eq!(k.get_risk_fund().0 .0, 400_000);
+    meeting::strike(1);
+    assert_eq!(k.get_agent_member().standing_bps, 5_000, "one strike halves it");
+    as_(&usdc(), near(0));
+    let _ = k.ft_on_transfer(dao(), U128(4_000_000), "share".into());
+    assert_eq!(k.get_risk_fund().0 .0, 600_000);
+    meeting::strike(2);
+    meeting::strike(3);
+    assert_eq!(k.get_agent_member().standing_bps, 0, "suspended: nothing");
+    assert_eq!(k.get_agent_member().shu_total.0, 600_000);
+}
+
+/// 0.3.3: a federation's resolution binds the code: only its DAO sets the ceiling, loans above it are refused.
+#[test]
+fn the_federations_loan_ceiling_binds_the_members_loan_rule() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let fed = acc("kop-federation.sputnik-v2.testnet");
+    let rule = |bps: u16, days: u32| lending::LoanRule { max_loan: U128(near(1).as_yoctonear()), rate_bps: bps, term_days: days };
+    assert!(fails(|| { as_(&fed, near(0)); k.set_federation_rules(200, 30); }), "no federation named yet");
+    as_(&dao(), near(0));
+    k.set_federation(Some(fed.clone()));
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_federation_rules(200, 30); }), "the co-op cannot set its own ceiling");
+    as_(&fed, near(0));
+    k.set_federation_rules(200, 30);
+    assert!(logs_have("federation_rules_set"));
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_loan_rule(rule(300, 30), U128(0)); }), "rate above the ceiling");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_loan_rule(rule(200, 60), U128(0)); }), "term above the ceiling");
+    as_(&dao(), near(0));
+    k.set_loan_rule(rule(200, 30), U128(near(2).as_yoctonear()));
+    // the federation lowers it: the old rule lends nothing until the members lower theirs
+    as_(&fed, near(0));
+    k.set_federation_rules(100, 30);
+    let bob = acc("bob.testnet");
+    at_paying(&acc("alice.testnet"), DAY, commons::PLEDGE_FEE);
+    k.guarantee(bob.clone());
+    commons::mark(&bob, |s| s.pledges_honored += 8);
+    assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(near(1).as_yoctonear() / 10)); }), "rule above the new ceiling");
+    // leaving the federation is the members' vote
+    as_(&dao(), near(0));
+    k.set_federation(None);
+    at(&bob, DAY);
+    let _ = k.request_loan(U128(near(1).as_yoctonear() / 10));
+}
+
+/// 0.3.3: a late loan is told to the sister co-ops; there the borrower's credit is 0 until it is repaid here.
+#[test]
+fn a_late_loan_is_told_to_the_sister_coops_and_lifted_when_repaid() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let (alice, bob) = (acc("alice.testnet"), acc("bob.testnet"));
+    let sister = acc("koperasi-sister.testnet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone()]);
+    // received from a sister
+    assert!(fails(|| { as_(&acc("koperasi-fake.testnet"), near(0)); k.note_late_elsewhere(bob.clone(), true); }), "only a sister");
+    commons::mark(&bob, |s| s.pledges_honored += 5);
+    as_(&sister, near(0));
+    k.note_late_elsewhere(bob.clone(), true);
+    assert!(logs_have("late_elsewhere"));
+    assert_eq!(k.get_credit(bob.clone()).0, 0);
+    as_(&dao(), near(0));
+    k.set_loan_rule(lending::LoanRule { max_loan: U128(near(1).as_yoctonear()), rate_bps: 200, term_days: 1 }, U128(near(2).as_yoctonear()));
+    at_paying(&alice, DAY, commons::PLEDGE_FEE);
+    k.guarantee(bob.clone());
+    assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(1)); }), "late at a sister");
+    assert!(fails(|| { as_(&acc("koperasi-other.testnet"), near(0)); k.note_late_elsewhere(bob.clone(), false); }));
+    as_(&sister, near(0));
+    k.note_late_elsewhere(bob.clone(), false);
+    assert_eq!(k.get_credit(bob.clone()).0, 7, "5 pledges and alice");
+    // sent: alice borrows here, is called late; every sister is told, and told again when she repays
+    commons::mark(&alice, |s| s.pledges_honored += 5);
+    at_paying(&bob, DAY, commons::PLEDGE_FEE);
+    k.guarantee(alice.clone());
+    at(&alice, DAY);
+    let _ = k.request_loan(U128(near(1).as_yoctonear() / 10));
+    at(&me(), DAY);
+    let _ = k.on_loan_filed(alice.clone(), Value::Null, Ok(5));
+    at(&acc("anyone.testnet"), 10 * DAY);
+    k.call_loan_late(alice.clone());
+    let told = |late: bool| near_sdk::test_utils::get_created_receipts().iter().filter(|r| r.receiver_id == sister)
+        .flat_map(|r| r.actions.clone()).any(|a| matches!(a, near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, .. }
+            if method_name == b"note_late_elsewhere" && near_sdk::serde_json::from_slice::<Value>(&args).unwrap()["late"] == late));
+    assert!(told(true), "the sister is told");
+    at_paying(&alice, 11 * DAY, NearToken::from_millinear(102));
+    k.repay_loan();
+    assert!(told(false), "and told again when it is repaid");
+}
+
+/// 0.3.3: work stamped from a sister co-op counts toward credit here.
+#[test]
+fn credit_counts_work_stamped_from_a_sister_coop() {
+    let mut k = setup();
+    with_members(&mut k, &["frank.testnet"]);
+    let (sister, frank) = (acc("koperasi-sister.testnet"), acc("frank.testnet"));
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone()]);
+    assert_eq!(k.get_credit(frank.clone()).0, 0);
+    as_(&me(), near(0));
+    let token = near_sdk::serde_json::json!({ "owner_id": "frank.testnet", "metadata": {
+        "extra": near_sdk::serde_json::json!({ "done": 4, "earned": "5", "good_standing": true }).to_string() } });
+    assert!(k.on_token_read(frank.clone(), sister.clone(), acc("anyone.testnet"), Ok(Some(token))));
+    assert_eq!(k.get_credit(frank.clone()).0, 4);
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![]);
+    assert_eq!(k.get_credit(frank.clone()).0, 0, "a co-op the members dropped stops counting");
+}
+
+/// 0.3.3: the reputation dividend's weight is new work since the last dividend plus half the last weight (no cap).
+#[test]
+fn reputation_weights_decay_and_never_saturate() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let (alice, bob) = (acc("alice.testnet"), acc("bob.testnet"));
+    as_(&dao(), near(0));
+    k.set_reputation_share(1000);
+    commons::mark(&alice, |s| s.pledges_honored += 30); // past the old cap of 10
+    commons::mark(&bob, |s| s.pledges_honored += 10);
+    let w = |k: &Koperasi, a: &AccountId| k.get_reputation_weights().iter().find(|(x, _)| x == a).map_or(0, |(_, w)| w.0);
+    assert_eq!((w(&k, &alice), w(&k, &bob)), (30, 10));
+    as_(&usdc(), near(0));
+    let _ = k.ft_on_transfer(dao(), U128(4_000_000), "share".into());
+    assert_eq!(k.get_claimable(alice.clone()).0, 300_000, "3:1 of 0.4 USDC");
+    // then bob works more: new work counts in full, old weight halves
+    commons::mark(&bob, |s| s.pledges_honored += 20);
+    assert_eq!((w(&k, &alice), w(&k, &bob)), (15, 25));
+}
+
+/// 0.3.3: the members set how often the agent may propose.
+#[test]
+fn the_members_set_how_often_the_agent_proposes() {
+    let mut k = setup();
+    assert_eq!(k.get_agent_propose_every(), 7);
+    as_(&dao(), near(0));
+    k.set_agent_propose_every(1);
+    at(&agent(), DAY);
+    let _ = k.agent_propose_bylaws(2, H2.into(), "u".into(), "r".into(), None);
+    assert!(fails(|| { at(&agent(), DAY + DAY / 2); let _ = k.agent_propose_bylaws(2, H2.into(), "u".into(), "r".into(), None); }));
+    at(&agent(), 2 * DAY);
+    let _ = k.agent_propose_bylaws(2, H2.into(), "u".into(), "r".into(), None);
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_agent_propose_every(31); }));
+}

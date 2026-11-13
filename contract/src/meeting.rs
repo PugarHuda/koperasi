@@ -26,6 +26,8 @@ const KEY_MEETINGS: &[u8] = b"annual_meetings";
 const KEY_STRIKES: &[u8] = b"agent_strikes";
 const KEY_REINSTATED: &[u8] = b"agent_reinstated";
 const KEY_AGENT_PROPOSALS: &[u8] = b"agent_proposals";
+/// 0.3.3: how many days apart the agent may propose, set by the members (7 until they do).
+const KEY_AGENT_EVERY: &[u8] = b"agent_propose_every_days";
 /// Signatures consumed so far: only ever goes up, even when a filing fails.
 const KEY_AGENT_NONCE: &[u8] = b"agent_proposal_nonce";
 /// The founding agent and the public key it last signed a receipt with (ed25519 only: curve byte 0, then 32 bytes).
@@ -275,7 +277,8 @@ impl Koperasi {
         require!(!uri.is_empty() && uri.len() <= 200 && uri.bytes().all(|b| b.is_ascii_graphic()), "uri: 1 to 200 characters, no spaces");
         require!(!reason.trim().is_empty() && reason.len() <= MAX_REASON, "reason: 1 to 500 characters");
         let now = env::block_timestamp();
-        require!(all.last().is_none_or(|p| now >= p.at.0 + AGENT_PROPOSE_EVERY_DAYS * DAY_NS), "one proposal every 7 days");
+        let every = load::<u64>(KEY_AGENT_EVERY).unwrap_or(AGENT_PROPOSE_EVERY_DAYS);
+        require!(all.last().is_none_or(|p| now >= p.at.0 + every * DAY_NS), "too soon after the agent's last proposal: the members set how often");
         all.push(AgentProposal { version, hash: hash.clone(), uri: uri.clone(), reason: reason.clone(), proposal: None, at: U64(now) });
         save(KEY_AGENT_PROPOSALS, &all);
         let args = near_sdk::serde_json::json!({ "version": version, "hash": hash, "uri": uri,
@@ -306,6 +309,18 @@ impl Koperasi {
             }
         }
         save(KEY_AGENT_PROPOSALS, &all);
+    }
+
+    /// DAO only: how many days apart the agent may put new by-laws to the members (0 to 30).
+    pub fn set_agent_propose_every(&mut self, days: u64) {
+        self.assert_dao();
+        require!(days <= 30, "at most 30 days");
+        save(KEY_AGENT_EVERY, &days);
+        Event::AgentProposeEverySet { days }.emit();
+    }
+
+    pub fn get_agent_propose_every(&self) -> u64 {
+        load(KEY_AGENT_EVERY).unwrap_or(AGENT_PROPOSE_EVERY_DAYS)
     }
 
     /// The exact text the agent signs for its next `agent_propose_bylaws`.

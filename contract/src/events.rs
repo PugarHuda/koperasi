@@ -188,6 +188,24 @@ pub enum Event {
     /// The steward's term ran out: the role is empty until the members appoint one.
     #[event_version("1.0.0")]
     StewardTermEnded { steward: AccountId },
+    /// The members voted the agent's share of every profit share (into the risk fund).
+    #[event_version("1.0.0")]
+    AgentShareSet { bps: u16 },
+    /// The agent's share of a profit share went into the risk fund, scaled by its standing.
+    #[event_version("1.0.0")]
+    AgentShare { amount: U128, standing_bps: u16 },
+    /// The members named the federation whose rules bind this co-op (None: left it).
+    #[event_version("1.0.0")]
+    FederationSet { federation: Option<AccountId> },
+    /// The federation set the loan ceiling for its member co-ops.
+    #[event_version("1.0.0")]
+    FederationRulesSet { max_rate_bps: u16, max_term_days: u32 },
+    /// A sister co-op said an account's loan there is late (or settled).
+    #[event_version("1.0.0")]
+    LateElsewhere { account_id: AccountId, coop: AccountId, late: bool },
+    /// The members set how many days apart the agent may propose by-laws.
+    #[event_version("1.0.0")]
+    AgentProposeEverySet { days: u64 },
     /// The co-op's agent put new by-laws to the members (a DAO proposal the contract filed).
     #[event_version("1.0.0")]
     AgentProposed { version: u32, hash: String, proposal_id: u64 },

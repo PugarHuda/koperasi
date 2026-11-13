@@ -262,10 +262,11 @@ impl Koperasi {
              <text x='36' y='170' fill='#fff' font-family='sans-serif' font-size='22'>{line1}</text>\
              <text x='36' y='206' fill='#fff' font-family='sans-serif' font-size='22'>{line2}</text>\
              <text x='36' y='242' fill='#fff' font-family='sans-serif' font-size='22'>{line3}</text>\
-             <text x='36' y='274' fill='#ffd54a' font-family='sans-serif' font-size='18'>{line4}</text>\
+             <rect x='36' y='126' width='200' height='10' rx='5' fill='#1b2a66'/><rect x='36' y='126' width='{bar}' height='10' rx='5' fill='#ffd54a'/><text x='248' y='136' fill='#ffd54a' font-family='sans-serif' font-size='14'>credit {score}/10</text><text x='36' y='274' fill='#ffd54a' font-family='sans-serif' font-size='18'>{line4}</text>\
              <text x='36' y='312' fill='{c}' font-family='sans-serif' font-size='18'>{g}</text>\
              <text x='564' y='312' fill='#9fb4ff' font-family='monospace' font-size='14' text-anchor='end'>{co}</text></svg>",
             c = if good { "#7ee2a8" } else { "#ff9a94" },
+            bar = score * 20,
             g = if good { "in good standing" } else { "not in good standing" },
             co = env::current_account_id(),
         );

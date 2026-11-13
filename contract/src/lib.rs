@@ -775,6 +775,8 @@ impl Koperasi {
         let reserve = self.pay_funds(amount, reserve);
         // 0.3.2: a reputation dividend, by each member's credit score, also out of the reserve part
         let reserve = self.pay_reputation(amount, reserve);
+        // 0.3.3: the agent's own share, into the risk fund its mistakes are refunded from
+        let reserve = self.pay_agent_share(amount, reserve);
         if reserve > 0 {
             self.forward_to_dao(reserve);
         }
@@ -991,5 +993,6 @@ mod commons;
 mod reach;
 mod meeting;
 mod lending;
+mod solidarity;
 pub use commons::*;
 pub use tasks::*;

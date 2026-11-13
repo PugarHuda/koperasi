@@ -156,12 +156,9 @@ impl Koperasi {
             return reserve;
         }
         // Only members in good standing, and only the record: work done, pledges kept, juries served. Guarantors are
-        // left out here (two members can stand surety for each other at no cost); the cap of 10 bounds the rest.
-        let scores: Vec<(AccountId, u128)> = self.members.keys().filter(|a| self.in_good_standing(a)).map(|a| {
-            let done = self.get_record(a.clone()).map_or(0, |r| r.done);
-            let s = crate::commons::standing_of(a);
-            (a.clone(), (done + s.pledges_honored + s.juries_served).min(10) as u128)
-        }).collect();
+        // left out here (two members can stand surety for each other at no cost). 0.3.3: the weight is the work added
+        // since the last dividend plus half the last weight, so it never saturates and recent work counts most.
+        let scores = self.reputation_weights(true);
         let total: u128 = scores.iter().map(|(_, s)| s).sum();
         if total == 0 {
             return reserve;
@@ -271,11 +268,17 @@ impl Koperasi {
 
     /// (score out of 10, the largest loan it allows now): finished tasks and bounties, pledges kept, juries served,
     /// and 2 for each guarantor in good standing.
+    /// 0.3.3: work stamped into the passport from sister co-ops counts too; a loan late at a sister co-op makes it 0.
     pub fn get_credit(&self, account_id: AccountId) -> (u32, U128) {
+        if crate::solidarity::late_elsewhere(&account_id).is_some() {
+            return (0, U128(0));
+        }
         let done = self.get_record(account_id.clone()).map_or(0, |r| r.done);
         let s = crate::commons::standing_of(&account_id);
         let g = self.get_guarantors(account_id.clone()).iter().filter(|x| self.in_good_standing(x)).count() as u32;
-        let score = (done + s.pledges_honored + s.juries_served + 2 * g).min(10);
+        let sisters = self.get_sister_coops();
+        let away: u32 = self.get_passport(account_id.clone()).iter().filter(|p| sisters.contains(&p.coop)).map(|p| p.done).sum();
+        let score = (done + s.pledges_honored + s.juries_served + 2 * g + away).min(10);
         let max = load::<LoanRule>(KEY_LOAN_RULE).map_or(0, |r| r.max_loan.0);
         (score, U128(max * score as u128 / 10))
     }
@@ -385,6 +388,7 @@ impl Koperasi {
     pub fn set_loan_rule(&mut self, rule: LoanRule, add_to_fund: U128) {
         self.assert_dao();
         require!(rule.rate_bps <= 5_000 && (1..=365).contains(&rule.term_days), "rate at most 50%, term 1 to 365 days");
+        require!(crate::solidarity::within_federation(rule.rate_bps, rule.term_days), "above the federation's loan ceiling");
         save(KEY_LOAN_RULE, &rule);
         save(KEY_LOAN_FUND, &U128(loan_fund() + add_to_fund.0));
         Event::LoanRuleSet { max_loan: rule.max_loan, rate_bps: rule.rate_bps, term_days: rule.term_days, fund: U128(loan_fund()) }.emit();
@@ -402,6 +406,8 @@ impl Koperasi {
         require!(self.in_good_standing(&who), "only a member in good standing");
         let rule: LoanRule = load(KEY_LOAN_RULE).unwrap_or_else(|| env::panic_str("the members voted no loans"));
         require!(amount.0 > 0 && amount.0 <= rule.max_loan.0, "at most the largest loan the members voted");
+        require!(crate::solidarity::within_federation(rule.rate_bps, rule.term_days), "the loan rule is above the federation's ceiling: the members must lower it");
+        require!(crate::solidarity::late_elsewhere(&who).is_none(), "a loan of yours is late at a sister co-op");
         // 0.3.2: and at most what the borrower's record allows (score out of 10 of the largest loan)
         require!(amount.0 <= self.get_credit(who.clone()).1 .0, "more than your record allows: finish tasks, keep pledges, find guarantors");
         require!(amount.0 <= loan_fund(), "the loan fund is too low: the members must add to it");
@@ -446,6 +452,9 @@ impl Koperasi {
         let who = env::predecessor_account_id();
         let mut l: Loan = load(&loan_key(&who)).unwrap_or_else(|| env::panic_str("no loan"));
         require!(l.status != LoanStatus::Repaid, "already repaid");
+        if l.status == LoanStatus::Late {
+            crate::solidarity::tell_sisters(&who, false); // 0.3.3: settled, the sister co-ops lift their note
+        }
         let owed = l.principal.0 + l.interest.0;
         let paid = env::attached_deposit().as_yoctonear();
         require!(paid >= owed, "attach the principal plus the interest");
@@ -467,6 +476,7 @@ impl Koperasi {
         l.status = LoanStatus::Late;
         save(&loan_key(&account_id), &l);
         crate::commons::mark(&account_id, |s| s.slashed += 1);
+        crate::solidarity::tell_sisters(&account_id, true); // 0.3.3: told to every sister co-op
         Event::LoanLate { account_id }.emit();
     }
 
