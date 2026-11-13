@@ -12589,6 +12589,17 @@ var init_verify = __esm({
         `${f.dao}: members ${members2.join(", ")}; resolution #${f.resolution.id} ${res.status}; ` + f.resolution.votes.map((v, i) => `${v.dao.split(".")[0]} voted by its proposal #${v.proposal} (${behind[i] ? "approved by its members" : "NOT FOUND"})`).join("; ")
       );
     }
+    if (d2.federation?.reserve) {
+      const f = d2.federation, r2 = f.reserve;
+      const ins = await Promise.all(r2.paid_in.map((x2) => view2(x2.dao, "get_proposal", { id: x2.proposal })));
+      const g2 = await view2(f.dao, "get_proposal", { id: r2.grant.id });
+      const ok = ins.every((p2) => p2.status === "Approved" && p2.kind.Transfer?.receiver_id === f.dao) && g2.status === "Approved" && g2.kind.Transfer?.receiver_id === r2.grant.to && r2.grant.votes.every((v) => g2.votes[v.dao] === "Approve");
+      check(
+        ok,
+        "the federation runs a shared reserve: each co-op paid in by its own vote, and a grant from it passed by both co-ops' votes",
+        `${r2.paid_in.map((x2, i) => `${x2.dao.split(".")[0]} paid ${x2.near} NEAR by #${x2.proposal} (${ins[i].status})`).join("; ")}; grant #${r2.grant.id} of ${r2.grant.near} NEAR to ${r2.grant.to.split(".")[0]}: ${g2.status}`
+      );
+    }
     if (d2.redteam?.length) {
       const res = await Promise.all(d2.redteam.map(async (r2) => {
         const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.tx, sender_account_id: r2.by, wait_until: "FINAL" });

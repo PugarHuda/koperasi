@@ -109,3 +109,12 @@ test("out of good standing: told so, and offered no court case", async ({ page }
   await expect(page.locator("#joinapp")).toContainText("you are not drawn as a juror");
   await expect(page.locator("#w-c-open")).toHaveCount(0);
 });
+
+test("the co-ops page shows who recognises whom, and the federation with each co-op's vote behind its resolutions", async ({ page }) => {
+  await page.goto("/coops.html");
+  await expect(page.locator("#coops tbody tr", { hasText: "showcase" })).toContainText("koperasi-mw80aczw");
+  await expect(page.locator("#fed")).toContainText("koperasi-mw4i2iwk.sputnik-v2.testnet");
+  await expect(page.locator("#fed")).toContainText("koperasi-mw80aczw.sputnik-v2.testnet");
+  await expect(page.locator("#resolutions tbody tr")).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.locator("#resolutions tbody tr", { hasText: "shared reserve" })).toContainText(/Approve \(its proposal #\d+\)/);
+});

@@ -450,6 +450,17 @@ if (d.federation) {
     + f.resolution.votes.map((v, i) => `${v.dao.split(".")[0]} voted by its proposal #${v.proposal} (${behind[i] ? "approved by its members" : "NOT FOUND"})`).join("; "));
 }
 
+// the federation's shared reserve moves money: each co-op paid in by its own vote, and a grant passed by both co-ops' votes
+if (d.federation?.reserve) {
+  const f = d.federation, r = f.reserve;
+  const ins = await Promise.all(r.paid_in.map((x) => view(x.dao, "get_proposal", { id: x.proposal })));
+  const g = await view(f.dao, "get_proposal", { id: r.grant.id });
+  const ok = ins.every((p) => p.status === "Approved" && p.kind.Transfer?.receiver_id === f.dao)
+    && g.status === "Approved" && g.kind.Transfer?.receiver_id === r.grant.to && r.grant.votes.every((v) => g.votes[v.dao] === "Approve");
+  check(ok, "the federation runs a shared reserve: each co-op paid in by its own vote, and a grant from it passed by both co-ops' votes",
+    `${r.paid_in.map((x, i) => `${x.dao.split(".")[0]} paid ${x.near} NEAR by #${x.proposal} (${ins[i].status})`).join("; ")}; grant #${r.grant.id} of ${r.grant.near} NEAR to ${r.grant.to.split(".")[0]}: ${g.status}`);
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {

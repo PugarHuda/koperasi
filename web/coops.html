@@ -21,28 +21,58 @@
       <table class="grid on-dark" id="coops">
         <caption>Co-ops <span class="muted">(a co-op whose contract still has a full-access key can have its code changed without a vote)</span></caption>
         <thead><tr><th scope="col">Co-op</th><th scope="col" class="num">Members</th><th scope="col" class="num">Jobs</th><th scope="col" class="num">Profit shares</th>
-          <th scope="col">By-laws</th><th scope="col">Code changes by</th></tr></thead>
-        <tbody><tr><td colspan="6" class="muted">Reading NEAR…</td></tr></tbody>
+          <th scope="col">By-laws</th><th scope="col">Recognises</th><th scope="col">Code changes by</th></tr></thead>
+        <tbody><tr><td colspan="7" class="muted">Reading NEAR…</td></tr></tbody>
+      </table>
+    </section>
+    <section class="block" id="network">
+      <h2>The co-ops' federation</h2>
+      <p class="sub">A secondary co-op, as Indonesian co-op law allows (Law 25/1992 art. 15–16): an unmodified Sputnik DAO whose only members are
+        co-ops' DAOs, one co-op one vote. A co-op votes there only when its own members approved a proposal that casts the vote.
+        Co-ops that recognise each other count each other's work records (the passport).</p>
+      <div id="fed" class="treasury">Reading NEAR…</div>
+      <table class="grid" id="resolutions">
+        <caption>Resolutions <span class="muted">(each vote cast by a member co-op's own DAO proposal)</span></caption>
+        <thead><tr><th scope="col">#</th><th scope="col">Resolution</th><th scope="col">Votes</th><th scope="col">Status</th></tr></thead>
+        <tbody></tbody>
       </table>
     </section>
   </main>
   <script type="module">
-    import { view, query, explorer, esc } from "/near.js";
+    import { dep, view, query, explorer, esc } from "/near.js";
     // ponytail: a fixed list of the co-ops deployed with this code; a factory contract would list them on-chain
     const COOPS = ["mw4i2iwk", "mw57ou3m", "mw4geird", "mw78bioc", "mw7zrvx4", "mw80aczw"].map((t) => `koperasi-${t}.testnet`);
     const row = async (c) => {
       try {
-        const [i, keys] = await Promise.all([view(c, "get_info"), query({ request_type: "view_access_key_list", account_id: c })]);
+        const [i, keys, sisters] = await Promise.all([view(c, "get_info"), query({ request_type: "view_access_key_list", account_id: c }),
+          view(c, "get_sister_coops").catch(() => null)]);
         const full = keys.keys.filter((k) => k.access_key.permission === "FullAccess").length;
         return `<tr><td><a href="${explorer(c)}">${esc(c)}</a>${c === "koperasi-mw4i2iwk.testnet" ? ' <span class="badge Paid">showcase</span>' : ""}<br><a class="muted" href="${explorer(i.dao_id)}">${esc(i.dao_id)}</a></td>
           <td class="num" data-label="Members">${Number(i.members)}</td><td class="num" data-label="Jobs">${Number(i.receipts)}</td><td class="num" data-label="Profit shares">${Number(i.periods)}</td>
           <td data-label="By-laws">v${Number(i.config?.version ?? 0)} <span class="muted">${esc(String(i.config?.hash ?? "").slice(0, 10))}…</span></td>
+          <td data-label="Recognises">${sisters === null ? '<span class="muted">older code</span>' : sisters.length ? sisters.map((x) => esc(x.replace(/\.testnet$/, ""))).join("<br>") : '<span class="muted">none</span>'}</td>
           <td data-label="Code changes by">${full === 0 ? "<strong>a members' vote only</strong>" : `<span class="muted">${full} full-access key${full > 1 ? "s" : ""} (test co-op)</span>`}</td></tr>`;
       } catch (e) {
-        return `<tr><td>${esc(c)}</td><td colspan="5" class="muted">Could not read it now (${esc(e.message.slice(0, 80))}).</td></tr>`;
+        return `<tr><td>${esc(c)}</td><td colspan="6" class="muted">Could not read it now (${esc(e.message.slice(0, 80))}).</td></tr>`;
       }
     };
     document.querySelector("#coops tbody").innerHTML = (await Promise.all(COOPS.map(row))).join("");
+    // the federation (scripts/federation.mjs): its members, from its own policy, and its resolutions with each co-op's vote
+    const f = dep.federation;
+    if (!f) document.getElementById("network").hidden = true;
+    else try {
+      const [policy, last] = await Promise.all([view(f.dao, "get_policy"), view(f.dao, "get_last_proposal_id")]);
+      const members = policy.roles.find((r) => r.name === "member")?.kind?.Group ?? [];
+      document.getElementById("fed").innerHTML = `<b><a href="${explorer(f.dao)}">${esc(f.dao)}</a></b>: members ${members.map((m) => `<a href="${explorer(m)}">${esc(m)}</a>`).join(" and ")}, and nobody else can vote.`;
+      const props = await view(f.dao, "get_proposals", { from_index: 0, limit: Math.min(50, last) });
+      const behind = new Map([f.resolution, f.reserve?.grant].filter(Boolean).map((r) => [r.id, r.votes]));
+      document.querySelector("#resolutions tbody").innerHTML = props.reverse().map((p) => `<tr><td>${p.id}</td><td>${esc(p.description)}</td>
+        <td data-label="Votes">${Object.entries(p.votes).map(([dao, v]) => { const by = behind.get(p.id)?.find((x) => x.dao === dao);
+          return `${esc(dao.split(".")[0])}: ${esc(v)}${by ? ` <span class="muted">(its proposal #${esc(by.proposal)})</span>` : ""}`; }).join("<br>") || "–"}</td>
+        <td data-label="Status">${esc(p.status)}</td></tr>`).join("");
+    } catch (e) {
+      document.getElementById("fed").textContent = `Could not read the federation now (${e.message.slice(0, 80)}).`;
+    }
   </script>
 </body>
 </html>

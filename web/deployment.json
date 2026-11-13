@@ -475,6 +475,35 @@
           "proposal": 9
         }
       ]
+    },
+    "reserve": {
+      "paid_in": [
+        {
+          "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+          "proposal": 101,
+          "near": 0.5
+        },
+        {
+          "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+          "proposal": 14,
+          "near": 0.5
+        }
+      ],
+      "grant": {
+        "id": 1,
+        "to": "koperasi-mw80aczw.sputnik-v2.testnet",
+        "near": 0.3,
+        "votes": [
+          {
+            "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+            "proposal": 102
+          },
+          {
+            "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+            "proposal": 15
+          }
+        ]
+      }
     }
   },
   "taskbond": [
