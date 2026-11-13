@@ -18,6 +18,7 @@ export function startMockMarket({ port = 8787, acceptMs = 1500, jobs: seed = [] 
       title: j.title,
       description: j.description,
       tags: j.tags ?? [],
+      ...(j.referredBy ? { referredBy: j.referredBy } : {}),
       budgetAmount: String(j.budgetAmount ?? "5"),
       budgetToken: "USDC",
       jobKind: "standard",

@@ -65,9 +65,11 @@ if (process.argv.includes("--reserve")) {
 }
 
 // --resolution 2: a shared standard for the member co-ops' savings and loans (contract 0.3.0)
+// --resolution 3: work passed between member co-ops, and the share the co-op that brought a job gets
 const RESOLUTIONS = {
   1: "Resolution 1: the member co-ops recognise each other's work records (the passport): good standing and finished work earned in one count as a trust source in the other",
   2: "Resolution 2: member co-ops lend at no more than 2% flat for up to 30 days, every loan with a guarantor in good standing, and a loan called late in one is told to the others",
+  3: "Resolution 3: work passes between member co-ops: when one co-op's agent does a job another co-op brought, its receipt names the co-op that brought it, and the co-op that did the work pays that co-op 30% of what the job earned, by its own members' vote",
 };
 const which = process.argv.includes("--resolution") ? Number(process.argv[process.argv.indexOf("--resolution") + 1]) : 1;
 const resolution = RESOLUTIONS[which];

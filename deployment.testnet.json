@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "3e5dc56701610919c311437bbbba192c9db9c5cc27dabf34fd8ca7010991918f",
   "configUri": "config/config.v7.yaml",
-  "codeSha256": "258ff2361a0c7e9bd71f75e4d6506240157024e09568e615680fd52f99c73ad6",
+  "codeSha256": "6185b266fdfa12e180b39350bd7a55d7fbd69659a5a7aca5620b8ea992aae162",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -566,8 +566,37 @@
             "proposal": 18
           }
         ]
+      },
+      {
+        "id": 3,
+        "text": "Resolution 3: work passes between member co-ops: when one co-op's agent does a job another co-op brought, its receipt names the co-op that brought it, and the co-op that did the work pays that co-op 30% of what the job earned, by its own members' vote",
+        "votes": [
+          {
+            "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+            "proposal": 125
+          },
+          {
+            "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+            "proposal": 20
+          }
+        ]
       }
-    ]
+    ],
+    "trade": {
+      "resolution": 3,
+      "coop": "koperasi-mw80aczw.testnet",
+      "job": "demo-b3f5d590-f77f-4822-8d49-b53d692799f6",
+      "referred_by": "koperasi-mw4i2iwk.testnet",
+      "gate": "HqjgNhBPXnYrUoa8YjYTq362v6ko1spbYZSE9jEBKmi5",
+      "model": "deepseek/deepseek-v3.2",
+      "token": "usdc.fakes.testnet",
+      "net": "3800000",
+      "share": "1140000",
+      "paid": "2F8oXUnVqVf778Goa2n4U3t7HLJ9DACWHJfEBHVsARLX",
+      "deposited": "28zXs8DYR9rCPteoCgdczitux4sgoQYQydYah36hqTzv",
+      "proposal": 21,
+      "dao": "koperasi-mw80aczw.sputnik-v2.testnet"
+    }
   },
   "taskbond": [
     {

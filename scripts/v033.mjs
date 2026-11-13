@@ -53,7 +53,7 @@ if (run("vote")) {
 if (run("federation")) {
   const resolutions = [];
   for (const target of CO_OPS) {
-    const text = `Resolution ${3 + CO_OPS.indexOf(target)}: resolution 2's loan ceiling (at most 2% flat, 30 days) becomes binding in ${target.contract}'s code`;
+    const text = `Resolution ${4 + CO_OPS.indexOf(target)}: resolution 2's loan ceiling (at most 2% flat, 30 days) becomes binding in ${target.contract}'s code`;
     const filed = (await view(FED, "get_proposals", { from_index: 0, limit: 50 })).find((p) => p.description === text);
     const id = filed ? filed.id : await propose(account(A), FED, text, fc(target.contract, act("set_federation_rules", { max_rate_bps: 200, max_term_days: 30 })));
     const kind = (await view(FED, "get_proposal", { id })).kind;

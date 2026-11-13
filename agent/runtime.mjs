@@ -357,7 +357,8 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
       let done;
       try {
         done = await infer(config, job, capJob, { local });
-        done = { ...done, proof: { ...done.proof, gate } };
+        // a job another co-op of the federation passed on names it, for the split its resolution sets
+        done = { ...done, proof: { ...done.proof, gate, ...(job.referredBy ? { referred_by: String(job.referredBy).slice(0, 64) } : {}) } };
       } catch (e) {
         if (e.spentMicroUsd) {
           state.spentMicroUsd += e.spentMicroUsd;

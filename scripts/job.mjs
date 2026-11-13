@@ -21,7 +21,8 @@ const JOBS = [
   { title: "Localization: a co-op's welcome note, English to Indonesian", tags: ["localization", "translation"], budgetAmount: "3",
     description: "Translate into Indonesian, plainly, for village members: \"Welcome to the co-op. You own an equal share of the vote. Profit is shared by what you put in and what you do. Ask any member to see the books.\" Keep it under 60 words." },
 ];
-mock.addJob(JOBS[Number(process.argv[2] ?? JOBS.length - 1)]);
+// KOP_REFERRED_BY=<co-op contract>: a job another co-op of the federation passed on (its receipt names it)
+mock.addJob({ ...JOBS[Number(process.argv[2] ?? JOBS.length - 1)], ...(process.env.KOP_REFERRED_BY ? { referredBy: process.env.KOP_REFERRED_BY } : {}) });
 const before = (await view(dep.contract, "get_info")).receipts;
 await runOnce({ dep });
 await sleep(2500); // the stand-in accepts the bid after 1.5 s
