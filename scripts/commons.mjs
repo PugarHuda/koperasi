@@ -14,6 +14,8 @@
 //   --passport  (0.2.8) carol, who did paid tasks in another co-op (koperasi-mw80aczw), mints her record there; the
 //               members vote that co-op a sister; the contract reads her token there and stamps her passport here,
 //               one more trust source for payouts on trust
+//   --passport-back  (0.2.8) the other way: the sister co-op's members vote the showcase a sister; its contract reads
+//               carol's record here (9 paid tasks) and stamps her passport there, so the recognition is mutual
 import fs from "node:fs";
 import { daoAddress } from "./chainsig.mjs";
 import { DEPLOYMENT, NEAR, account, callRaw, decide, fnCall, txUrl, view, vote } from "./lib.mjs";
@@ -127,3 +129,20 @@ if (process.argv.includes("--passport")) {
   console.log(`carol's trust sources here: ${before} → ${await view(dep.contract, "get_trust_sources", { account_id: CAROL })};`,
     JSON.stringify(await view(dep.contract, "get_passport", { account_id: CAROL })));
 }
+
+if (process.argv.includes("--passport-back")) {
+  const sis = JSON.parse(fs.readFileSync(new URL("../deployment.testnet.local.json", import.meta.url), "utf8"));
+  const WHO = "kop-carol-mw4i2iwk.testnet", SB = "kop-bob-mw80aczw.testnet", SS = "kop-steward-mw80aczw.testnet";
+  if (!(await view(dep.contract, "nft_token", { token_id: WHO }))) throw new Error(`${WHO} has no work-record token here`);
+  if (!(await view(sis.contract, "get_sister_coops")).includes(dep.contract)) {
+    const { id } = await decide(account(SB), [SB, SS].map(account), sis.dao,
+      `Recognise ${dep.contract} as a sister co-op: work records there in good standing count as one trust source here`,
+      fnCall(sis.contract, "set_sister_coops", { coops: [dep.contract] }, { tgas: 30 }));
+    console.log(`${sis.dao} proposal #${id} approved: set_sister_coops([${dep.contract}])`);
+  }
+  const r = await callRaw(account(SB), sis.contract, "stamp_passport", { account_id: WHO, coop: dep.contract }, { deposit: NEAR / 100n, tgas: 60 });
+  say(`${sis.contract} read ${WHO}'s record here and stamped it: ${value(r)}`, r);
+  console.log(`trust sources there: ${await view(sis.contract, "get_trust_sources", { account_id: WHO })};`,
+    JSON.stringify(await view(sis.contract, "get_passport", { account_id: WHO })));
+}
+

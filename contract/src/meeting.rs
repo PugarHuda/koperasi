@@ -91,13 +91,18 @@ pub(crate) fn strike(case: u32) {
     Event::AgentStruck { case, strikes: live_strikes().len() as u32, suspended: agent_suspended() }.emit();
 }
 
+/// Paid until: the latest of what the member paid, when the members voted these dues, and when they joined. A record
+/// from earlier dues (voted off, then on again) never makes anyone owe for the time no dues were voted.
+fn paid_until(d: &Dues, joined: u64, a: &AccountId) -> u64 {
+    load::<U64>(&paid_key(a)).map_or(0, |t| t.0).max(d.since.0).max(joined)
+}
+
 impl Koperasi {
     /// Up to date on dues (true when the members voted none, and for anyone who is not a member).
     pub(crate) fn dues_ok(&self, a: &AccountId) -> bool {
         let Some(d) = load::<Dues>(KEY_DUES).filter(|d| d.amount.0 > 0) else { return true };
         let Some(m) = self.members.get(a) else { return true };
-        let until = load::<U64>(&paid_key(a)).map_or(d.since.0.max(m.joined_at.0), |t| t.0);
-        env::block_timestamp() <= until + DUES_GRACE_DAYS * DAY_NS
+        env::block_timestamp() <= paid_until(&d, m.joined_at.0, a) + DUES_GRACE_DAYS * DAY_NS
     }
 }
 
@@ -128,7 +133,7 @@ impl Koperasi {
         let paid = env::attached_deposit().as_yoctonear();
         let periods = (paid / d.amount.0).min(MAX_PERIODS);
         require!(periods >= 1, "attach at least one period's dues");
-        let from = load::<U64>(&paid_key(&who)).map_or(d.since.0.max(m.joined_at.0), |t| t.0);
+        let from = paid_until(&d, m.joined_at.0, &who);
         let until = from + periods as u64 * d.every_days as u64 * DAY_NS;
         save(&paid_key(&who), &U64(until));
         let total = d.amount.0 * periods;
@@ -144,8 +149,7 @@ impl Koperasi {
     pub fn get_dues_status(&self, account_id: AccountId) -> Option<(U64, bool)> {
         let d = load::<Dues>(KEY_DUES).filter(|d| d.amount.0 > 0)?;
         let m = self.members.get(&account_id)?;
-        let until = load::<U64>(&paid_key(&account_id)).map_or(d.since.0.max(m.joined_at.0), |t| t.0);
-        Some((U64(until), self.dues_ok(&account_id)))
+        Some((U64(paid_until(&d, m.joined_at.0, &account_id)), self.dues_ok(&account_id)))
     }
 
     // ---------- the annual members' meeting ----------

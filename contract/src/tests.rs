@@ -2434,6 +2434,12 @@ fn a_member_behind_on_dues_loses_good_standing_until_they_pay_the_arrears() {
     at(&dao(), 100 * DAY);
     k.set_dues(U128(0), 0);
     assert!(k.get_standing(acc("bob.testnet")).1);
+    // voted on again later: alice's old record (paid to day 61) does not make her owe for the time without dues
+    at(&dao(), 200 * DAY);
+    k.set_dues(U128(100 * MILLI), 30);
+    at(&alice, 203 * DAY);
+    assert!(k.get_standing(alice.clone()).1);
+    assert_eq!(k.get_dues_status(alice.clone()).unwrap().0, U64(200 * DAY));
 }
 
 /// The annual members' meeting (0.2.9): members set the agenda, the DAO records the approved report once a year.

@@ -449,6 +449,14 @@ cargo near build reproducible-wasm
     const appeals = await Promise.all(cases.map((c) => (c.status === "Dismissed" ? view(dep.contract, "get_appeal", { id: c.id }).catch(() => null) : null)));
     // contract 0.2.8: what the claimant and the steward filed while the case was open
     const evidence = await Promise.all(cases.map((c) => view(dep.contract, "get_evidence", { id: c.id }).catch(() => [])));
+    // a sha256 in a piece of evidence is checked against the case's receipt: the hash of what the agent delivered
+    const delivered = new Map((await all(dep.contract, "get_receipts").catch(() => [])).map((r) => [r.job_id, r.deliverable_hash]));
+    const against = (c, what) => {
+      const hashes = String(what).match(/\b[0-9a-f]{64}\b/g) ?? [];
+      if (!hashes.length) return "";
+      return hashes.includes(delivered.get(c.job_id)) ? " <strong>(the hash matches the delivered work on the receipt)</strong>"
+        : " <strong>(no hash here matches the receipt's delivered work)</strong>";
+    };
     const APPEAL = { Open: "on appeal: the members vote", Upheld: "appealed: the members overturned it, refunded", Dismissed: "appealed: the members kept the ruling" };
     const kept = (id, st) => claims.filter((c) => c.pledge === id && c.status === st).length;
     rows($("pledges").tBodies[0], [...pledges].reverse().map((p) => `<tr><td><strong>#${p.id}</strong> ${esc(p.what)}</td>
@@ -456,7 +464,7 @@ cargo near build reproducible-wasm
       <td class="num" data-label="Called in">${p.called} of ${p.units}</td><td data-label="Kept / broken">${kept(p.id, "Honored")} / ${kept(p.id, "Broken")}</td></tr>`).join(""));
     const OUT = { Open: "jury out", Upheld: "upheld: refunded", Dismissed: "not upheld" };
     rows($("cases").tBodies[0], [...cases].map((c, i) => [c, appeals[i], evidence[i]]).reverse().map(([c, a, ev]) => `<tr><td><strong>#${c.id}</strong> job ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, brought by ${esc(c.claimant)} for ${esc(c.refund_to)}</span>${
-      ev.map(([by, what]) => `<span class="claim">evidence from ${by === c.claimant ? "the claimant" : "the steward"}: ${esc(what)}</span>`).join("")}</td>
+      ev.map(([by, what]) => `<span class="claim">evidence from ${by === c.claimant ? "the claimant" : "the steward"}: ${esc(what)}${against(c, what)}</span>`).join("")}</td>
       <td class="num" data-label="Refund">${usdc(c.amount)} USDC</td>
       <td data-label="Jurors">${c.jurors.map((j) => { const v = c.votes.find(([x]) => x === j); return `${esc(j)}: ${v ? (v[1] ? "uphold" : "reject") : "–"}`; }).join("<br>")}</td>
       <td data-label="Outcome">${OUT[c.status] ?? esc(c.status)}${c.refund_proposal !== null ? `; <a href="${explorer(dep.dao)}">DAO proposal #${esc(c.refund_proposal)}</a>` : ""}${
