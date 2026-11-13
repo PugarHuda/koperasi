@@ -3,7 +3,7 @@ import React from "react";
 import { AbsoluteFill, Img, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, Easing } from "remotion";
 
 export const INTRO_FPS = 30;
-const SCENE = 5 * INTRO_FPS;
+const SCENE = Math.round((30 * INTRO_FPS) / 7); // seven cards in 30 seconds
 const BLUE = "#2b5cff";
 const GOLD = "#ffd54a";
 const INK = "#030a2a";
@@ -14,9 +14,10 @@ type Card = { kicker: string; title: string; sub: string; shot?: string; shot2?:
 const CARDS: Card[] = [
   { kicker: "Koperasi · NEAR testnet", title: "A co-op owns this AI agent.", sub: "One member, one vote. The agent's prompt, model and wallet answer to the members' votes.", shot: "hero.png" },
   { kicker: "Red team, on-chain", title: "19 attacks. 19 refused.", sub: "Real transactions against the live co-op; your browser re-reads every refusal.", shot: "attacks.png" },
-  { kicker: "Work judged by someone else", title: "95/100 on another team's market.", sub: "Taskbond's guard approved the voted prompt, its reviewer AI scored the work, its escrow paid.", shot: "taskbond.png" },
-  { kicker: "Reputation that travels", title: "Trust earned in one co-op counts in another.", sub: "Only in co-ops the members voted to recognise: the contract reads the record itself.", shot: "passport.png" },
-  { kicker: "Indonesian co-op law, on-chain", title: "The members approve the year's books.", sub: "The agent writes the report in a TEE; the vote records it, sets dues, and the court can suspend the agent.", shot: "meeting.png", shot2: "duties.png" },
+  { kicker: "Work judged by someone else", title: "95/100, three times, on another team's market.", sub: "Taskbond's guard approved the voted prompt, its reviewer AI scored the work, its escrow paid.", shot: "taskbond.png" },
+  { kicker: "Reputation that travels", title: "Trust earned in one co-op counts in another.", sub: "Co-ops recognise each other by vote, and federate: one co-op, one vote, a shared reserve.", shot: "passport.png", shot2: "federation.png" },
+  { kicker: "The agent answers to the court", title: "Three upheld cases, and it is suspended.", sub: "The members reinstated it by vote. Members also lend to each other, each loan with a guarantor.", shot: "duties.png" },
+  { kicker: "Indonesian co-op law, on-chain", title: "The members approve the year's books.", sub: "The agent writes the report in a TEE; the vote records it and sets the dues. One draft was voted down.", shot: "meeting.png" },
   { kicker: "Don't trust us", title: "Check every claim. No clone.", sub: "It reads NEAR, Ethereum, Base and Arbitrum testnets.", code: "curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs\n\nevery claim checks out." },
 ];
 

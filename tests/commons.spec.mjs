@@ -71,6 +71,25 @@ test("the inbox lists what needs the member: a case where they are a juror, a pl
   await expect(inbox).toContainText("Your dues fall due on");
 });
 
+test("surety and loans (0.3.0): a member sees their guarantors and the loan they may take, then the loan to repay", async ({ page }, testInfo) => {
+  onlyLocal(testInfo);
+  const rule = [{ max_loan: "500000000000000000000000", rate_bps: 200, term_days: 30 }, "800000000000000000000000"];
+  await answerViews(page, { get_pledges: [], get_pledge_claims: [], get_cases: [], get_standing: good,
+    get_loan_rule: rule, get_loan: null, get_guarantors: [ALICE] });
+  await page.goto(`/?as=${BOB}`);
+  const box = page.locator("#joinapp");
+  await expect(box).toContainText("Surety and loans");
+  await expect(box).toContainText(`Your guarantors: ${ALICE}`);
+  await expect(box.locator("#w-l-go")).toBeVisible();
+  await expect(box).toContainText("Up to 0.5 NEAR for 30 days at 2% flat; the fund can lend 0.8 NEAR now");
+  await box.locator("#w-l-go").click();
+  await expect(box.locator(".note-line .err")).toContainText("Borrow: an amount of NEAR");
+  await answerViews(page, { get_pledges: [], get_pledge_claims: [], get_cases: [], get_standing: good, get_loan_rule: rule, get_guarantors: [ALICE],
+    get_loan: { principal: "300000000000000000000000", interest: "6000000000000000000000", due: String(now() + 29n * DAY), proposal: 107, status: "Open" } });
+  await page.goto(`/?as=${BOB}`);
+  await expect(box.locator("#w-l-repay")).toContainText("Repay 0.306 NEAR");
+});
+
 test("a juror is offered uphold and reject; someone else is not", async ({ page }, testInfo) => {
   onlyLocal(testInfo);
   await answerViews(page, { get_pledges: [], get_pledge_claims: [], get_cases: [kase()], get_standing: good });
@@ -127,6 +146,6 @@ test("the co-ops page shows who recognises whom, and the federation with each co
   await expect(page.locator("#coops tbody tr", { hasText: "showcase" })).toContainText("koperasi-mw80aczw");
   await expect(page.locator("#fed")).toContainText("koperasi-mw4i2iwk.sputnik-v2.testnet");
   await expect(page.locator("#fed")).toContainText("koperasi-mw80aczw.sputnik-v2.testnet");
-  await expect(page.locator("#resolutions tbody tr")).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.locator("#resolutions tbody tr")).toHaveCount(3, { timeout: 30_000 });
   await expect(page.locator("#resolutions tbody tr", { hasText: "shared reserve" })).toContainText(/Approve \(its proposal #\d+\)/);
 });

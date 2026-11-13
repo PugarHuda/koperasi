@@ -11965,10 +11965,38 @@ var init_eth = __esm({
   }
 });
 
+// web/share.js
+function splitShare(amount, rule, members2) {
+  const savingsPool = amount * BigInt(rule.savings_bps) / BPS;
+  const pointsPool = amount * BigInt(rule.points_bps) / BPS;
+  const weight = members2.map(([, m2]) => BigInt(m2.savings) / SAVINGS_UNIT);
+  const totalSavings = weight.reduce((a, b2) => a + b2, 0n);
+  const totalPoints = members2.reduce((a, [, m2]) => a + BigInt(m2.points), 0n);
+  let paid = 0n;
+  const shares2 = members2.map(([account2, m2], i) => {
+    let share = 0n;
+    if (totalSavings > 0n) share += savingsPool * weight[i] / totalSavings;
+    if (totalPoints > 0n) share += pointsPool * BigInt(m2.points) / totalPoints;
+    paid += share;
+    return { account: account2, share };
+  });
+  return { shares: shares2, reserve: amount - paid };
+}
+var BPS, SAVINGS_UNIT, B64, SIGNED;
+var init_share = __esm({
+  "web/share.js"() {
+    BPS = 10000n;
+    SAVINGS_UNIT = 10n ** 21n;
+    B64 = "[A-Za-z0-9+/]+={0,2}";
+    SIGNED = new RegExp(String.raw` \[nep413 (ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}) (${B64}) (${B64})\]$`);
+  }
+});
+
 // scripts/chainsig.mjs
 import fs2 from "node:fs";
-async function daoAddress(dao, path3 = PATH) {
-  const pk = await view(SIGNER, "derived_public_key", { path: path3, predecessor: dao, domain_id: 0 });
+import path2 from "node:path";
+async function daoAddress(dao, path4 = PATH) {
+  const pk = await view(SIGNER, "derived_public_key", { path: path4, predecessor: dao, domain_id: 0 });
   return addressOf(baseDecode(pk.split(":")[1]));
 }
 async function signByVote(hash, description, compiled) {
@@ -12023,6 +12051,7 @@ var init_chainsig = __esm({
     init_sha3();
     init_lib();
     init_eth();
+    init_share();
     init_lib2();
     init_eth();
     SIGNER = NETWORK === "mainnet" ? "v1.signer" : "v1.signer-prod.testnet";
@@ -12099,6 +12128,40 @@ Ethereum address ${address} (MPC ${SIGNER}, path ${PATH})`);
       save();
       console.log(`signed by vote #${id2}: ${what}
 ethereum tx ${dep.chainSignatures.transfer.hash} (broadcast with --broadcast once ${address} holds Sepolia ETH)`);
+    } else if (main && process.argv.includes("--batch")) {
+      const amount = Number(process.argv[process.argv.indexOf("--batch") + 1]) || 6e-4;
+      const units = BigInt(Math.round(amount * 1e6)) * 10n ** 12n;
+      const [info2, roster, routes2] = await Promise.all([
+        view(dep.contract, "get_info"),
+        view(dep.contract, "get_members", { from: 0, limit: 100 }),
+        view(dep.contract, "get_payout_routes")
+      ]);
+      const evm = new Map(routes2.map(([a, , x2]) => [a, x2]));
+      const { shares: shares2 } = splitShare(units, info2.share_rule, roster.filter(([a]) => evm.has(a)));
+      const payees = shares2.filter((x2) => x2.share > 0n);
+      if (!payees.length) throw new Error("no member with an EVM route and a share");
+      let nonce = BigInt(await eth("eth_getTransactionCount", [address, "latest"]));
+      const txs = [];
+      for (const p2 of payees) {
+        const to = evm.get(p2.account);
+        const gas = BigInt(await eth("eth_estimateGas", [{ from: address, to, value: `0x${p2.share.toString(16)}` }])) * 12n / 10n;
+        txs.push({ member: p2.account, t: { chainId: SEPOLIA.chainId, nonce: nonce++, maxPriorityFeePerGas: 1000000000n, maxFeePerGas: 5000000000n, gas, to, value: p2.share } });
+      }
+      const payouts = [];
+      for (const { member, t: t2 } of txs) {
+        const what = `[trezu-tmpl:kop-pay-ethereum] Profit share in Sepolia ETH (${amount} split by the voted rule among the members with an EVM route): ${Number(t2.value) / 1e18} ETH from the co-op's Ethereum address ${address} to ${member}'s route ${t2.to} (nonce ${t2.nonce}, NEAR Chain Signatures) tx ${txText(t2)}`;
+        const { id: id2, sig } = await signByVote(txHash(t2), what);
+        if (recover(txHash(t2), sig) !== address) throw new Error(`the signature for ${member} does not recover ${address}`);
+        const hash = await eth("eth_sendRawTransaction", [rawTx(t2, sig)]);
+        console.log(`#${id2}: ${member} ${Number(t2.value) / 1e18} ETH to ${t2.to}: ${SEPOLIA.explorer}${hash}`);
+        payouts.push({ member, to: t2.to, eth: Number(t2.value) / 1e18, nonce: Number(t2.nonce), proposal: id2, hash });
+      }
+      dep.chainSignatures = { ...dep.chainSignatures, batch: { eth: amount, payouts } };
+      save();
+      for (const f of [path2.join(ROOT, "web/deployment.json")]) {
+        const d3 = JSON.parse(fs2.readFileSync(f, "utf8"));
+        fs2.writeFileSync(f, JSON.stringify({ ...d3, chainSignatures: dep.chainSignatures }, null, 2) + "\n");
+      }
     } else if (main && process.argv.includes("--broadcast")) {
       const x2 = dep.chainSignatures?.transfer;
       if (!x2) throw new Error("no signed transfer: run --tx first");
@@ -12120,9 +12183,9 @@ ethereum tx ${dep.chainSignatures.transfer.hash} (broadcast with --broadcast onc
 // scripts/verify.mjs
 var verify_exports = {};
 import fs3 from "node:fs";
-import path2 from "node:path";
+import path3 from "node:path";
 async function file(rel, served) {
-  if (!PAGE) return fs3.readFileSync(path2.join(ROOT, rel));
+  if (!PAGE) return fs3.readFileSync(path3.join(ROOT, rel));
   const res = await fetch(`${PAGE}/${served}`, { signal: AbortSignal.timeout(3e4) });
   if (!res.ok) throw new Error(`${PAGE}/${served}: HTTP ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
@@ -12162,7 +12225,7 @@ var init_verify = __esm({
     init_lib2();
     await init_chainsig();
     PAGE = process.env.KOP_PAGE;
-    d2 = JSON.parse(String(await file(path2.relative(ROOT, DEPLOYMENT), "deployment.json")));
+    d2 = JSON.parse(String(await file(path3.relative(ROOT, DEPLOYMENT), "deployment.json")));
     if (PAGE) console.log(`reading the deployment, the by-laws and the gate program from ${PAGE}; every claim from the chain
 `);
     view2 = async (account_id, method_name, args = {}) => {
@@ -12441,7 +12504,7 @@ var init_verify = __esm({
       );
     }
     GATE_WASM = sha2562(await file("web/outlayer/bylaws-check.wasm", "outlayer/bylaws-check.wasm"));
-    GATE_WASMS = [GATE_WASM, "725254a197b432cdb366ee6f3e4086d9ff9099ed350d114fcf6fb87d2e984fa0"];
+    GATE_WASMS = [GATE_WASM, "5d1c4ec7ae6a3b3f89dc101acde74034b532dbe73ed9b80900783af1869a28a5", "725254a197b432cdb366ee6f3e4086d9ff9099ed350d114fcf6fb87d2e984fa0"];
     if (d2.outlayer) {
       const o = d2.outlayer;
       const g2 = await gate(o.tx, o.sender, d2.configHash);
@@ -12589,6 +12652,11 @@ var init_verify = __esm({
         `${f.dao}: members ${members2.join(", ")}; resolution #${f.resolution.id} ${res.status}; ` + f.resolution.votes.map((v, i) => `${v.dao.split(".")[0]} voted by its proposal #${v.proposal} (${behind[i] ? "approved by its members" : "NOT FOUND"})`).join("; ")
       );
     }
+    for (const r2 of d2.federation?.resolutions ?? []) {
+      const [res, ...ps] = await Promise.all([view2(d2.federation.dao, "get_proposal", { id: r2.id }), ...r2.votes.map((v) => view2(v.dao, "get_proposal", { id: v.proposal }))]);
+      const ok = res.status === "Approved" && r2.votes.every((v, i) => ps[i].status === "Approved" && res.votes[v.dao] === "Approve" && argsOf(ps[i]).some((a) => a.method === "act_proposal" && a.args.id === r2.id));
+      check(ok, `the federation's resolution #${r2.id} passed by each co-op's own vote`, `${r2.text.slice(0, 90)}\u2026: ${r2.votes.map((v) => `${v.dao.split(".")[0]} #${v.proposal}`).join(", ")}`);
+    }
     if (d2.federation?.reserve) {
       const f = d2.federation, r2 = f.reserve;
       const ins = await Promise.all(r2.paid_in.map((x2) => view2(x2.dao, "get_proposal", { id: x2.proposal })));
@@ -12625,6 +12693,24 @@ var init_verify = __esm({
         res.every((r2) => r2.ok) && Boolean(approvedCall("set_loan_rule", () => true)),
         "savings and loans: members with a guarantor borrowed from the fund the members voted, and repaid into the treasury",
         res.map((r2) => r2.line).join("; ")
+      );
+    }
+    if (d2.chainSignatures?.batch) {
+      const b2 = d2.chainSignatures.batch;
+      const sep = async (method, params) => (await (await fetch(SEPOLIA.rpc, {
+        method: "POST",
+        signal: AbortSignal.timeout(3e4),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+      })).json()).result;
+      const res = await Promise.all(b2.payouts.map(async (p2) => {
+        const [prop, tx, rc] = await Promise.all([view2(d2.dao, "get_proposal", { id: p2.proposal }), sep("eth_getTransactionByHash", [p2.hash]), sep("eth_getTransactionReceipt", [p2.hash])]);
+        return prop.status === "Approved" && prop.kind.FunctionCall?.receiver_id === SIGNER && tx?.to?.toLowerCase() === p2.to && rc?.status === "0x1";
+      }));
+      check(
+        res.every(Boolean),
+        "a profit share in Sepolia ETH went to each member's EVM route, every payment signed by NEAR Chain Signatures only after the members' vote",
+        b2.payouts.map((p2, i) => `${p2.member.split(".")[0]} ${p2.eth.toFixed(6)} ETH by #${p2.proposal}: ${res[i] ? "landed" : "NOT FOUND"}`).join("; ")
       );
     }
     if (d2.agents?.translator) {

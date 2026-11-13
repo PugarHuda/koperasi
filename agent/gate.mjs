@@ -12,7 +12,8 @@ export const OUTLAYER = "outlayer.testnet";
 export const PAGE = "https://koperasi-kohl.vercel.app";
 export const GATE_RPC = "https://rpc.testnet.fastnear.com";
 const WASM = path.join(ROOT, "web/outlayer/bylaws-check.wasm");
-const LIMITS = { max_instructions: 10_000_000_000, max_memory_mb: 128, max_execution_seconds: 30 };
+// 60 s (was 30): of 19 gates on 13 Nov, 6 came back with no answer; a fetch from the page and the RPC can take long
+const LIMITS = { max_instructions: 10_000_000_000, max_memory_mb: 128, max_execution_seconds: 60 };
 
 /** The program as built in the repo, and as the page serves it (they must be the same bytes). */
 export async function program() {
@@ -28,12 +29,13 @@ export async function program() {
 /**
  * Runs the gate on-chain, paid by `payer`. Returns the enclave's output and the transaction. With `job`
  * ({id, tags, price_usdc}) the enclave also judges the job by the matched by-laws' job_filter (`out.job.allowed`).
- * @param {string} payer @param {string} contract @param {{ id: string, tags: string[], price_usdc: number }} [job]
+ * @param {string} payer @param {string} contract @param {{ id: string, tags: string[], price_usdc: number }} [job] @param {string} [agent]
  * @returns {Promise<{ tx: string, sender: string, wasm: string, wasm_sha256: string, out: any }>}
  */
-export async function bylawsGate(payer, contract, job) {
+export async function bylawsGate(payer, contract, job, agent) {
   const { url, hash } = await program();
-  const input = JSON.stringify({ contract, rpc: GATE_RPC, page: PAGE, ...(job ? { job } : {}) });
+  // `agent`: a further agent with its own voted by-laws; the enclave then reads get_agent_config for it
+  const input = JSON.stringify({ contract, rpc: GATE_RPC, page: PAGE, ...(job ? { job } : {}), ...(agent ? { agent } : {}) });
   const cost = BigInt(String(await view(OUTLAYER, "estimate_execution_cost", { resource_limits: LIMITS, input_size: input.length })).replace(/"/g, ""));
   const r = await callRaw(account(payer), OUTLAYER, "request_execution",
     { source: { WasmUrl: { url, hash, build_target: "wasm32-wasip2" } }, resource_limits: LIMITS, input_data: input,

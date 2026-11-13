@@ -50,6 +50,12 @@ export const rawHash = (raw) => `0x${toHex(keccak_256(fromHex(raw)))}`;
  * @param {{ chainId: bigint, nonce: bigint, maxPriorityFeePerGas: bigint, maxFeePerGas: bigint, gas: bigint, to: string, value: bigint }} t
  */
 export const txText = (t) => JSON.stringify(Object.fromEntries(Object.entries(t).map(([k, v]) => [k, String(v)])));
+/** Every `tx {…}` in a description, in order (a batch of payments signed in one vote); only Sepolia transactions. */
+export function txsFromText(description) {
+  const re = /tx (\{"chainId":"11155111","nonce":"\d+","maxPriorityFeePerGas":"\d+","maxFeePerGas":"\d+","gas":"\d+","to":"0x[0-9a-f]{40}","value":"\d+"\})/g;
+  return [...String(description).matchAll(re)].map((m) => txFromText(`tx ${m[1]}`));
+}
+
 /** The fields back from a proposal's description (`tx {…}`), or null; only a Sepolia transaction (chain id 11155111). */
 export function txFromText(description) {
   const m = /tx (\{"chainId":"11155111","nonce":"\d+","maxPriorityFeePerGas":"\d+","maxFeePerGas":"\d+","gas":"\d+","to":"0x[0-9a-f]{40}","value":"\d+"\})/.exec(String(description));

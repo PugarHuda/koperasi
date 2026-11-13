@@ -103,10 +103,13 @@ export async function verifiedTee(model) {
 }
 
 /** Reads the config file and checks it against the hash on-chain. Throws ConfigMismatch if they differ. */
-export async function loadApprovedConfig(dep, file = dep.configUri) {
+export async function loadApprovedConfig(dep, file = dep.configUri, agentId = null) {
+  // a further agent the members voted its own by-laws runs those (contract 0.3.2 get_agent_config)
+  const own = agentId ? await view(dep.contract, "get_agent_config", { account_id: agentId }).catch(() => null) : null;
+  if (own) file = own.uri;
   const raw = fs.readFileSync(path.join(ROOT, file));
   const local = sha256(raw);
-  const onchain = await view(dep.contract, "get_config");
+  const onchain = own ?? await view(dep.contract, "get_config");
   if (local !== onchain.hash) {
     throw new ConfigMismatch(`config_mismatch: local ${local.slice(0, 12)}… ≠ approved v${onchain.version} ${onchain.hash.slice(0, 12)}…`);
   }
@@ -205,7 +208,10 @@ const usdcUnits = (s) => {
  * @param {{ dep?: any, log?: (msg: string) => void, configFile?: string }} [opts]
  */
 export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8")), log = console.log, configFile } = {}) {
-  const { config, hash, version } = await loadApprovedConfig(dep, configFile);
+  // KOP_AGENT: run as one of the further agents the members voted (contract 0.3.1); it takes only its voted tags, and
+  // runs its own by-laws if the members voted it some (0.3.2)
+  const me = process.env.KOP_AGENT ?? dep.agent;
+  const { config, hash, version } = await loadApprovedConfig(dep, configFile, me === dep.agent ? null : me);
   const info = await view(dep.contract, "get_info");
   if (info.paused) {
     log("koperasi is paused by the DAO: not working");
@@ -223,8 +229,6 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
       return;
     }
   }
-  // KOP_AGENT: run as one of the further agents the members voted (contract 0.3.1); it takes only its voted tags
-  const me = process.env.KOP_AGENT ?? dep.agent;
   const agent = account(me);
   const voted = (await view(dep.contract, "get_agents").catch(() => null))?.find((a) => a.account === me);
   if (me !== dep.agent && !voted) throw new Error(`${me} is not an agent the members voted`);
@@ -325,12 +329,13 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         const payer = process.env.KOP_GATE_PAYER ?? dep.steward;
         // the enclave also judges this job by the by-laws it matched: the receipt's job id, its tags and what it pays
         const judged = { id: a.assignmentId, tags: job.tags ?? [], price_usdc: Number(a.escrowAmount) };
-        let g = await bylawsGate(payer, dep.contract, judged);
+        const own = me !== dep.agent && (await view(dep.contract, "get_agent_config", { account_id: me }).catch(() => null)) ? me : undefined;
+        let g = await bylawsGate(payer, dep.contract, judged, own);
         // no answer at all: OutLayer's worker failed ("Execution promise failed", the deposit refunded but 0.001 NEAR),
         // which testnet does often; asked up to twice more. A mismatch or a refusal is never asked again.
         for (let k = 0; k < 2 && (g.out === null || g.out === undefined); k++) {
           log(`the by-laws gate gave no answer (tx ${g.tx}); asking again`);
-          g = await bylawsGate(payer, dep.contract, judged);
+          g = await bylawsGate(payer, dep.contract, judged, own);
         }
         if (!g.out?.match || g.out.voted_sha256 !== hash) throw new Error(`no match (${JSON.stringify(g.out).slice(0, 160)})`);
         if (g.out.job?.id !== judged.id) throw new Error(`the enclave did not judge this job (${JSON.stringify(g.out.job).slice(0, 120)})`);

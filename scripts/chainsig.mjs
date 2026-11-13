@@ -9,11 +9,13 @@
 // it from the DAO's account and a path, and signs for it only when the DAO itself calls `sign`, which a Sputnik DAO does
 // only by a members' vote. The statement is an EIP-191 message, so any Ethereum tool can recover the signer.
 import fs from "node:fs";
+import path from "node:path";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { baseDecode } from "near-api-js";
 import { rawTx, txHash, txText } from "../web/eth.js";
-import { DEPLOYMENT, NETWORK, account, propose, txUrl, view, vote } from "./lib.mjs";
+import { splitShare } from "../web/share.js";
+import { DEPLOYMENT, NETWORK, ROOT, account, propose, txUrl, view, vote } from "./lib.mjs";
 
 export const SIGNER = NETWORK === "mainnet" ? "v1.signer" : "v1.signer-prod.testnet";
 export const PATH = "ethereum-1";
@@ -128,6 +130,44 @@ if (main && process.argv.includes("--sign")) {
     maxPriorityFeePerGas: String(t.maxPriorityFeePerGas), maxFeePerGas: String(t.maxFeePerGas), gas: String(t.gas), proposal: id, tx, signature: sig, raw, hash: `0x${hex(keccak_256(Buffer.from(raw.slice(2), "hex")))}` } };
   save();
   console.log(`signed by vote #${id}: ${what}\nethereum tx ${dep.chainSignatures.transfer.hash} (broadcast with --broadcast once ${address} holds Sepolia ETH)`);
+} else if (main && process.argv.includes("--batch")) {
+  // a profit share in Sepolia ETH from the co-op's Ethereum address, to every member whose payout route is an EVM
+  // address, split by the contract's voted rule among them, consecutive nonces; each payment signed by its members'
+  // vote and sent, all in one run.
+  const amount = Number(process.argv[process.argv.indexOf("--batch") + 1]) || 0.0006;
+  const units = BigInt(Math.round(amount * 1e6)) * 10n ** 12n;
+  const [info, roster, routes] = await Promise.all([view(dep.contract, "get_info"), view(dep.contract, "get_members", { from: 0, limit: 100 }),
+    view(dep.contract, "get_payout_routes")]);
+  const evm = new Map(routes.map(([a, , x]) => [a, x]));
+  const { shares } = splitShare(units, info.share_rule, roster.filter(([a]) => evm.has(a)));
+  const payees = shares.filter((x) => x.share > 0n);
+  if (!payees.length) throw new Error("no member with an EVM route and a share");
+  let nonce = BigInt(await eth("eth_getTransactionCount", [address, "latest"]));
+  const txs = [];
+  for (const p of payees) {
+    const to = evm.get(p.account);
+    const gas = (BigInt(await eth("eth_estimateGas", [{ from: address, to, value: `0x${p.share.toString(16)}` }])) * 12n) / 10n;
+    txs.push({ member: p.account, t: { chainId: SEPOLIA.chainId, nonce: nonce++, maxPriorityFeePerGas: 1_000_000_000n, maxFeePerGas: 5_000_000_000n, gas, to, value: p.share } });
+  }
+  // NEAR's MPC network on testnet times out when one proposal asks it for two signatures at once (#112, #113 on
+  // 13 Nov: "Request has timed out"), so each payment is its own sign proposal: filed and voted in one run, each one
+  // a payment the page checks on its own (the hash is its transaction's)
+  const payouts = [];
+  for (const { member, t } of txs) {
+    const what = `[trezu-tmpl:kop-pay-ethereum] Profit share in Sepolia ETH (${amount} split by the voted rule among the members with an EVM route): `
+      + `${Number(t.value) / 1e18} ETH from the co-op's Ethereum address ${address} to ${member}'s route ${t.to} (nonce ${t.nonce}, NEAR Chain Signatures) tx ${txText(t)}`;
+    const { id, sig } = await signByVote(txHash(t), what);
+    if (recover(txHash(t), sig) !== address) throw new Error(`the signature for ${member} does not recover ${address}`);
+    const hash = await eth("eth_sendRawTransaction", [rawTx(t, sig)]);
+    console.log(`#${id}: ${member} ${Number(t.value) / 1e18} ETH to ${t.to}: ${SEPOLIA.explorer}${hash}`);
+    payouts.push({ member, to: t.to, eth: Number(t.value) / 1e18, nonce: Number(t.nonce), proposal: id, hash });
+  }
+  dep.chainSignatures = { ...dep.chainSignatures, batch: { eth: amount, payouts } };
+  save();
+  for (const f of [path.join(ROOT, "web/deployment.json")]) {
+    const d = JSON.parse(fs.readFileSync(f, "utf8"));
+    fs.writeFileSync(f, JSON.stringify({ ...d, chainSignatures: dep.chainSignatures }, null, 2) + "\n");
+  }
 } else if (main && process.argv.includes("--broadcast")) {
   const x = dep.chainSignatures?.transfer;
   if (!x) throw new Error("no signed transfer: run --tx first");

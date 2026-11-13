@@ -392,7 +392,18 @@ impl Koperasi {
         } else {
             env::storage_remove(&job_case_key(&c.job_id));
         }
-        if upheld {
+        if upheld && crate::lending::risk_fund() >= c.amount.0 {
+            // 0.3.2: the risk fund holds enough: the buyer is refunded at once, no proposal needed
+            crate::meeting::strike(c.id);
+            let _ = Promise::new(c.claimant.clone()).transfer(COURT_BOND);
+            crate::lending::take_risk(c.amount.0);
+            Event::RefundFromRiskFund { id: c.id, amount: c.amount }.emit();
+            let _ = ext_ft::ext(self.usdc_id.clone())
+                .with_attached_deposit(NearToken::from_yoctonear(1))
+                .with_static_gas(Gas::from_tgas(15))
+                .ft_transfer(c.refund_to.clone(), c.amount, Some(format!("Koperasi court case #{}: refund from the risk fund", c.id)))
+                .then(Self::ext(env::current_account_id()).with_static_gas(crate::lending::GAS_RISK_REFUND).on_risk_refund(c.id, c.amount));
+        } else if upheld {
             crate::meeting::strike(c.id); // a case upheld against the agent's job
             let _ = Promise::new(c.claimant.clone()).transfer(COURT_BOND);
             let description = format!("Koperasi court case #{}: refund {} USDC (6 decimals: {}) to {} for job {}, upheld by the jury",

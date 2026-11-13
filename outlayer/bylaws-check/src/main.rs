@@ -27,6 +27,20 @@ struct Input {
     rpc: String,
     page: String,
     job: Option<Job>,
+    /// A further agent with its own voted by-laws (contract 0.3.2 `get_agent_config`); none: the co-op's by-laws.
+    agent: Option<String>,
+}
+
+fn b64(data: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for c in data.chunks(3) {
+        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        for i in 0..4 {
+            out.push(if i <= c.len() { T[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
+        }
+    }
+    out
 }
 
 /// `job_filter` from the by-laws (tags_any, min_price_usdc). A line reader, not YAML: the file's bytes were just
@@ -73,10 +87,14 @@ fn run() -> Result<Value, String> {
     }
     let client = Client::new();
 
-    // what the members voted, straight from the chain ({} as base64 is "e30=")
+    // what the members voted, straight from the chain: the co-op's by-laws, or the further agent's own
+    let (method, args) = match &input.agent {
+        Some(a) => ("get_agent_config", b64(json!({ "account_id": a }).to_string().as_bytes())),
+        None => ("get_config", "e30=".to_string()), // {} as base64
+    };
     let body = json!({ "jsonrpc": "2.0", "id": 1, "method": "query", "params": {
         "request_type": "call_function", "finality": "final", "account_id": input.contract,
-        "method_name": "get_config", "args_base64": "e30=" } }).to_string();
+        "method_name": method, "args_base64": args } }).to_string();
     let res = client.post(&input.rpc).header("content-type", "application/json").body(body.as_bytes())
         .send().map_err(|e| format!("rpc: {e}"))?;
     let rpc: Value = serde_json::from_slice(&res.body().map_err(|e| format!("rpc: {e}"))?).map_err(|e| format!("rpc json: {e}"))?;
@@ -108,7 +126,7 @@ fn run() -> Result<Value, String> {
         (None, _) => Value::Null,
     };
     Ok(json!({
-        "contract": input.contract, "rpc": input.rpc, "page": input.page, "version": config["version"], "uri": uri, "url": url,
+        "contract": input.contract, "agent": input.agent, "rpc": input.rpc, "page": input.page, "version": config["version"], "uri": uri, "url": url,
         "voted_sha256": voted, "file_sha256": got, "match": got == voted, "job": job,
     }))
 }
@@ -134,5 +152,7 @@ mod tests {
         assert!(!judge(&job("research", 1.5), &tags, min).0);
         assert!(!judge(&job("research", f64::NAN), &tags, min).0);
         assert!(job_filter("version: 1\n").is_err());
+        assert_eq!(b64(b"{}"), "e30=");
+        assert_eq!(b64(br#"{"account_id":"a.testnet"}"#), "eyJhY2NvdW50X2lkIjoiYS50ZXN0bmV0In0=");
     }
 }

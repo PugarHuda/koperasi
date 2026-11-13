@@ -30,27 +30,27 @@
       "network": "sepolia",
       "from": "0xb3dc0128b4a9804de94796480bef8ba014dfca7d",
       "to": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
-      "eth": 0.001,
-      "nonce": 2,
+      "toNote": "bob's own Chain Signatures address",
+      "eth": 0.0001,
+      "nonce": 3,
       "maxPriorityFeePerGas": "1000000000",
       "maxFeePerGas": "5000000000",
       "gas": "25200",
-      "proposal": 81,
-      "tx": "HvNtFRGDVXbZHLjsxf9Qi8mmWBXSqhuePzYoBYydairZ",
+      "proposal": 114,
+      "tx": "2i71LKHDJwarCEmqj59xdPuhiSHaday3sxDidgNB5GsH",
       "signature": {
         "scheme": "Secp256k1",
         "big_r": {
-          "affine_point": "029fa28249d989359ff2078ad978eb0dadc23af8e063d304155cee0997c71771a1"
+          "affine_point": "03343f543eb6c54022d0f967eb998971bab0c680589731727aed1a3b78786b1f96"
         },
         "s": {
-          "scalar": "7c6b88e58bc7c9e21dc2194dff73087e791c2c98121638acd4462e25b33e4a09"
+          "scalar": "355fea27eec10c17ec9076cae8fd5fee8412bdec550876b45f74adb396dddb6d"
         },
-        "recovery_id": 0
+        "recovery_id": 1
       },
-      "raw": "0x02f87583aa36a702843b9aca0085012a05f2008262709489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c080a09fa28249d989359ff2078ad978eb0dadc23af8e063d304155cee0997c71771a1a07c6b88e58bc7c9e21dc2194dff73087e791c2c98121638acd4462e25b33e4a09",
-      "hash": "0x8cbfea39832739c8ef053c8c567ddce05c97dd5e9f0a6a8945a52fd288fbb740",
-      "sent": true,
-      "trezu": "kop-pay-ethereum"
+      "raw": "0x02f87483aa36a703843b9aca0085012a05f2008262709489b70a44dc6ebf5f9015de6f7077561a0d927138865af3107a400080c001a0343f543eb6c54022d0f967eb998971bab0c680589731727aed1a3b78786b1f96a0355fea27eec10c17ec9076cae8fd5fee8412bdec550876b45f74adb396dddb6d",
+      "hash": "0xe6a4091abbe61e7f0d273fb53105c618a779d239a79916c505ee42969c941793",
+      "sent": true
     },
     "transfers_before": [
       {
@@ -105,8 +105,55 @@
         "raw": "0x02f87683aa36a701843b9aca0085012a05f2008303cc259489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c080a0091280c3e6c60679b36c2c193250d1ce3ae492a5dfc4cd4d2d2515a3575a7658a016bece3785be69c0090af299aebde6162652b0c9227ed209dd10eb19e19a009f",
         "hash": "0x9f794e2d81f016671cf49f5c5984371e1b9c33e6c58606c9dbb5ba0cb8bf1da9",
         "sent": true
+      },
+      {
+        "network": "sepolia",
+        "from": "0xb3dc0128b4a9804de94796480bef8ba014dfca7d",
+        "to": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
+        "eth": 0.001,
+        "nonce": 2,
+        "maxPriorityFeePerGas": "1000000000",
+        "maxFeePerGas": "5000000000",
+        "gas": "25200",
+        "proposal": 81,
+        "tx": "HvNtFRGDVXbZHLjsxf9Qi8mmWBXSqhuePzYoBYydairZ",
+        "signature": {
+          "scheme": "Secp256k1",
+          "big_r": {
+            "affine_point": "029fa28249d989359ff2078ad978eb0dadc23af8e063d304155cee0997c71771a1"
+          },
+          "s": {
+            "scalar": "7c6b88e58bc7c9e21dc2194dff73087e791c2c98121638acd4462e25b33e4a09"
+          },
+          "recovery_id": 0
+        },
+        "raw": "0x02f87583aa36a702843b9aca0085012a05f2008262709489b70a44dc6ebf5f9015de6f7077561a0d92713887038d7ea4c6800080c080a09fa28249d989359ff2078ad978eb0dadc23af8e063d304155cee0997c71771a1a07c6b88e58bc7c9e21dc2194dff73087e791c2c98121638acd4462e25b33e4a09",
+        "hash": "0x8cbfea39832739c8ef053c8c567ddce05c97dd5e9f0a6a8945a52fd288fbb740",
+        "sent": true,
+        "trezu": "kop-pay-ethereum"
       }
-    ]
+    ],
+    "batch": {
+      "eth": 0.0006,
+      "payouts": [
+        {
+          "member": "kop-alice-mw4i3w8f.testnet",
+          "to": "0x5e3b0f2c5d9297f6d8b295ac746ca1d43340e29d",
+          "eth": 0.000291428571428571,
+          "nonce": 4,
+          "proposal": 115,
+          "hash": "0x328172c58946734c59de7b454ae5e8f166cfe0359d0248c1d267b6110411192c"
+        },
+        {
+          "member": "kop-bob-mw4i3w8f.testnet",
+          "to": "0x89b70a44dc6ebf5f9015de6f7077561a0d927138",
+          "eth": 0.000188571428571428,
+          "nonce": 5,
+          "proposal": 116,
+          "hash": "0x9ee24f8013ea885f92a7d6bcf1fe550d16cd0a2aeba2afafa9b928544e56f748"
+        }
+      ]
+    }
   },
   "intents": {
     "provider": "Tidepool (testnet mirror of the NEAR Intents Agent API)",
@@ -504,7 +551,23 @@
           }
         ]
       }
-    }
+    },
+    "resolutions": [
+      {
+        "id": 2,
+        "text": "Resolution 2: member co-ops lend at no more than 2% flat for up to 30 days, every loan with a guarantor in good standing, and a loan called late in one is told to the others",
+        "votes": [
+          {
+            "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+            "proposal": 111
+          },
+          {
+            "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+            "proposal": 18
+          }
+        ]
+      }
+    ]
   },
   "taskbond": [
     {

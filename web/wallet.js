@@ -1,7 +1,7 @@
 // Join the co-op from the page with a testnet wallet: pay the deposit, ask the members (a DAO proposal from your own
 // wallet), sync once they vote you in. Members can then vote on open proposals and claim their profit share.
 import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
-import { SEPOLIA, eth, plainPayment, rawHash, rawTx, toHex, transfer, txFromText, txHash, txText } from "./eth.js";
+import { SEPOLIA, eth, plainPayment, rawHash, rawTx, toHex, transfer, txFromText, txsFromText, txHash, txText } from "./eth.js";
 import { dep, view, all, query, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
 import { affordable, checkVouch, inviteOf, inviteParam, joinText, vouchParam, vouchSuffix, vouchText, nearUnits, oneLine, payPath, plainCall, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
@@ -102,6 +102,12 @@ const describe = (p, s) => {
   }
   if (k === "BountyDone") return `Pay task #${p.kind.BountyDone.bounty_id} to ${oneLine(p.kind.BountyDone.receiver_id)} from the treasury`;
   if (k === "Transfer") return `Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${oneLine(p.kind.Transfer.receiver_id)}`;
+  const batch = ethBatch(p);
+  if (batch) return batch.ok
+    ? `Pay ${batch.ts.length} Sepolia ETH payments from the co-op's Ethereum address, each signed by NEAR's MPC network for the DAO:\n`
+      + batch.ts.map((t) => `${ethAmt(t.value)} ETH to ${t.to} (nonce ${t.nonce}, fee at most ${ethAmt(t.gas * t.maxFeePerGas)} ETH)`).join("\n")
+      + "\nChecked here: each hash to sign is the transaction's at the same place."
+    : "Sign several hashes with the co-op's Ethereum address.\nWARNING: they do not all match the plain Sepolia payments in the description. Do not approve.";
   const pay = ethPayment(p);
   if (pay) return pay.ok
     ? `Pay ${ethAmt(pay.t.value)} Sepolia ETH from the co-op's Ethereum address to ${pay.t.to} (Sepolia, nonce ${pay.t.nonce}, fee at most ${ethAmt(pay.t.gas * pay.t.maxFeePerGas)} ETH): NEAR's MPC network signs it for the DAO.
@@ -134,6 +140,20 @@ function ethPayment(p) {
   // the hash must be this transaction's, and the transaction a plain Sepolia payment (no other chain, no outsized fee)
   const matches = !!t && toHex(txHash(t)) === asked;
   return { asked, t, matches, ok: matches && plainPayment(t) };
+}
+
+/**
+ * A batch of payments from the co-op's Ethereum address signed in one vote (scripts/chainsig.mjs --batch): every sign
+ * action must ask for the hash of the transaction at the same place in the description, each a plain Sepolia payment.
+ */
+function ethBatch(p) {
+  if (kindOf(p) !== "FunctionCall" || p.kind.FunctionCall.receiver_id !== SIGNER) return null;
+  const a = p.kind.FunctionCall.actions;
+  if (a.length < 2 || a.some((x) => x.method_name !== "sign")) return null;
+  const ts = txsFromText(p.description);
+  const asked = a.map((x) => { try { return JSON.parse(atob(x.args)).request.payload_v2.Ecdsa; } catch { return null; } });
+  const ok = ts.length === a.length && ts.every((t, i) => t && toHex(txHash(t)) === asked[i] && plainPayment(t));
+  return { ts, ok };
 }
 
 // proposals are anyone's on-chain data: one malformed proposal must not take the panel down for every member
@@ -314,7 +334,8 @@ function inboxPanel(s) {
     ? ' <button type="button" class="linkish" id="w-notify">Tell me in this browser when something new needs me</button>' : "";
   return `<div class="inbox" id="w-inbox"><h3 class="jh">Needs you${items.length ? ` (${items.length})` : ""}</h3>${items.length
     ? `<ul>${items.map((i) => `<li>${fresh.includes(i) ? "<strong>new</strong> " : ""}${esc(i.text)}</li>`).join("")}</ul>`
-    : `<p class="small">Nothing waits for you: no vote, no jury, no pledge to confirm, no dues due this week.</p>`}<p class="small">${ask}</p></div>`;
+    : `<p class="small">Nothing waits for you: no vote, no jury, no pledge to confirm, no dues due this week.</p>`}<p class="small">${ask}
+      Outside this page: <a href="/api/inbox?who=${encodeURIComponent(me)}">your feed</a> (RSS, read from the chain; any feed-to-email or feed-to-Telegram service delivers it).</p></div>`;
 }
 
 function commonsPanel(s) {
@@ -379,8 +400,9 @@ function commonsPanel(s) {
       const [r, fund] = s.loanRule;
       const open = s.loan && s.loan.status !== "Repaid";
       html += open
-        ? `<p class="small">Your loan: ${nearAmt(s.loan.principal)} NEAR plus ${nearAmt(s.loan.interest)} NEAR interest, due ${new Date(nsMs(s.loan.due)).toLocaleDateString()}${s.loan.status === "Late" ? " (<strong>late</strong>)" : ""}.</p>
-           <button type="button" class="btn" id="w-l-repay">Repay ${nearAmt(BigInt(s.loan.principal) + BigInt(s.loan.interest))} NEAR</button>`
+        // exact amounts: the contract takes nothing less than principal plus interest
+        ? `<p class="small">Your loan: ${nearAmt(s.loan.principal)} NEAR plus ${(Number(BigInt(s.loan.interest) / 10n ** 18n) / 1e6).toLocaleString("en", { maximumFractionDigits: 6 })} NEAR interest, due ${new Date(nsMs(s.loan.due)).toLocaleDateString()}${s.loan.status === "Late" ? " (<strong>late</strong>)" : ""}.</p>
+           <button type="button" class="btn" id="w-l-repay">Repay ${(Number((BigInt(s.loan.principal) + BigInt(s.loan.interest)) / 10n ** 18n) / 1e6).toLocaleString("en", { maximumFractionDigits: 6 })} NEAR</button>`
         : `<div class="stake-row"><label>Borrow <input id="w-l-amt" type="number" min="0.01" step="0.01" aria-label="NEAR to borrow"> NEAR</label>
              <button type="button" class="btn" id="w-l-go">Borrow</button></div>
            <p class="small">Up to ${nearAmt(r.max_loan)} NEAR for ${esc(r.term_days)} days at ${r.rate_bps / 100}% flat; the fund can lend ${nearAmt(fund)} NEAR now.

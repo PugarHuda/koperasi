@@ -18,6 +18,15 @@
 //!   the job tags each one takes (`set_agents`). Any of them records receipts under the same by-laws and court; a receipt
 //!   names the agent that did the job, and only that agent updates it. Each agent's runtime takes only its voted tags.
 //!
+//! - **A risk fund** (0.3.2): a fund whose account is the contract itself is kept here, in USDC, and the members may
+//!   vote that a share of every earnings deposit stays in it too (`set_agent_saves`: the agent saves for its own
+//!   mistakes). A court case upheld against the agent's job is refunded from it at once when it holds enough; otherwise
+//!   the contract files the refund as a DAO proposal, as before.
+//! - **Credit from the record** (0.3.2): a loan is at most the voted largest loan times the borrower's score out of 10:
+//!   finished tasks and bounties, pledges kept, juries served, and two points for each guarantor in good standing.
+//! - **An agent's own by-laws** (0.3.2): the members can vote a further agent its own by-laws (`set_agent_config`); its
+//!   receipts must then carry that hash, and the OutLayer gate checks that file.
+//!
 //! State lives under its own storage keys, so the upgrade needs no state migration.
 
 use crate::tasks::{ext_dao_proposals, load, save, DAY_NS, GAS_ACT, GAS_PROPOSE, PAYOUT_BOND};
@@ -27,6 +36,29 @@ const KEY_FUNDS: &[u8] = b"share_funds";
 const KEY_LOAN_RULE: &[u8] = b"loan_rule";
 const KEY_LOAN_FUND: &[u8] = b"loan_fund";
 const KEY_AGENTS: &[u8] = b"more_agents";
+const KEY_RISK: &[u8] = b"risk_fund";
+const KEY_AGENT_SAVES: &[u8] = b"agent_saves_bps";
+pub(crate) const GAS_RISK_REFUND: Gas = Gas::from_tgas(10);
+
+pub(crate) fn risk_fund() -> u128 {
+    load::<U128>(KEY_RISK).map_or(0, |x| x.0)
+}
+pub(crate) fn add_risk(x: u128) {
+    save(KEY_RISK, &U128(risk_fund() + x));
+}
+pub(crate) fn take_risk(x: u128) {
+    save(KEY_RISK, &U128(risk_fund() - x));
+}
+pub(crate) fn agent_saves_bps() -> u16 {
+    load::<u16>(KEY_AGENT_SAVES).unwrap_or(0)
+}
+fn agent_config_key(a: &AccountId) -> Vec<u8> {
+    format!("agent_config:{a}").into_bytes()
+}
+/// A further agent's own by-laws, if the members voted it some.
+pub(crate) fn agent_config(a: &AccountId) -> Option<Config> {
+    load(&agent_config_key(a))
+}
 const MAX_AGENTS: usize = 5;
 
 /// A further agent the members voted, and the job tags it takes.
@@ -127,6 +159,10 @@ impl Koperasi {
             }
             left -= x;
             Event::FundPaid { name: f.name.clone(), to: f.to.clone(), amount: U128(x) }.emit();
+            if f.to == env::current_account_id() {
+                add_risk(x); // the risk fund is kept here, for court refunds
+                continue;
+            }
             let _ = ext_ft::ext(self.usdc_id.clone())
                 .with_attached_deposit(NearToken::from_yoctonear(1))
                 .with_static_gas(Gas::from_tgas(15))
@@ -139,6 +175,61 @@ impl Koperasi {
 
 #[near]
 impl Koperasi {
+    // ---------- the risk fund ----------
+
+    /// DAO only: the share of every earnings deposit (bps, at most 20%) that stays in the risk fund.
+    pub fn set_agent_saves(&mut self, bps: u16) {
+        self.assert_dao();
+        require!(bps <= 2_000, "at most 20%");
+        save(KEY_AGENT_SAVES, &bps);
+        Event::AgentSavesSet { bps }.emit();
+    }
+
+    /// (USDC in the risk fund, bps of each earnings deposit it keeps).
+    pub fn get_risk_fund(&self) -> (U128, u16) {
+        (U128(risk_fund()), agent_saves_bps())
+    }
+
+    /// Callback of a refund paid from the risk fund: if it failed, the amount goes back to the fund (the members then
+    /// refund the buyer by a proposal).
+    #[private]
+    pub fn on_risk_refund(&mut self, id: u32, amount: U128, #[callback_result] r: Result<(), PromiseError>) {
+        if r.is_err() {
+            add_risk(amount.0);
+            Event::RiskRefundFailed { id, amount }.emit();
+        }
+    }
+
+    // ---------- an agent's own by-laws ----------
+
+    /// DAO only: a further agent's own by-laws (version, sha256, file next to the page).
+    pub fn set_agent_config(&mut self, account_id: AccountId, version: u32, hash: String, uri: String) {
+        self.assert_dao();
+        require!(more_agents().iter().any(|a| a.account == account_id), "not a further agent the members voted");
+        require!(hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()), "hash: sha256 hex");
+        require!(!uri.is_empty() && uri.len() <= 200, "uri");
+        save(&agent_config_key(&account_id), &Config { version, hash: hash.clone(), uri, contributor: None, activated_at: U64(env::block_timestamp()) });
+        Event::AgentConfigSet { account_id, version, hash }.emit();
+    }
+
+    /// A further agent's own by-laws (None: it runs the co-op's).
+    pub fn get_agent_config(&self, account_id: AccountId) -> Option<Config> {
+        agent_config(&account_id)
+    }
+
+    // ---------- credit from the record ----------
+
+    /// (score out of 10, the largest loan it allows now): finished tasks and bounties, pledges kept, juries served,
+    /// and 2 for each guarantor in good standing.
+    pub fn get_credit(&self, account_id: AccountId) -> (u32, U128) {
+        let done = self.get_record(account_id.clone()).map_or(0, |r| r.done);
+        let s = crate::commons::standing_of(&account_id);
+        let g = self.get_guarantors(account_id.clone()).iter().filter(|x| self.in_good_standing(x)).count() as u32;
+        let score = (done + s.pledges_honored + s.juries_served + 2 * g).min(10);
+        let max = load::<LoanRule>(KEY_LOAN_RULE).map_or(0, |r| r.max_loan.0);
+        (score, U128(max * score as u128 / 10))
+    }
+
     // ---------- more than one agent ----------
 
     /// DAO only: further agents (at most 5, not the founding agent) and the job tags each takes (1 to 8, lowercase).
@@ -261,6 +352,8 @@ impl Koperasi {
         require!(self.in_good_standing(&who), "only a member in good standing");
         let rule: LoanRule = load(KEY_LOAN_RULE).unwrap_or_else(|| env::panic_str("the members voted no loans"));
         require!(amount.0 > 0 && amount.0 <= rule.max_loan.0, "at most the largest loan the members voted");
+        // 0.3.2: and at most what the borrower's record allows (score out of 10 of the largest loan)
+        require!(amount.0 <= self.get_credit(who.clone()).1 .0, "more than your record allows: finish tasks, keep pledges, find guarantors");
         require!(amount.0 <= loan_fund(), "the loan fund is too low: the members must add to it");
         require!(self.get_loan(who.clone()).is_none_or(|l| l.status == LoanStatus::Repaid), "repay your loan first");
         let gs = self.get_guarantors(who.clone());

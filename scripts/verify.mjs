@@ -289,7 +289,7 @@ if (d.intents) {
 // the by-laws gate, run inside an Intel TDX enclave by OutLayer: the tx ran this repo's wasm, and resumed with a match
 const GATE_WASM = sha256(await file("web/outlayer/bylaws-check.wasm", "outlayer/bylaws-check.wasm"));
 // earlier builds of the same program (git history of web/outlayer/bylaws-check.wasm): gates already on-chain ran them
-const GATE_WASMS = [GATE_WASM, "725254a197b432cdb366ee6f3e4086d9ff9099ed350d114fcf6fb87d2e984fa0"];
+const GATE_WASMS = [GATE_WASM, "5d1c4ec7ae6a3b3f89dc101acde74034b532dbe73ed9b80900783af1869a28a5", "725254a197b432cdb366ee6f3e4086d9ff9099ed350d114fcf6fb87d2e984fa0"];
 /**
  * Reads an OutLayer gate transaction: this repo's program, a NEAR RPC, and a match with `voted`. With `jobId`, the
  * enclave must also have judged that job allowed by the by-laws, when it ran a build that judges jobs.
@@ -450,6 +450,14 @@ if (d.federation) {
     + f.resolution.votes.map((v, i) => `${v.dao.split(".")[0]} voted by its proposal #${v.proposal} (${behind[i] ? "approved by its members" : "NOT FOUND"})`).join("; "));
 }
 
+// further resolutions of the federation, each passed by both co-ops through their own approved proposals
+for (const r of d.federation?.resolutions ?? []) {
+  const [res, ...ps] = await Promise.all([view(d.federation.dao, "get_proposal", { id: r.id }), ...r.votes.map((v) => view(v.dao, "get_proposal", { id: v.proposal }))]);
+  const ok = res.status === "Approved" && r.votes.every((v, i) => ps[i].status === "Approved" && res.votes[v.dao] === "Approve"
+    && argsOf(ps[i]).some((a) => a.method === "act_proposal" && a.args.id === r.id));
+  check(ok, `the federation's resolution #${r.id} passed by each co-op's own vote`, `${r.text.slice(0, 90)}…: ${r.votes.map((v) => `${v.dao.split(".")[0]} #${v.proposal}`).join(", ")}`);
+}
+
 // the federation's shared reserve moves money: each co-op paid in by its own vote, and a grant passed by both co-ops' votes
 if (d.federation?.reserve) {
   const f = d.federation, r = f.reserve;
@@ -481,6 +489,19 @@ if (d.lending?.loans) {
   }));
   check(res.every((r) => r.ok) && Boolean(approvedCall("set_loan_rule", () => true)),
     "savings and loans: members with a guarantor borrowed from the fund the members voted, and repaid into the treasury", res.map((r) => r.line).join("; "));
+}
+
+// a profit share in Sepolia ETH by Chain Signatures: each payment signed only after its members' vote, landed on Sepolia
+if (d.chainSignatures?.batch) {
+  const b = d.chainSignatures.batch;
+  const sep = async (method, params) => (await (await fetch(SEPOLIA.rpc, { method: "POST", signal: AbortSignal.timeout(30_000), headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json()).result;
+  const res = await Promise.all(b.payouts.map(async (p) => {
+    const [prop, tx, rc] = await Promise.all([view(d.dao, "get_proposal", { id: p.proposal }), sep("eth_getTransactionByHash", [p.hash]), sep("eth_getTransactionReceipt", [p.hash])]);
+    return prop.status === "Approved" && prop.kind.FunctionCall?.receiver_id === SIGNER && tx?.to?.toLowerCase() === p.to && rc?.status === "0x1";
+  }));
+  check(res.every(Boolean), "a profit share in Sepolia ETH went to each member's EVM route, every payment signed by NEAR Chain Signatures only after the members' vote",
+    b.payouts.map((p, i) => `${p.member.split(".")[0]} ${p.eth.toFixed(6)} ETH by #${p.proposal}: ${res[i] ? "landed" : "NOT FOUND"}`).join("; "));
 }
 
 // 0.3.1: a second agent the members voted, with its tags, holding only a function-call key; its receipt names it

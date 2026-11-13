@@ -678,7 +678,10 @@ impl Koperasi {
         self.assert_agent();
         require!(!self.paused, "koperasi is paused");
         require!(!crate::meeting::agent_suspended(), "the agent is suspended by the co-op court (3 upheld cases in 90 days): the members reinstate it by vote");
-        require!(config_hash == self.config.hash, "config_mismatch: the agent is not running the approved config");
+        // 0.3.2: a further agent with its own voted by-laws runs those; every other agent the co-op's
+        let own = crate::lending::agent_config(&env::predecessor_account_id());
+        let (want, version) = own.as_ref().map_or((&self.config.hash, self.config.version), |c| (&c.hash, c.version));
+        require!(config_hash == *want, "config_mismatch: the agent is not running the approved config");
         require!(!job_id.is_empty() && job_id.len() <= 128, "bad job_id");
         require!(deliverable_hash.len() <= 128, "bad deliverable_hash");
         require!(!self.receipt_index.contains_key(&job_id), "receipt exists");
@@ -695,7 +698,7 @@ impl Koperasi {
             job_id,
             price,
             inference_cost,
-            config_version: self.config.version,
+            config_version: version,
             config_hash,
             deliverable_hash,
             status: ReceiptStatus::Submitted,
@@ -738,7 +741,13 @@ impl Koperasi {
             "earnings" if Some(&sender_id) == self.steward.as_ref() => {
                 self.deposited += amount.0;
                 Event::EarningsDeposited { amount }.emit();
-                self.forward_to_dao(amount.0);
+                // 0.3.2: the agent saves a voted share of what it earned into the risk fund, for its own mistakes
+                let saved = amount.0 * crate::lending::agent_saves_bps() as u128 / BPS;
+                if saved > 0 {
+                    crate::lending::add_risk(saved);
+                    Event::AgentSaved { amount: U128(saved) }.emit();
+                }
+                self.forward_to_dao(amount.0 - saved);
                 PromiseOrValue::Value(U128(0))
             }
             "share" if sender_id == self.dao_id => {

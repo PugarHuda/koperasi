@@ -188,6 +188,21 @@ pub enum Event {
     /// The steward's term ran out: the role is empty until the members appoint one.
     #[event_version("1.0.0")]
     StewardTermEnded { steward: AccountId },
+    /// The members voted the share of every earnings deposit kept in the risk fund.
+    #[event_version("1.0.0")]
+    AgentSavesSet { bps: u16 },
+    /// Part of an earnings deposit stayed in the risk fund.
+    #[event_version("1.0.0")]
+    AgentSaved { amount: U128 },
+    /// A court case was refunded from the risk fund at once.
+    #[event_version("1.0.0")]
+    RefundFromRiskFund { id: u32, amount: U128 },
+    /// A refund from the risk fund bounced; the amount went back to the fund.
+    #[event_version("1.0.0")]
+    RiskRefundFailed { id: u32, amount: U128 },
+    /// The members voted a further agent its own by-laws.
+    #[event_version("1.0.0")]
+    AgentConfigSet { account_id: AccountId, version: u32, hash: String },
     /// The members voted further agents and the job tags each takes.
     #[event_version("1.0.0")]
     AgentsSet { agents: Vec<AccountId> },

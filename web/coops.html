@@ -65,7 +65,7 @@
       const members = policy.roles.find((r) => r.name === "member")?.kind?.Group ?? [];
       document.getElementById("fed").innerHTML = `<b><a href="${explorer(f.dao)}">${esc(f.dao)}</a></b>: members ${members.map((m) => `<a href="${explorer(m)}">${esc(m)}</a>`).join(" and ")}, and nobody else can vote.`;
       const props = await view(f.dao, "get_proposals", { from_index: 0, limit: Math.min(50, last) });
-      const behind = new Map([f.resolution, f.reserve?.grant].filter(Boolean).map((r) => [r.id, r.votes]));
+      const behind = new Map([f.resolution, f.reserve?.grant, ...(f.resolutions ?? [])].filter(Boolean).map((r) => [r.id, r.votes]));
       document.querySelector("#resolutions tbody").innerHTML = props.reverse().map((p) => `<tr><td>${p.id}</td><td>${esc(p.description)}</td>
         <td data-label="Votes">${Object.entries(p.votes).map(([dao, v]) => { const by = behind.get(p.id)?.find((x) => x.dao === dao);
           return `${esc(dao.split(".")[0])}: ${esc(v)}${by ? ` <span class="muted">(its proposal #${esc(by.proposal)})</span>` : ""}`; }).join("<br>") || "–"}</td>

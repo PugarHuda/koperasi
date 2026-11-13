@@ -64,7 +64,13 @@ if (process.argv.includes("--reserve")) {
   process.exit(0);
 }
 
-const resolution = "Resolution 1: the member co-ops recognise each other's work records (the passport): good standing and finished work earned in one count as a trust source in the other";
+// --resolution 2: a shared standard for the member co-ops' savings and loans (contract 0.3.0)
+const RESOLUTIONS = {
+  1: "Resolution 1: the member co-ops recognise each other's work records (the passport): good standing and finished work earned in one count as a trust source in the other",
+  2: "Resolution 2: member co-ops lend at no more than 2% flat for up to 30 days, every loan with a guarantor in good standing, and a loan called late in one is told to the others",
+};
+const which = process.argv.includes("--resolution") ? Number(process.argv[process.argv.indexOf("--resolution") + 1]) : 1;
+const resolution = RESOLUTIONS[which];
 const proposer = account(CO_OPS[0].voters[0]); // anyone may file a proposal (with the bond); only the co-ops vote
 const filed = (await view(fed, "get_proposals", { from_index: 0, limit: 20 })).find((p) => p.description === resolution);
 const id = filed ? filed.id : await propose(proposer, fed, resolution, "Vote");
@@ -82,8 +88,13 @@ for (const c of CO_OPS) {
 const p = await view(fed, "get_proposal", { id });
 console.log(`federation #${id}: ${p.status}; votes ${JSON.stringify(p.votes)}`);
 if (p.status !== "Approved") throw new Error("the federation's resolution did not pass");
-const federation = { dao: fed, factory: SPUTNIK_FACTORY, members: CO_OPS.map((c) => c.dao), resolution: { id, text: resolution, votes } };
+// merged into what is saved: a re-run never drops the reserve or the other resolutions, nor a vote recorded earlier
 for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) {
   const d = JSON.parse(fs.readFileSync(f, "utf8"));
-  fs.writeFileSync(f, JSON.stringify({ ...d, federation }, null, 2) + "\n");
+  const prev = which === 1 ? d.federation?.resolution : d.federation?.resolutions?.find((r) => r.id === id);
+  const merged = votes.map((v) => ({ ...v, proposal: v.proposal ?? prev?.votes?.find((x) => x.dao === v.dao)?.proposal ?? null }));
+  d.federation = { ...d.federation, dao: fed, factory: SPUTNIK_FACTORY, members: CO_OPS.map((c) => c.dao) };
+  if (which === 1) d.federation.resolution = { id, text: resolution, votes: merged };
+  else d.federation.resolutions = [...(d.federation.resolutions ?? []).filter((r) => r.id !== id), { id, text: resolution, votes: merged }];
+  fs.writeFileSync(f, JSON.stringify(d, null, 2) + "\n");
 }

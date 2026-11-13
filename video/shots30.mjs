@@ -23,4 +23,5 @@ await shot("taskbond", "/#work", "#p-agent", { sel: "#p-agent", text: "Taskbond"
 await shot("passport", "/cert.html?who=kop-carol-mw80aczw.testnet", "#cert-sum-t", { sel: "#cert-sum", text: "trust source" });
 await shot("meeting", "/#commons", "#rat", { sel: "#rat", text: "Annual members" });
 await shot("duties", "/#commons", "#duties", { sel: "#duties", text: "Mandatory dues" });
+await shot("federation", "/coops.html", "#network", { sel: "#resolutions tbody tr", text: "Resolution" });
 await browser.close();

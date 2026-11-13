@@ -2556,6 +2556,9 @@ fn a_member_borrows_from_the_voted_fund_repays_with_interest_and_a_late_loan_mar
     assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(near(1).as_yoctonear())); }), "needs a guarantor");
     at_paying(&alice, DAY, commons::PLEDGE_FEE);
     k.guarantee(bob.clone());
+    assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(near(1).as_yoctonear())); }), "0.3.2: 2 of 10 (one guarantor) allows 0.2 NEAR");
+    commons::mark(&bob, |s| s.pledges_honored += 8); // bob's record: 8 pledges kept, so 10 of 10 with alice
+    assert_eq!(k.get_credit(bob.clone()), (10, U128(near(1).as_yoctonear())));
     assert!(fails(|| { at(&bob, DAY); let _ = k.request_loan(U128(near(2).as_yoctonear())); }), "at most the largest loan");
     assert!(fails(|| { at(&acc("outsider.testnet"), DAY); let _ = k.request_loan(U128(1)); }), "members only");
     at(&bob, DAY);
@@ -2627,3 +2630,57 @@ fn a_further_agents_paid_jobs_do_not_count_toward_what_the_steward_owes() {
     at(&acc("anyone.testnet"), 9 * DAY);
     assert_eq!(k.get_overdue().0, 9_500_000, "only job-1; the translator's 50 USDC job is not the steward's to pass on");
 }
+
+/// 0.3.2: the risk fund. A fund whose account is the contract stays here; the agent saves a voted share of each
+/// earnings deposit into it; a case upheld against its job is refunded from it at once, with no proposal.
+#[test]
+fn the_risk_fund_fills_from_shares_and_the_agents_earnings_and_refunds_an_upheld_case_at_once() {
+    let mut k = court();
+    as_(&dao(), near(0));
+    k.set_share_funds(vec![lending::ShareFund { name: "risk".into(), bps: 1000, to: me() }]);
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_agent_saves(2500); }), "at most 20%");
+    k.set_agent_saves(1000);
+    as_(&usdc(), near(0));
+    let _ = k.ft_on_transfer(dao(), U128(2_000_000), "share".into()); // 10% of 2 USDC
+    assert_eq!(k.get_risk_fund().0, U128(200_000));
+    as_(&usdc(), near(0));
+    let _ = k.ft_on_transfer(steward(), U128(3_000_000), "earnings".into()); // the agent saves 10% of 3 USDC
+    assert!(logs_have("\"agent_saved\""));
+    assert_eq!(k.get_risk_fund().0, U128(500_000));
+    assert_eq!(k.get_audit().deposited, U128(3_000_000), "the whole deposit counts as passed on");
+    // a 0.4 USDC case upheld: paid from the fund, no DAO proposal
+    let id = {
+        at_paying(&acc("frank.testnet"), 2 * DAY, COURT_BOND);
+        k.open_case("job-1".into(), acc("buyer.testnet"), U128(400_000), "half the brief was missing".into())
+    };
+    for j in k.get_cases(None, None)[0].jurors.clone().iter().take(2) {
+        at(j, 2 * DAY + 1);
+        k.rule_case(id, true);
+    }
+    assert!(logs_have("refund_from_risk_fund"));
+    assert_eq!(k.get_risk_fund().0, U128(100_000));
+    assert_eq!(k.get_agent_standing().strikes.len(), 1, "still a strike against the agent");
+    // a bounced refund goes back to the fund
+    at(&me(), 3 * DAY);
+    k.on_risk_refund(id, U128(400_000), Err(near_sdk::PromiseError::Failed));
+    assert_eq!(k.get_risk_fund().0, U128(500_000));
+}
+
+/// 0.3.2: a further agent can run its own by-laws, voted by the members; its receipts must carry that hash.
+#[test]
+fn a_further_agent_runs_the_by_laws_the_members_voted_for_it() {
+    let mut k = setup();
+    let tr = acc("translator.testnet");
+    let own = "ab".repeat(32);
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_agent_config(tr.clone(), 1, own.clone(), "config/translator/config.v1.yaml".into()); }), "not an agent yet");
+    as_(&dao(), near(0));
+    k.set_agents(vec![lending::AgentSkill { account: tr.clone(), tags: vec!["translation".into()] }]);
+    k.set_agent_config(tr.clone(), 1, own.clone(), "config/translator/config.v1.yaml".into());
+    assert_eq!(k.get_agent_config(tr.clone()).unwrap().hash, own);
+    assert!(fails(|| { as_(&tr, near(0)); k.record_receipt("t-1".into(), U128(1), U128(0), H1.into(), "00".into(), None); }), "the co-op's by-laws are not its own");
+    as_(&tr, near(0));
+    k.record_receipt("t-1".into(), U128(1), U128(0), own.clone(), "00".into(), None);
+    assert_eq!(k.get_receipts(None, None)[0].config_version, 1);
+    receipt(&mut k, "j-1", 1, H1); // the founding agent still runs the co-op's
+}
+
