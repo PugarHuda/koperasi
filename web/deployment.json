@@ -291,9 +291,9 @@
     "program": "outlayer/bylaws-check",
     "wasm": "https://koperasi-kohl.vercel.app/outlayer/bylaws-check.wasm?v=b7b95a15712c",
     "wasm_sha256": "b7b95a15712cedbfcdc7f5ec0a7f23340e1f17abdb0e1a5efec95cec608867d4",
-    "tx": "9sL8E53oye1bxy6TSzGBxF5Ck12JeKHn7icmFZCHsjXe",
+    "tx": "87PTj2cbCRJjMz2RWdBHLnoEYq9zvbejb5AQmAx7No28",
     "sender": "kop-alice-mw4i3w8f.testnet",
-    "version": 7
+    "version": 8
   },
   "redteam": [
     {
