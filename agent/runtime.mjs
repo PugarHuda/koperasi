@@ -248,7 +248,12 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
   const byJob = new Map(receipts.map((r) => [r.job_id, r]));
   const state = loadState();
   const capJob = Math.round(config.limits.max_inference_per_job_usd * 1e6);
-  const capDay = Math.round(config.limits.max_inference_per_day_usd * 1e6);
+  // the agent as a defendant (contract 0.2.9): each court case upheld against its jobs in the last 90 days halves its
+  // daily inference budget, and at 3 the contract suspends it until the members reinstate it (older contracts: none)
+  const court = (await view(dep.contract, "get_agent_standing").catch(() => null)) ?? { strikes: [], suspended: false };
+  const capDay = Math.round(config.limits.max_inference_per_day_usd * 1e6 / 2 ** court.strikes.length);
+  if (court.suspended) log(`suspended by the co-op court (${court.strikes.length} upheld cases in 90 days): no new job until the members reinstate the agent`);
+  else if (court.strikes.length) log(`${court.strikes.length} upheld court case(s) in 90 days: today's inference budget is ${capDay / 1e6} USD`);
   let halted = false;
   const receipt = async (a, { text, costMicroUsd, proof }) => {
     await call(agent, dep.contract, "record_receipt", {
@@ -284,6 +289,10 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         continue;
       }
       // a job may only start if even its worst case fits in today's budget
+      if (court.suspended) {
+        log(`not starting "${job.title}": the agent is suspended by the co-op court`);
+        continue;
+      }
       if (halted || state.spentMicroUsd + capJob > capDay) {
         log(`inference budget left today: ${(capDay - state.spentMicroUsd) / 1e6} USD; not starting "${job.title}"`);
         continue;

@@ -12486,11 +12486,14 @@ var init_verify = __esm({
     for (const r2 of d2.rat ?? []) {
       const [report, facts] = await Promise.all([file(`web/${r2.report}`, r2.report), file(`web/${r2.facts}`, r2.facts)]);
       const p2 = await view2(d2.dao, "get_proposal", { id: r2.proposal });
-      const ok = p2.status === "Approved" && p2.kind === "Vote" && p2.description.includes(`sha256 ${sha2562(report)}`) && p2.description.includes(`sha256 ${sha2562(facts)}`) && Boolean(r2.proof?.model && r2.proof?.tee_signer);
+      const call2 = argsOf(p2).find((x2) => x2.method === "record_annual_meeting");
+      const held = call2 ? (await view2(d2.contract, "get_annual_meetings")).find((m2) => m2.year === r2.year) : null;
+      const bound = call2 ? call2.args.report_sha256 === sha2562(report) && call2.args.facts_sha256 === sha2562(facts) && held?.report_sha256 === sha2562(report) && held?.facts_sha256 === sha2562(facts) : p2.kind === "Vote" && p2.description.includes(`sha256 ${sha2562(report)}`) && p2.description.includes(`sha256 ${sha2562(facts)}`);
+      const ok = p2.status === "Approved" && bound && Boolean(r2.proof?.model && r2.proof?.tee_signer);
       check(
         ok,
         `the members approved the ${r2.year} annual report by vote, and the report is the one the co-op's agent wrote in a TEE from the chain's facts`,
-        `proposal #${r2.proposal} ${p2.status}: report sha256 ${sha2562(report).slice(0, 12)}\u2026, facts ${sha2562(facts).slice(0, 12)}\u2026; model ${r2.proof?.model}, TEE key ${r2.proof?.tee_signer}`
+        `proposal #${r2.proposal} ${p2.status}${held ? ", recorded by the contract" : ""}${call2 && argsOf(p2).length > 1 ? ` with the meeting's decisions (${argsOf(p2).slice(1).map((x2) => x2.method).join(", ")})` : ""}: report sha256 ${sha2562(report).slice(0, 12)}\u2026, facts ${sha2562(facts).slice(0, 12)}\u2026; model ${r2.proof?.model}, TEE key ${r2.proof?.tee_signer}`
       );
     }
     if (d2.redteam?.length) {

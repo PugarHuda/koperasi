@@ -1,4 +1,4 @@
-// node --env-file=.env scripts/rat.mjs [year]   the co-op's annual members' meeting, on-chain
+// node --env-file=.env scripts/rat.mjs [year] [--dues <NEAR>/<days>]   the co-op's annual members' meeting, on-chain
 //
 // Every Indonesian co-op holds a yearly members' meeting (Law 25/1992 art. 22–26) where the board accounts for the
 // year in an accountability report and the members approve the accounts or do not. Here:
@@ -7,15 +7,19 @@
 //   2. the co-op's own agent writes the accountability report from those facts only, with the model and system prompt
 //      of the by-laws the members voted, on NEAR AI Cloud after checking its TEE, and the response's TEE signature is
 //      checked (agent/runtime.mjs `infer`); saved as web/rat/<year>.md with the proof;
-//   3. a DAO proposal (kind Vote) asks the members to approve the report, naming both files' sha256: what they approve
-//      is exactly those bytes. `npm run verify` reads the vote and hashes the files.
+//   3. a DAO proposal asks the members to approve the report: it calls the contract's `record_annual_meeting` with both
+//      files' sha256 (contract 0.2.9), so what they approve is exactly those bytes, and it carries the decisions the
+//      meeting takes as further actions (`--dues 0.01/30`: mandatory dues the agenda asked for). Rejected, nothing is
+//      recorded and nothing changes. `npm run verify` reads the contract's record and hashes the files.
+// Members put items on the agenda beforehand (`propose_agenda`); the report must answer each one.
 import fs from "node:fs";
 import path from "node:path";
 import { infer, loadApprovedConfig } from "../agent/runtime.mjs";
-import { DEPLOYMENT, ROOT, account, decide, sha256, view } from "./lib.mjs";
+import { DEPLOYMENT, NEAR, ROOT, account, decide, fnCall, sha256, view } from "./lib.mjs";
 
 const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
-const year = Number(process.argv[2] ?? new Date().getUTCFullYear());
+const year = Number(process.argv.slice(2).find((a) => /^\d{4}$/.test(a)) ?? new Date().getUTCFullYear());
+const duesArg = process.argv.includes("--dues") ? process.argv[process.argv.indexOf("--dues") + 1] : null;
 const C = dep.contract;
 const usdc = (u) => Number(u) / 1e6;
 const near = (y) => Number(BigInt(y) / 10n ** 21n) / 1000;
@@ -56,6 +60,7 @@ const facts = {
   tasks: { posted: tasks.length, paid: tasks.filter((t) => t.status === "Paid").length,
     paid_near: tasks.filter((t) => t.status === "Paid").reduce((s, t) => s + near(t.amount), 0), budget_left_near: near(board.budget) },
   treasury_usdc: usdc(treasury),
+  agenda: (await view(C, "get_agenda", { year }).catch(() => [])).map(([by, item]) => ({ by, item })),
   dao_proposals: { filed: lastProposal, last: recent.map((p) => ({ id: p.id, status: p.status, what: p.description.slice(0, 120) })) },
 };
 const dir = path.join(ROOT, "web", "rat");
@@ -68,7 +73,7 @@ console.log(`facts of ${year} read from the chain: web/rat/${year}.facts.json`);
 const { config } = await loadApprovedConfig(dep);
 const job = {
   title: `Annual members' meeting ${year}: the accountability report`,
-  description: `Write the accountability report the co-op presents to its annual members' meeting, in English. Use ONLY the facts in the JSON below, read from the chain; add none, and say plainly what they do not show. Sections: 1. Membership; 2. Business: the agent's jobs; 3. Finances and the audit; 4. Profit shares; 5. Court and pledges; 6. What the members must decide. Six short paragraphs, under 200 words in all, plain sentences, no tables.\n\n${JSON.stringify(facts)}`,
+  description: `Write the accountability report the co-op presents to its annual members' meeting, in English. Use ONLY the facts in the JSON below, read from the chain; add none, and say plainly what they do not show. Sections: 1. Membership; 2. Business: the agent's jobs; 3. Finances and the audit; 4. Profit shares; 5. Court and pledges; 6. The agenda: answer each item the members put on it, from the facts. Six short paragraphs, under 200 words in all, plain sentences, no tables.\n\n${JSON.stringify(facts)}`,
 };
 const done = await infer(config, job, Math.round(config.limits.max_inference_per_job_usd * 1e6));
 if (!done.proof?.model) throw new Error("no TEE proof: the report is not written");
@@ -84,9 +89,17 @@ const voters = ["kop-alice-mw4i3w8f.testnet", "kop-bob-mw4i3w8f.testnet", dep.st
 const description = `Annual members' meeting ${year}: approve the accountability report ${dep.page ?? "https://koperasi-kohl.vercel.app"}/rat/${year}.md `
   + `(sha256 ${sha256(report)}), written by the co-op's agent in a TEE from the facts read from the chain `
   + `(rat/${year}.facts.json, sha256 ${sha256(factsText)}; inference ${done.proof.inference_id})`;
-const { id } = await decide(account(voters[0]), voters.map(account), dep.dao, description, "Vote");
+// the record, and the decisions the meeting takes, in one proposal: approved, all of it runs; rejected, none of it
+const kind = fnCall(C, "record_annual_meeting", { year, report_sha256: sha256(report), facts_sha256: sha256(factsText) }, { tgas: 30 });
+if (duesArg) {
+  const [amount, days] = duesArg.split("/");
+  const extra = fnCall(C, "set_dues", { amount: String(BigInt(Math.round(Number(amount) * 1000)) * NEAR / 1000n), every_days: Number(days) }, { tgas: 30 });
+  kind.FunctionCall.actions.push(...extra.FunctionCall.actions);
+}
+const { id } = await decide(account(voters[0]), voters.map(account), dep.dao,
+  `${description}${duesArg ? `; and, as the agenda asked, mandatory dues of ${duesArg.replace("/", " NEAR every ")} days` : ""}`, kind);
 console.log(`proposal #${id} approved: the members approved the ${year} report`);
-const rat = { year, report: `rat/${year}.md`, report_sha256: sha256(report), facts: `rat/${year}.facts.json`, facts_sha256: sha256(factsText),
+const rat = { year, ...(duesArg ? { decided: { dues: duesArg } } : {}), report: `rat/${year}.md`, report_sha256: sha256(report), facts: `rat/${year}.facts.json`, facts_sha256: sha256(factsText),
   proposal: id, proof: done.proof, at: new Date().toISOString() };
 for (const f of [DEPLOYMENT, path.join(ROOT, "web/deployment.json")]) {
   const d = JSON.parse(fs.readFileSync(f, "utf8"));

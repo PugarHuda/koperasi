@@ -76,7 +76,7 @@ export const EVENTS = ["join_requested", "join_cancelled", "member_added", "memb
   "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "veto_window_set", "task_held", "task_vetoed", "task_approved",
   "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited",
-  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "steward_term_set", "steward_term_ended"];
+  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
 /**
@@ -139,6 +139,12 @@ export function describeEvent({ event: e, data: d }) {
     case_appealed: () => `${short(d.claimant)} appealed court case #${d.id} to the members: DAO proposal #${d.proposal_id}`,
     appeal_settled: () => `The members ${d.upheld ? "overturned the jury: the buyer of case #" + d.id + " is refunded" : "kept the jury's ruling on case #" + d.id}`,
     payout_route_set: () => `${short(d.account_id)} wants payouts on ${d.chain === "near" ? "NEAR" : { base: "Base", arb: "Arbitrum", eth: "Ethereum" }[d.chain] ?? "?"}`,
+    dues_set: () => (BigInt(d.amount) === 0n ? "The members voted no mandatory dues" : `The members set mandatory dues: ${Number(BigInt(d.amount) / 10n ** 21n) / 1000} NEAR every ${d.every_days} days`),
+    dues_paid: () => `${short(d.account_id)} paid ${d.periods} period(s) of dues into the treasury`,
+    agenda_proposed: () => `${short(d.by)} put an item on the ${d.year} annual meeting's agenda`,
+    annual_meeting_held: () => `The members approved the ${d.year} accountability report (sha256 ${String(d.report_sha256).slice(0, 12)}…)`,
+    agent_struck: () => `Court case #${d.case} was upheld against the agent: ${d.strikes} strike(s) in 90 days${d.suspended ? ", the agent is suspended" : ""}`,
+    agent_reinstated: () => "The members reinstated the agent",
     evidence_filed: () => `${short(d.by)} filed evidence in court case #${d.id}`,
     sister_coops_set: () => `The members now recognise work records from ${d.coops?.length ?? 0} sister co-op(s)`,
     passport_stamped: () => d.kept ? `${short(d.account_id)}'s work at ${short(d.coop)} (${d.done} done, in good standing) now counts here` : `${short(d.account_id)}'s record at ${short(d.coop)} no longer holds: its stamp is removed`,

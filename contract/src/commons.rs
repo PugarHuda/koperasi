@@ -258,7 +258,8 @@ impl Koperasi {
     /// Kept and broken pledges, juries served and missed, slashes; `good` = none broken, missed or slashed.
     pub fn get_standing(&self, account_id: AccountId) -> (Standing, bool) {
         let s = standing(&account_id);
-        let good = s.good();
+        // 0.2.9: a member behind on the dues the members voted is out of good standing too
+        let good = s.good() && self.dues_ok(&account_id);
         (s, good)
     }
 
@@ -271,7 +272,7 @@ impl Koperasi {
     #[payable]
     pub fn open_case(&mut self, job_id: String, refund_to: AccountId, amount: U128, reason: String) -> u32 {
         let claimant = self.assert_member();
-        require!(standing(&claimant).good(), "only a member in good standing");
+        require!(standing(&claimant).good() && self.dues_ok(&claimant), "only a member in good standing");
         require!(env::attached_deposit() >= COURT_BOND, "attach the 0.5 NEAR court bond");
         require!(!reason.trim().is_empty() && reason.len() <= MAX_WHAT, "reason: 1 to 280 characters");
         let i = *self.receipt_index.get(&job_id).unwrap_or_else(|| env::panic_str("no receipt for this job"));
@@ -289,7 +290,7 @@ impl Koperasi {
         require!(tries < MAX_CASES_PER_JOB, "this job had its two cases");
         env::storage_write(&job_tries_key(&job_id), &[tries + 1]);
         let mut pool: Vec<AccountId> = self.members.keys()
-            .filter(|m| **m != claimant && **m != refund_to && Some(*m) != self.steward.as_ref() && standing(m).good())
+            .filter(|m| **m != claimant && **m != refund_to && Some(*m) != self.steward.as_ref() && standing(m).good() && self.dues_ok(m))
             .cloned()
             .collect();
         require!(pool.len() >= JURORS, "fewer than 3 members can sit on a jury");
@@ -384,6 +385,7 @@ impl Koperasi {
             env::storage_remove(&job_case_key(&c.job_id));
         }
         if upheld {
+            crate::meeting::strike(c.id); // a case upheld against the agent's job
             let _ = Promise::new(c.claimant.clone()).transfer(COURT_BOND);
             let description = format!("Koperasi court case #{}: refund {} USDC (6 decimals: {}) to {} for job {}, upheld by the jury",
                 c.id, c.amount.0 as f64 / 1e6, c.amount.0, c.refund_to, c.job_id);
@@ -494,6 +496,7 @@ impl Koperasi {
         a.status = if upheld { CaseStatus::Upheld } else { CaseStatus::Dismissed };
         save(&appeal_key(id), &a);
         if upheld {
+            crate::meeting::strike(c.id); // upheld by the members on appeal
             env::storage_write(&job_case_key(&c.job_id), &[1]);
             let _ = Promise::new(c.claimant.clone()).transfer(APPEAL_BOND);
         } else {

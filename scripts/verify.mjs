@@ -350,10 +350,15 @@ if (d.passport) {
 for (const r of d.rat ?? []) {
   const [report, facts] = await Promise.all([file(`web/${r.report}`, r.report), file(`web/${r.facts}`, r.facts)]);
   const p = await view(d.dao, "get_proposal", { id: r.proposal });
-  const ok = p.status === "Approved" && p.kind === "Vote" && p.description.includes(`sha256 ${sha256(report)}`)
-    && p.description.includes(`sha256 ${sha256(facts)}`) && Boolean(r.proof?.model && r.proof?.tee_signer);
+  // since 0.2.9 the vote calls record_annual_meeting with both sha256, and the contract keeps the record; before, a poll
+  const call = argsOf(p).find((x) => x.method === "record_annual_meeting");
+  const held = call ? (await view(d.contract, "get_annual_meetings")).find((m) => m.year === r.year) : null;
+  const bound = call
+    ? call.args.report_sha256 === sha256(report) && call.args.facts_sha256 === sha256(facts) && held?.report_sha256 === sha256(report) && held?.facts_sha256 === sha256(facts)
+    : p.kind === "Vote" && p.description.includes(`sha256 ${sha256(report)}`) && p.description.includes(`sha256 ${sha256(facts)}`);
+  const ok = p.status === "Approved" && bound && Boolean(r.proof?.model && r.proof?.tee_signer);
   check(ok, `the members approved the ${r.year} annual report by vote, and the report is the one the co-op's agent wrote in a TEE from the chain's facts`,
-    `proposal #${r.proposal} ${p.status}: report sha256 ${sha256(report).slice(0, 12)}…, facts ${sha256(facts).slice(0, 12)}…; model ${r.proof?.model}, TEE key ${r.proof?.tee_signer}`);
+    `proposal #${r.proposal} ${p.status}${held ? ", recorded by the contract" : ""}${call && argsOf(p).length > 1 ? ` with the meeting's decisions (${argsOf(p).slice(1).map((x) => x.method).join(", ")})` : ""}: report sha256 ${sha256(report).slice(0, 12)}…, facts ${sha256(facts).slice(0, 12)}…; model ${r.proof?.model}, TEE key ${r.proof?.tee_signer}`);
 }
 
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with

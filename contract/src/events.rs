@@ -188,6 +188,24 @@ pub enum Event {
     /// The steward's term ran out: the role is empty until the members appoint one.
     #[event_version("1.0.0")]
     StewardTermEnded { steward: AccountId },
+    /// The members voted the mandatory dues (amount 0: none).
+    #[event_version("1.0.0")]
+    DuesSet { amount: U128, every_days: u32 },
+    /// A member paid dues into the DAO treasury.
+    #[event_version("1.0.0")]
+    DuesPaid { account_id: AccountId, periods: u32, amount: U128, paid_until: U64 },
+    /// A member put an item on the annual meeting's agenda.
+    #[event_version("1.0.0")]
+    AgendaProposed { year: u32, by: AccountId },
+    /// The members approved the year's accountability report.
+    #[event_version("1.0.0")]
+    AnnualMeetingHeld { year: u32, report_sha256: String },
+    /// A court case was upheld against the agent's job.
+    #[event_version("1.0.0")]
+    AgentStruck { case: u32, strikes: u32, suspended: bool },
+    /// The members reinstated the agent.
+    #[event_version("1.0.0")]
+    AgentReinstated {},
     /// The claimant or the steward filed a piece of evidence in a court case.
     #[event_version("1.0.0")]
     EvidenceFiled { id: u32, by: AccountId },

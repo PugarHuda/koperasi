@@ -672,6 +672,7 @@ impl Koperasi {
     ) {
         self.assert_agent();
         require!(!self.paused, "koperasi is paused");
+        require!(!crate::meeting::agent_suspended(), "the agent is suspended by the co-op court (3 upheld cases in 90 days): the members reinstate it by vote");
         require!(config_hash == self.config.hash, "config_mismatch: the agent is not running the approved config");
         require!(!job_id.is_empty() && job_id.len() <= 128, "bad job_id");
         require!(deliverable_hash.len() <= 128, "bad deliverable_hash");
@@ -960,5 +961,6 @@ mod tests;
 mod tasks;
 mod commons;
 mod reach;
+mod meeting;
 pub use commons::*;
 pub use tasks::*;

@@ -33,6 +33,7 @@ mock.module(pathToFileURL(path.join(ROOT, "scripts/lib.mjs")).href, { namedExpor
     get_config: { hash: sha256(fs.readFileSync(path.join(ROOT, dep.configUri))), version: 3 },
     get_info: { paused: false },
     get_receipts: w.receipts,
+    get_agent_standing: w.court,
   })[method],
   call: async (_a, _c, method, args) => {
     if (method === "record_receipt" && w.receiptFails-- > 0) throw new Error("RPC timeout");
@@ -91,7 +92,7 @@ const { runOnce } = await import("../../agent/runtime.mjs");
 
 const fresh = (t, setup = {}) => {
   fs.rmSync(process.env.KOP_STATE, { force: true });
-  Object.assign(w, { receipts: [], calls: [], completions: 0, signatureStatus: 200, submitFails: 0, receiptFails: 0, gateFails: false, gates: 0, gateSilent: 0, jobRefused: false,
+  Object.assign(w, { receipts: [], calls: [], completions: 0, signatureStatus: 200, submitFails: 0, receiptFails: 0, gateFails: false, gates: 0, gateSilent: 0, jobRefused: false, court: undefined,
     assignment: { assignmentId: `a-${t}`, status: "in_progress", escrowAmount: "6" } }, setup);
 };
 const state = () => JSON.parse(fs.readFileSync(process.env.KOP_STATE, "utf8"));
@@ -169,6 +170,17 @@ test("the enclave judges the job by the voted by-laws: a job it refuses is hande
   assert.equal(w.assignment.status, "declined");
   await run();
   assert.equal(w.gates, 1);
+});
+
+test("the agent as a defendant: suspended by the court it starts no job; one strike halves the day's budget", async () => {
+  fresh(10, { court: { strikes: [[0, "1"], [1, "2"], [2, "3"]], suspended: true } });
+  await run();
+  assert.equal(w.gates, 0);
+  assert.equal(w.completions, 0);
+  assert.equal(w.calls.length, 0);
+  fresh(11, { court: { strikes: [[0, "1"]], suspended: false } });
+  await run();
+  assert.equal(w.completions, 1, "one strike: still works, on half the budget");
 });
 
 test("a by-laws gate that does not match: the job is not started and nothing is spent", async () => {

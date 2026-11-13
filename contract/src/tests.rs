@@ -2400,3 +2400,93 @@ fn the_claimant_and_the_steward_file_evidence_while_the_case_is_open() {
     k.close_case(id);
     assert!(fails(|| { at_paying(&steward(), 6 * DAY, commons::PLEDGE_FEE); k.add_evidence(id, "late".into()); }));
 }
+
+/// Mandatory dues (0.2.9): paid into the DAO treasury, arrears first; 7 days behind and a member is out of good standing.
+#[test]
+fn a_member_behind_on_dues_loses_good_standing_until_they_pay_the_arrears() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let alice = acc("alice.testnet");
+    assert!(k.get_standing(alice.clone()).1, "no dues voted: good");
+    assert!(fails(|| { at(&alice, DAY); k.set_dues(U128(MILLI), 30); }), "only the DAO");
+    at(&dao(), DAY);
+    k.set_dues(U128(100 * MILLI), 30);
+    assert!(logs_have("dues_set"));
+    // due from the vote, with 7 days' grace
+    at(&alice, DAY + 7 * DAY);
+    assert!(k.get_standing(alice.clone()).1);
+    at(&alice, DAY + 8 * DAY);
+    assert!(!k.get_standing(alice.clone()).1, "8 days behind");
+    assert!(fails(|| { at_paying(&alice, 9 * DAY, NearToken::from_millinear(50)); k.pay_dues(); }), "less than one period");
+    assert!(fails(|| { at_paying(&acc("outsider.testnet"), 9 * DAY, NearToken::from_millinear(100)); k.pay_dues(); }), "members only");
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(alice.clone()).account_balance(near(100)).block_timestamp(9 * DAY)
+        .attached_deposit(NearToken::from_millinear(250));
+    testing_env!(b.build());
+    let until = k.pay_dues();
+    assert_eq!(until.0, DAY + 2 * 30 * DAY, "two whole periods from the vote, the change returned");
+    assert!(logs_have("dues_paid"));
+    assert!(k.get_standing(alice.clone()).1);
+    assert_eq!(k.get_dues_status(alice.clone()), Some((until, true)));
+    // the members turn dues off: everyone is fine again
+    at(&acc("bob.testnet"), 100 * DAY);
+    assert!(!k.get_standing(acc("bob.testnet")).1);
+    at(&dao(), 100 * DAY);
+    k.set_dues(U128(0), 0);
+    assert!(k.get_standing(acc("bob.testnet")).1);
+}
+
+/// The annual members' meeting (0.2.9): members set the agenda, the DAO records the approved report once a year.
+#[test]
+fn members_set_the_agenda_and_the_dao_records_the_approved_report_once_a_year() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    let alice = acc("alice.testnet");
+    assert!(fails(|| { at_paying(&acc("outsider.testnet"), DAY, commons::PLEDGE_FEE); k.propose_agenda(2026, "x".into()); }));
+    for n in 0..3 {
+        at_paying(&alice, DAY, commons::PLEDGE_FEE);
+        k.propose_agenda(2026, format!("item {n}"));
+    }
+    assert!(fails(|| { at_paying(&alice, DAY, commons::PLEDGE_FEE); k.propose_agenda(2026, "a fourth".into()); }), "three each");
+    assert_eq!(k.get_agenda(2026).len(), 3);
+    let h = "ab".repeat(32);
+    assert!(fails(|| { at(&alice, DAY); k.record_annual_meeting(2026, h.clone(), h.clone()); }), "only the DAO");
+    assert!(fails(|| { at(&dao(), DAY); k.record_annual_meeting(2026, "AB".repeat(32), h.clone()); }), "lowercase hex");
+    at(&dao(), DAY);
+    k.record_annual_meeting(2026, h.clone(), h.clone());
+    assert!(logs_have("annual_meeting_held"));
+    assert!(fails(|| { at(&dao(), DAY); k.record_annual_meeting(2026, h.clone(), h.clone()); }), "once a year");
+    assert!(fails(|| { at_paying(&alice, DAY, commons::PLEDGE_FEE); k.propose_agenda(2026, "late".into()); }), "the meeting is held");
+    assert_eq!(k.get_annual_meetings()[0].year, 2026);
+}
+
+/// The agent as a defendant (0.2.9): an upheld case is a strike; 3 in 90 days suspend it until the members reinstate it.
+#[test]
+fn upheld_cases_strike_the_agent_and_three_suspend_it_until_the_members_reinstate_it() {
+    let mut k = court();
+    let id = open(&mut k, "frank.testnet", 2 * DAY);
+    let jurors = k.get_cases(None, None)[0].jurors.clone();
+    for j in jurors.iter().take(2) {
+        at(j, 2 * DAY + 1);
+        k.rule_case(id, true);
+    }
+    assert!(logs_have("agent_struck"));
+    assert_eq!(k.get_agent_standing().strikes.len(), 1);
+    meeting::strike(id); // the same case never counts twice
+    assert_eq!(k.get_agent_standing().strikes.len(), 1);
+    at(&agent(), 3 * DAY);
+    meeting::strike(90);
+    meeting::strike(91);
+    assert!(k.get_agent_standing().suspended);
+    assert!(fails(|| { as_(&agent(), near(0)); k.record_receipt("job-9".into(), U128(1), U128(0), H1.into(), "00".into(), None); }), "suspended");
+    assert!(fails(|| { at(&acc("alice.testnet"), 4 * DAY); k.reinstate_agent(); }), "only the DAO");
+    at(&dao(), 4 * DAY);
+    k.reinstate_agent();
+    assert!(!k.get_agent_standing().suspended && k.get_agent_standing().strikes.is_empty());
+    receipt(&mut k, "job-9", 1, H1);
+    // strikes older than 90 days stop counting
+    at(&agent(), 5 * DAY);
+    meeting::strike(92);
+    at(&agent(), 5 * DAY + meeting::STRIKE_DAYS * DAY + 1);
+    assert!(k.get_agent_standing().strikes.is_empty());
+}
