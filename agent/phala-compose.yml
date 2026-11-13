@@ -13,6 +13,6 @@ services:
       - KOP_SPONSOR_KEY=${KOP_SPONSOR_KEY}
       - NEARAI_API_KEY=${NEARAI_API_KEY}
     command: >-
-      sh -c "git clone https://github.com/PugarHuda/koperasi /app && cd /app && git checkout 553d8c126d448d2469cb4a292f519e556653adff
+      sh -c "git clone https://github.com/PugarHuda/koperasi /app && cd /app && git checkout 86cad6dd5877b3f6cb65471857d3a69debc7fb9a
       && npm ci --omit=dev --ignore-scripts && node agent/tee-worker.mjs"
     restart: "no"
