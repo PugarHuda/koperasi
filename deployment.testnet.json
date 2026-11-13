@@ -173,7 +173,6 @@
         },
         "reserve": 1.000005,
         "at": "2026-11-13T02:59:28.855Z",
-        "pending": true,
         "payouts": [
           {
             "to": "kop-steward-mw4i2iwk.testnet",
@@ -227,9 +226,14 @@
           {
             "to": "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
             "address": "vouched-mwa7jwhw.kop-publisher-mw5tkpfo.testnet",
-            "amount": 0.857142,
+            "amount": 0.894736,
             "chain": "near",
-            "payout": "exec_4aa51dca32abe05b40bc991f"
+            "payout": "exec_4aa51dca32abe05b40bc991f",
+            "status": "SUCCESS",
+            "tx": "AoYNwskpMCgkvqS3MfQH5QxcXUscX7Rv4rJZjPrxLtpJ",
+            "destination_chain": null,
+            "destination_tx": "AoYNwskpMCgkvqS3MfQH5QxcXUscX7Rv4rJZjPrxLtpJ",
+            "at": "2026-11-13T04:10:22.437Z"
           }
         ]
       }
