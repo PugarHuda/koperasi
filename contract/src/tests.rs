@@ -2929,13 +2929,13 @@ fn reputation_weights_decay_and_never_saturate() {
     commons::mark(&alice, |s| s.pledges_honored += 30); // past the old cap of 10
     commons::mark(&bob, |s| s.pledges_honored += 10);
     let w = |k: &Koperasi, a: &AccountId| k.get_reputation_weights().iter().find(|(x, _)| x == a).map_or(0, |(_, w)| w.0);
-    assert_eq!((w(&k, &alice), w(&k, &bob)), (30, 10));
+    assert_eq!((w(&k, &alice), w(&k, &bob)), (3000, 1000), "x100, no court record: factor 1");
     as_(&usdc(), near(0));
     let _ = k.ft_on_transfer(dao(), U128(4_000_000), "share".into());
     assert_eq!(k.get_claimable(alice.clone()).0, 300_000, "3:1 of 0.4 USDC");
     // then bob works more: new work counts in full, old weight halves
     commons::mark(&bob, |s| s.pledges_honored += 20);
-    assert_eq!((w(&k, &alice), w(&k, &bob)), (15, 25));
+    assert_eq!((w(&k, &alice), w(&k, &bob)), (1500, 2500));
 }
 
 /// 0.3.3: the members set how often the agent may propose.
@@ -2951,4 +2951,54 @@ fn the_members_set_how_often_the_agent_proposes() {
     at(&agent(), 2 * DAY);
     let _ = k.agent_propose_bylaws(2, H2.into(), "u".into(), "r".into(), None);
     assert!(fails(|| { as_(&dao(), near(0)); k.set_agent_propose_every(31); }));
+}
+
+/// 0.3.4: an agent the members mark TEE-only records receipts only while the registry they named says it is attested.
+#[test]
+fn a_tee_only_agent_records_only_while_attested() {
+    let mut k = setup();
+    let worker = acc("7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1d6eacbf7f0b0a");
+    let registry = acc("kop-tee.testnet");
+    as_(&dao(), near(0));
+    k.set_agents(vec![lending::AgentSkill { account: worker.clone(), tags: vec!["translation".into()] }]);
+    as_(&dao(), near(0));
+    k.set_agent_tee(worker.clone(), true);
+    let rec = |k: &mut Koperasi, id: &str| k.record_receipt(id.into(), U128(1), U128(0), H1.into(), "00".into(), None);
+    assert!(fails(|| { at(&worker, DAY); rec(&mut k, "t-1"); }), "not attested yet");
+    assert!(fails(|| { as_(&registry, near(0)); k.note_attested(worker.clone(), U64(10 * DAY), "ab".into()); }), "no registry named");
+    as_(&dao(), near(0));
+    k.set_tee_registry(Some(registry.clone()));
+    assert!(fails(|| { as_(&acc("mallory.testnet"), near(0)); k.note_attested(worker.clone(), U64(10 * DAY), "ab".into()); }), "only the registry");
+    as_(&registry, near(0));
+    k.note_attested(worker.clone(), U64(10 * DAY), "ab".into());
+    assert!(logs_have("agent_attested"));
+    at(&worker, DAY);
+    rec(&mut k, "t-1");
+    assert!(fails(|| { at(&worker, 11 * DAY); rec(&mut k, "t-2"); }), "the attestation expired");
+    // an agent not marked TEE-only is unaffected; unmarking lifts the rule
+    at(&agent(), 11 * DAY);
+    rec(&mut k, "t-3");
+    as_(&dao(), near(0));
+    k.set_agent_tee(worker.clone(), false);
+    at(&worker, 11 * DAY);
+    rec(&mut k, "t-4");
+}
+
+/// 0.3.4: the reputation weight is multiplied by how a member's judgments held up in court.
+#[test]
+fn reputation_weighs_how_judgments_held_up_in_court() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet", "carol.testnet", "dave.testnet"]);
+    let (alice, bob) = (acc("alice.testnet"), acc("bob.testnet"));
+    commons::mark(&alice, |s| s.pledges_honored += 10);
+    commons::mark(&bob, |s| s.pledges_honored += 10);
+    let w = |k: &Koperasi, a: &AccountId| k.get_reputation_weights().iter().find(|(x, _)| x == a).map_or(0, |(_, w)| w.0);
+    assert_eq!(w(&k, &alice), w(&k, &bob));
+    // a case alice brought is upheld, with bob on the jury against the outcome
+    let case = commons::Case { id: 0, job_id: "j".into(), claimant: alice.clone(), refund_to: acc("buyer.testnet"), amount: U128(1),
+        reason: "r".into(), jurors: vec![bob.clone()], votes: vec![(bob.clone(), false)], opened: U64(0), status: commons::CaseStatus::Upheld,
+        refund_proposal: None };
+    commons::put_case(&case);
+    // alice: 1 good of 1 -> 3/2; bob: 1 bad of 1 -> 2/3
+    assert_eq!((w(&k, &alice), w(&k, &bob)), (1500, 666));
 }

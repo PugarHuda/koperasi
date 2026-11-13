@@ -12,6 +12,14 @@
 //! - **A reputation dividend that decays**: a member's weight is the work added to their record since the last
 //!   dividend plus half of their previous weight, so it is never capped and recent work counts most.
 //!
+//! - **Quality, not only quantity** (0.3.4): each member's reputation weight is multiplied by how their judgments
+//!   held up in the co-op court: a juror who ruled with the case's outcome, a claimant whose case was upheld, count for
+//!   them; a juror against the outcome, a claimant whose case was dismissed, against. Factor (good + 2) / (bad + 2).
+//! - **Agents that must run in a TEE** (0.3.4, the Shade Agent pattern): the members name a TEE registry
+//!   (`set_tee_registry`, its own contract, `tee-registry/`) that verifies an Intel TDX attestation on-chain and then
+//!   calls `note_attested`. An agent the members mark `set_agent_tee(account, true)` records receipts only while its
+//!   attestation holds: the contract refuses them from that key otherwise, whoever holds it.
+//!
 //! State lives under its own storage keys, so the upgrade needs no state migration.
 
 use crate::tasks::{load, save};
@@ -22,6 +30,41 @@ const KEY_AGENT_SHU: &[u8] = b"agent_shu_total";
 const KEY_FEDERATION: &[u8] = b"federation";
 const KEY_FED_RULES: &[u8] = b"federation_rules";
 const GAS_NOTE: Gas = Gas::from_tgas(5);
+const KEY_TEE_REGISTRY: &[u8] = b"tee_registry";
+
+fn attested_key(a: &AccountId) -> Vec<u8> {
+    format!("attested:{a}").into_bytes()
+}
+fn tee_required_key(a: &AccountId) -> Vec<u8> {
+    format!("tee_required:{a}").into_bytes()
+}
+
+/// Called from `record_receipt`/`update_receipt`: an agent the members marked TEE-only acts only while attested.
+pub(crate) fn assert_tee_ok(a: &AccountId) {
+    if env::storage_has_key(&tee_required_key(a)) {
+        let until = load::<(U64, String)>(&attested_key(a)).map_or(0, |(u, _)| u.0);
+        require!(until > env::block_timestamp(), "this agent must run in an attested TEE: register its attestation first");
+    }
+}
+
+/// (judgments that held, judgments that did not) in the co-op court: as juror against the outcome, as claimant.
+fn court_record(cases: &[crate::commons::Case], a: &AccountId) -> (u32, u32) {
+    let (mut good, mut bad) = (0, 0);
+    for c in cases {
+        let upheld = match c.status {
+            crate::commons::CaseStatus::Upheld => true,
+            crate::commons::CaseStatus::Dismissed => false,
+            crate::commons::CaseStatus::Open => continue,
+        };
+        if let Some((_, v)) = c.votes.iter().find(|(j, _)| j == a) {
+            if *v == upheld { good += 1 } else { bad += 1 }
+        }
+        if c.claimant == *a {
+            if upheld { good += 1 } else { bad += 1 }
+        }
+    }
+    (good, bad)
+}
 
 fn late_key(a: &AccountId) -> Vec<u8> {
     format!("late_elsewhere:{a}").into_bytes()
@@ -101,6 +144,7 @@ impl Koperasi {
     /// With `commit`, the weights are kept as the new baseline (a dividend was paid by them).
     pub(crate) fn reputation_weights(&self, commit: bool) -> Vec<(AccountId, u128)> {
         let mut out = vec![];
+        let cases = self.get_cases(Some(0), Some(500));
         for a in self.members.keys() {
             let done = self.get_record(a.clone()).map_or(0, |r| r.done);
             let s = crate::commons::standing_of(a);
@@ -111,7 +155,9 @@ impl Koperasi {
                 save(&rep_key(a), &(total, w));
             }
             if self.in_good_standing(a) && w > 0 {
-                out.push((a.clone(), w as u128));
+                // 0.3.4: weighted by how the member's judgments held up in court (x100 to keep the fraction)
+                let (good, bad) = court_record(&cases, a);
+                out.push((a.clone(), w as u128 * 100 * (good as u128 + 2) / (bad as u128 + 2)));
             }
         }
         out
@@ -200,6 +246,45 @@ impl Koperasi {
         self.assert_dao();
         env::storage_remove(&late_key(&account_id));
         Event::LateElsewhere { account_id, coop: env::current_account_id(), late: false }.emit();
+    }
+
+    // ---------- agents in a TEE (0.3.4) ----------
+
+    /// DAO only: the TEE registry whose attestations count here (None: none).
+    pub fn set_tee_registry(&mut self, registry: Option<AccountId>) {
+        self.assert_dao();
+        match &registry {
+            Some(r) => save(KEY_TEE_REGISTRY, r),
+            None => {
+                env::storage_remove(KEY_TEE_REGISTRY);
+            }
+        };
+        Event::TeeRegistrySet { registry }.emit();
+    }
+
+    /// DAO only: whether an agent may record receipts only while attested in a TEE.
+    pub fn set_agent_tee(&mut self, account_id: AccountId, required: bool) {
+        self.assert_dao();
+        if required {
+            save(&tee_required_key(&account_id), &true);
+        } else {
+            env::storage_remove(&tee_required_key(&account_id));
+        }
+        Event::AgentTeeSet { account_id, required }.emit();
+    }
+
+    /// The TEE registry only: `account_id`'s attestation was verified on-chain and holds until `until`.
+    pub fn note_attested(&mut self, account_id: AccountId, until: U64, compose_hash: String) {
+        let reg: Option<AccountId> = load(KEY_TEE_REGISTRY);
+        require!(reg.as_ref() == Some(&env::predecessor_account_id()), "only the TEE registry the members named");
+        require!(compose_hash.len() <= 64, "compose hash: 64 hex");
+        save(&attested_key(&account_id), &(until, compose_hash.clone()));
+        Event::AgentAttested { account_id, until, compose_hash }.emit();
+    }
+
+    /// (TEE-only?, attested until, compose hash) for an agent; and the registry.
+    pub fn get_agent_tee(&self, account_id: AccountId) -> (bool, Option<(U64, String)>, Option<AccountId>) {
+        (env::storage_has_key(&tee_required_key(&account_id)), load(&attested_key(&account_id)), load(KEY_TEE_REGISTRY))
     }
 
     // ---------- the reputation dividend's weights ----------

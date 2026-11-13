@@ -203,6 +203,15 @@ pub enum Event {
     /// A sister co-op said an account's loan there is late (or settled).
     #[event_version("1.0.0")]
     LateElsewhere { account_id: AccountId, coop: AccountId, late: bool },
+    /// The members named the TEE registry whose attestations count.
+    #[event_version("1.0.0")]
+    TeeRegistrySet { registry: Option<AccountId> },
+    /// The members said whether an agent must run in an attested TEE.
+    #[event_version("1.0.0")]
+    AgentTeeSet { account_id: AccountId, required: bool },
+    /// The TEE registry verified an agent's attestation on-chain.
+    #[event_version("1.0.0")]
+    AgentAttested { account_id: AccountId, until: U64, compose_hash: String },
     /// The members set how many days apart the agent may propose by-laws.
     #[event_version("1.0.0")]
     AgentProposeEverySet { days: u64 },

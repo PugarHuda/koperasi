@@ -148,6 +148,14 @@ fn claim_key(id: u32) -> Vec<u8> {
 fn case_key(id: u32) -> Vec<u8> {
     format!("case:{id}").into_bytes()
 }
+/// Tests only: store a case as if the court had ruled it.
+#[cfg(test)]
+pub(crate) fn put_case(c: &Case) {
+    save(&case_key(c.id), c);
+    if count(KEY_CASES) <= c.id {
+        save(KEY_CASES, &(c.id + 1));
+    }
+}
 fn appeal_key(id: u32) -> Vec<u8> {
     format!("appeal:{id}").into_bytes()
 }
