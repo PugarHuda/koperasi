@@ -48,7 +48,7 @@ const MAX_ITEM: usize = 280;
 
 /// What the agent signs to put new by-laws to the members (bound to this contract and to the next version).
 pub fn agent_proposal_message(contract: &AccountId, nonce: u32, version: u32, hash: &str, uri: &str, reason: &str) -> String {
-    format!("{contract} agent_propose_bylaws #{nonce} v{version} {hash} {uri}
+    format!("koperasi-agent-proposal/1 {contract} #{nonce} v{version} {hash} {uri}
 {reason}")
 }
 
@@ -256,17 +256,18 @@ impl Koperasi {
     pub fn agent_propose_bylaws(&mut self, version: u32, hash: String, uri: String, reason: String, signature: Option<String>) -> Promise {
         require!(!self.paused, "koperasi is paused");
         let mut all: Vec<AgentProposal> = load(KEY_AGENT_PROPOSALS).unwrap_or_default();
+        // a nonce that only goes up, on either path; it starts past every proposal filed before it existed
+        let nonce: u32 = load(KEY_AGENT_NONCE).unwrap_or(all.len() as u32);
         if env::predecessor_account_id() != self.agent_id {
             let pk = load::<(AccountId, Vec<u8>)>(KEY_AGENT_PK).filter(|(a, _)| *a == self.agent_id).map(|(_, pk)| pk)
                 .unwrap_or_else(|| env::panic_str("only the co-op's agent: it has signed no receipt under this code yet"));
             let sig = signature.as_deref().and_then(|s| near_sdk::base64::Engine::decode(&near_sdk::base64::engine::general_purpose::STANDARD, s).ok())
                 .and_then(|b| <[u8; 64]>::try_from(b).ok()).unwrap_or_else(|| env::panic_str("only the co-op's agent, or its signature (base64, 64 bytes)"));
-            // bound to this contract, to the next version and to a nonce that only goes up: a signature counts once
-            let nonce: u32 = load(KEY_AGENT_NONCE).unwrap_or(0);
+            // bound to this contract, to the next version and to the nonce: a signature counts once
             let msg = agent_proposal_message(&env::current_account_id(), nonce, version, &hash, &uri, &reason);
             require!(pk.len() == 33 && pk[0] == 0 && env::ed25519_verify(&sig, msg.as_bytes(), &pk[1..].try_into().unwrap()), "not the agent's signature");
-            save(KEY_AGENT_NONCE, &(nonce + 1));
         }
+        save(KEY_AGENT_NONCE, &(nonce + 1));
         require!(!agent_suspended(), "the agent is suspended");
         require!(version == self.config.version + 1, "the next version only");
         require!(valid_hash(&hash), "hash must be 64 lowercase hex chars");
@@ -309,7 +310,8 @@ impl Koperasi {
 
     /// The exact text the agent signs for its next `agent_propose_bylaws`.
     pub fn get_agent_proposal_message(&self, version: u32, hash: String, uri: String, reason: String) -> String {
-        agent_proposal_message(&env::current_account_id(), load(KEY_AGENT_NONCE).unwrap_or(0), version, &hash, &uri, &reason)
+        let n = load(KEY_AGENT_NONCE).unwrap_or_else(|| load::<Vec<AgentProposal>>(KEY_AGENT_PROPOSALS).map_or(0, |v| v.len() as u32));
+        agent_proposal_message(&env::current_account_id(), n, version, &hash, &uri, &reason)
     }
 
     pub fn get_agent_proposals(&self) -> Vec<AgentProposal> {
