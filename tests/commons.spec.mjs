@@ -146,6 +146,9 @@ test("the co-ops page shows who recognises whom, and the federation with each co
   await expect(page.locator("#coops tbody tr", { hasText: "showcase" })).toContainText("koperasi-mw80aczw");
   await expect(page.locator("#fed")).toContainText("koperasi-mw4i2iwk.sputnik-v2.testnet");
   await expect(page.locator("#fed")).toContainText("koperasi-mw80aczw.sputnik-v2.testnet");
-  await expect(page.locator("#resolutions tbody tr")).toHaveCount(3, { timeout: 30_000 });
+  // the recognition, the shared reserve's grant, the loan standard, work passed between co-ops, and the ceiling made
+  // binding in each co-op's contract (0.3.3)
+  await expect(page.locator("#resolutions tbody tr")).toHaveCount(6, { timeout: 30_000 });
+  await expect(page.locator("#resolutions tbody tr", { hasText: "becomes binding" })).toHaveCount(2);
   await expect(page.locator("#resolutions tbody tr", { hasText: "shared reserve" })).toContainText(/Approve \(its proposal #\d+\)/);
 });
