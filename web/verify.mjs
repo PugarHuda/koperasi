@@ -11710,7 +11710,7 @@ var init_lib2 = __esm({
     NEAR2 = 10n ** 24n;
     sleep = (ms) => new Promise((r2) => setTimeout(r2, ms));
     KEYS = path.join(ROOT, ".keys");
-    DEPLOYMENT = path.join(ROOT, `deployment.${NETWORK}.json`);
+    DEPLOYMENT = process.env.KOP_DEPLOYMENT ? path.resolve(ROOT, process.env.KOP_DEPLOYMENT) : path.join(ROOT, `deployment.${NETWORK}.json`);
     LOCAL_DEPLOYMENT = path.join(ROOT, `deployment.${NETWORK}.local.json`);
     sha2562 = (buf) => crypto2.createHash("sha256").update(buf).digest("hex");
     keyFile = (id2) => path.join(KEYS, `${id2}.json`);
@@ -12528,6 +12528,51 @@ var init_verify = __esm({
           `${agent.strikes.length} strike(s) (${agent.strikes.map(([id2]) => `case #${id2}`).join(", ") || "none"}); ${agent.suspended ? "SUSPENDED" : "not suspended"}; the runtime's daily inference budget is divided by ${2 ** agent.strikes.length}`
         );
       }
+    }
+    {
+      const runs = [];
+      for (const who of [d2.steward, "kop-alice-mw4i3w8f.testnet"]) {
+        const list = await fetch(`https://api-testnet.nearblocks.io/v3/accounts/${who}/txns?receiver=outlayer.testnet&limit=100`, { signal: AbortSignal.timeout(3e4) }).then((r2) => r2.json()).then((j2) => j2.data ?? []).catch(() => []);
+        runs.push(...list.map((x2) => ({ hash: x2.transaction_hash, who })));
+      }
+      const outs = await Promise.all(runs.map(async (r2) => {
+        const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.hash, sender_account_id: r2.who, wait_until: "FINAL" }).catch(() => null);
+        const v = t2?.status?.SuccessValue ? Buffer.from(t2.status.SuccessValue, "base64").toString() : null;
+        return v && v !== "null" ? JSON.parse(v).match === true ? "match" : "other" : t2 ? "none" : "unread";
+      }));
+      const n = (k2) => outs.filter((o) => o === k2).length;
+      if (runs.length) console.log(`INFO  OutLayer gate: ${runs.length} runs on-chain, ${n("match")} answered with a match (${Math.round(100 * n("match") / runs.length)}%), ${n("none")} with no answer (the worker failed; the deposit came back), ${n("other")} other, ${n("unread")} unread`);
+    }
+    if (d2.sister_meeting) {
+      const m2 = d2.sister_meeting;
+      const [no, yes, held, report] = await Promise.all([
+        view2(m2.dao, "get_proposal", { id: m2.rejected }),
+        view2(m2.dao, "get_proposal", { id: m2.approved }),
+        view2(m2.contract, "get_annual_meetings"),
+        file(`web/${m2.report}`, m2.report)
+      ]);
+      const rec = held.find((x2) => x2.year === m2.year);
+      const ok = no.status === "Rejected" && argsOf(no).some((a) => a.method === "record_annual_meeting") && yes.status === "Approved" && argsOf(yes).some((a) => a.method === "record_annual_meeting" && a.args.report_sha256 === sha2562(report)) && rec?.report_sha256 === sha2562(report);
+      check(
+        ok,
+        "an annual meeting can say no: the members rejected a draft report (nothing was recorded), then approved the next one",
+        `${m2.contract}: draft #${m2.rejected} ${no.status}; #${m2.approved} ${yes.status}, recorded with sha256 ${String(rec?.report_sha256).slice(0, 12)}\u2026`
+      );
+    }
+    if (d2.suspension) {
+      const sp = d2.suspension;
+      const [t2, p2, cs] = await Promise.all([
+        rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: sp.refused.tx, sender_account_id: sp.refused.by, wait_until: "FINAL" }),
+        view2(d2.dao, "get_proposal", { id: sp.reinstated_by }),
+        view2(d2.contract, "get_cases", { from: 0, limit: 100 })
+      ]);
+      const failed2 = JSON.stringify(t2?.status?.Failure ?? t2?.receipts_outcome?.map((o) => o.outcome.status.Failure).find(Boolean) ?? null).includes("suspended by the co-op court");
+      const ok = failed2 && sp.strikes.length >= 3 && sp.strikes.every((id2) => cs.find((c) => c.id === id2)?.status === "Upheld") && p2.status === "Approved" && argsOf(p2).some((a) => a.method === "reinstate_agent");
+      check(
+        ok,
+        "the court suspended the agent after three upheld cases, the contract refused its receipt, and the members reinstated it by vote",
+        `strikes: ${sp.strikes.map((c) => `case #${c}`).join(", ")}; refused ${sp.refused.tx.slice(0, 10)}\u2026 ("${sp.refused.error.slice(0, 50)}\u2026"); reinstated by #${sp.reinstated_by} (${p2.status})`
+      );
     }
     if (d2.federation) {
       const f = d2.federation;

@@ -536,5 +536,14 @@
       "error": "the agent is suspended by the co-op court (3 upheld cases in 90 days): the members reinstate it by vote"
     },
     "reinstated_by": 100
+  },
+  "sister_meeting": {
+    "contract": "koperasi-mw80aczw.testnet",
+    "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+    "year": 2026,
+    "rejected": 12,
+    "approved": 13,
+    "report": "rat/koperasi-mw80aczw.testnet/2026.md",
+    "rejected_report": "rat/koperasi-mw80aczw.testnet/2026.rejected-12.md"
   }
 }

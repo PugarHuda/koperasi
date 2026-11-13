@@ -388,6 +388,37 @@ for (const r of d.rat ?? []) {
   }
 }
 
+// how often OutLayer's enclave answered: every gate the steward (before jobs) or alice (by hand) asked for, from the
+// explorer's list, each read on NEAR. Information, not a claim: a gate with no answer starts no job (fail closed).
+{
+  const runs = [];
+  for (const who of [d.steward, "kop-alice-mw4i3w8f.testnet"]) {
+    const list = await fetch(`https://api-testnet.nearblocks.io/v3/accounts/${who}/txns?receiver=outlayer.testnet&limit=100`, { signal: AbortSignal.timeout(30_000) })
+      .then((r) => r.json()).then((j) => j.data ?? []).catch(() => []);
+    runs.push(...list.map((x) => ({ hash: x.transaction_hash, who })));
+  }
+  const outs = await Promise.all(runs.map(async (r) => {
+    const t = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r.hash, sender_account_id: r.who, wait_until: "FINAL" }).catch(() => null);
+    const v = t?.status?.SuccessValue ? Buffer.from(t.status.SuccessValue, "base64").toString() : null;
+    return v && v !== "null" ? (JSON.parse(v).match === true ? "match" : "other") : t ? "none" : "unread";
+  }));
+  const n = (k) => outs.filter((o) => o === k).length;
+  if (runs.length) console.log(`INFO  OutLayer gate: ${runs.length} runs on-chain, ${n("match")} answered with a match (${Math.round((100 * n("match")) / runs.length)}%), `
+    + `${n("none")} with no answer (the worker failed; the deposit came back), ${n("other")} other, ${n("unread")} unread`);
+}
+
+// a meeting that said no: the sister co-op's members rejected the first draft (nothing recorded), then approved a second
+if (d.sister_meeting) {
+  const m = d.sister_meeting;
+  const [no, yes, held, report] = await Promise.all([view(m.dao, "get_proposal", { id: m.rejected }), view(m.dao, "get_proposal", { id: m.approved }),
+    view(m.contract, "get_annual_meetings"), file(`web/${m.report}`, m.report)]);
+  const rec = held.find((x) => x.year === m.year);
+  const ok = no.status === "Rejected" && argsOf(no).some((a) => a.method === "record_annual_meeting") && yes.status === "Approved"
+    && argsOf(yes).some((a) => a.method === "record_annual_meeting" && a.args.report_sha256 === sha256(report)) && rec?.report_sha256 === sha256(report);
+  check(ok, "an annual meeting can say no: the members rejected a draft report (nothing was recorded), then approved the next one",
+    `${m.contract}: draft #${m.rejected} ${no.status}; #${m.approved} ${yes.status}, recorded with sha256 ${String(rec?.report_sha256).slice(0, 12)}…`);
+}
+
 // the full cycle: three upheld cases suspended the agent, the contract refused its receipt, the members reinstated it
 if (d.suspension) {
   const sp = d.suspension;

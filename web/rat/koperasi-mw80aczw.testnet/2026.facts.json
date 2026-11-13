@@ -1,0 +1,108 @@
+{
+  "co_op": "koperasi-mw80aczw.testnet",
+  "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+  "year": 2026,
+  "read_at": "2026-11-13T07:39:59.985Z",
+  "network": "NEAR testnet",
+  "by_laws": {
+    "version": 2,
+    "sha256": "e434689a723d2a256cecb1fcb41f7e5132f9d71f315d12ceabec3c446ad9e666"
+  },
+  "members": [
+    {
+      "account": "kop-steward-mw80aczw.testnet",
+      "savings_near": 0,
+      "points": 0
+    },
+    {
+      "account": "kop-bob-mw80aczw.testnet",
+      "savings_near": 0,
+      "points": 0
+    }
+  ],
+  "share_rule_bps": {
+    "reserve_bps": 2000,
+    "savings_bps": 4000,
+    "points_bps": 4000
+  },
+  "jobs": {
+    "receipts": 0,
+    "paid": 0,
+    "with_tee_proof": 0,
+    "from_agent_market": 0,
+    "from_a_third_party_testnet_market": 0,
+    "from_a_local_stand_in_market": 0,
+    "inference_cost_usd": 0
+  },
+  "audit_usdc": {
+    "expected": 0,
+    "deposited": 0,
+    "owed": 0
+  },
+  "profit_shares": [],
+  "court": [],
+  "pledges": {
+    "made": 0,
+    "called_in": 0,
+    "kept": 0,
+    "broken": 0
+  },
+  "tasks": {
+    "posted": 3,
+    "paid": 2,
+    "paid_near": 0.13,
+    "budget_left_near": 0.37
+  },
+  "treasury_usdc": 0,
+  "agenda": [
+    {
+      "by": "kop-bob-mw80aczw.testnet",
+      "item": "The draft we rejected did not say whether the co-op can survive on two paid tasks a year: can it?"
+    }
+  ],
+  "dao_proposals": {
+    "filed": 13,
+    "last": [
+      {
+        "id": 5,
+        "status": "Approved",
+        "what": "Koperasi task #2: pay kop-dave-mw80aczw-mw80d2ea.testnet for \"bounce test: the contributor deletes the account\" (approve"
+      },
+      {
+        "id": 6,
+        "status": "Approved",
+        "what": "Upgrade the Koperasi contract to code 7bLZ4Sq9ZRisgPYkHRqbPoU7jRFf67bAnzziaz6KcBZy (sha256 61f1fa38d4c09a30b125afd561f56"
+      },
+      {
+        "id": 7,
+        "status": "InProgress",
+        "what": "Upgrade the Koperasi contract to code 7bLZ4Sq9ZRisgPYkHRqbPoU7jRFf67bAnzziaz6KcBZy (sha256 61f1fa38d4c09a30b125afd561f56"
+      },
+      {
+        "id": 8,
+        "status": "Approved",
+        "what": "Recognise koperasi-mw4i2iwk.testnet as a sister co-op: work records there in good standing count as one trust source her"
+      },
+      {
+        "id": 9,
+        "status": "Approved",
+        "what": "Vote for our co-op in the federation kop-federation-mwejskze.sputnik-v2.testnet: approve its proposal #0 (\"Resolution 1:"
+      },
+      {
+        "id": 10,
+        "status": "Approved",
+        "what": "Upgrade the Koperasi contract to code 7Y3Eby6BznqQ4eZRHWQF4Gi8MobpABm9UqEvxdAEbg7U (sha256 6119a73a4c36849bae148cd1dae81"
+      },
+      {
+        "id": 11,
+        "status": "Approved",
+        "what": "By-laws v2: the model of v1 is no longer served; take the showcase's v6 (deepseek-v3.2, TEE-attested)"
+      },
+      {
+        "id": 12,
+        "status": "Rejected",
+        "what": "Annual members' meeting 2026: approve the accountability report https://koperasi-kohl.vercel.app/rat/koperasi-mw80aczw.t"
+      }
+    ]
+  }
+}
