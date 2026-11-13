@@ -161,11 +161,14 @@ test("a gate that gives no answer is asked once more; two silences in a row and 
   assert.equal(w.calls.length, 0);
 });
 
-test("the enclave judges the job by the voted by-laws: a job it refuses is not started", async () => {
+test("the enclave judges the job by the voted by-laws: a job it refuses is handed back, not started, and not gated again", async () => {
   fresh(9, { jobRefused: true });
   await run();
   assert.equal(w.completions, 0);
   assert.equal(w.calls.length, 0);
+  assert.equal(w.assignment.status, "declined");
+  await run();
+  assert.equal(w.gates, 1);
 });
 
 test("a by-laws gate that does not match: the job is not started and nothing is spent", async () => {

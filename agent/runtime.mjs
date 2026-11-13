@@ -315,7 +315,14 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
           g = await bylawsGate(payer, dep.contract, judged);
         }
         if (!g.out?.match || g.out.voted_sha256 !== hash) throw new Error(`no match (${JSON.stringify(g.out).slice(0, 160)})`);
-        if (!g.out.job?.allowed || g.out.job.id !== judged.id) throw new Error(`the job is not one the by-laws allow (${g.out.job?.reason ?? "not judged"})`);
+        if (g.out.job?.id !== judged.id) throw new Error(`the enclave did not judge this job (${JSON.stringify(g.out.job).slice(0, 120)})`);
+        if (!g.out.job.allowed) {
+          // the voted by-laws refuse this job: hand it back, so it is not gated again, and go on with the others
+          log(`handing back "${job.title}": the voted by-laws do not allow it (${g.out.job.reason}); tx ${g.tx}`);
+          await m.message(a.assignmentId, `The Koperasi agent's by-laws do not allow this job (${g.out.job.reason}); handing it back.`).catch(() => {});
+          await m.decline(a.assignmentId).catch((x) => log(`decline failed: ${x.message}`));
+          continue;
+        }
         gate = { tx: g.tx, by: g.sender };
         log(`by-laws v${version} checked inside an Intel TDX enclave (OutLayer): tx ${g.tx}`);
       } catch (e) {
