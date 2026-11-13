@@ -101,7 +101,8 @@ proposal #68 to drop the veto window, rejected by the members; and #69, still op
 
 ## For judges: 60 seconds, no wallet, no keys
 
-The full read-only checklist, with what you should see at each step, is [`JUDGE.md`](JUDGE.md).
+The full read-only checklist, with what you should see at each step, is [`JUDGE.md`](JUDGE.md). Every claim in one
+command, no clone (Node 20+): `curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs`.
 
 1. Open **https://koperasi-kohl.vercel.app**. Under the headline, *The Social Money brief, proven live* reads each line
    of the track's brief and the co-op's activity from the chain. Then *Don't trust us* runs four checks in your browser:

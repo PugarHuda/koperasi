@@ -18,7 +18,8 @@ import { DEPLOYMENT, NETWORK, account, propose, txUrl, view, vote } from "./lib.
 export const SIGNER = NETWORK === "mainnet" ? "v1.signer" : "v1.signer-prod.testnet";
 export const PATH = "ethereum-1";
 export const SEPOLIA = { chainId: 11155111n, rpc: "https://ethereum-sepolia-rpc.publicnode.com", explorer: "https://sepolia.etherscan.io/tx/" };
-const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
+// verify.mjs imports the helpers; its one-file build runs with no checkout, so no deployment file to read
+const dep = fs.existsSync(DEPLOYMENT) ? JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8")) : {};
 
 const hex = (b) => Buffer.from(b).toString("hex");
 const addressOf = (xy) => "0x" + hex(keccak_256(xy)).slice(24);

@@ -28,6 +28,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:unit
+      # web/verify.mjs (`npm run verify` as one file, served by the page) must be what this source builds
+      - run: npm run build:verify && git diff --exit-code web/verify.mjs
       - run: npm audit --audit-level=high
 
   # every push and every day: the README's claims about the showcase co-op, read from testnet (no keys)

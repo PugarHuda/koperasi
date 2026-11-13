@@ -5,12 +5,17 @@ The showcase co-op is on NEAR testnet: contract `koperasi-mw4i2iwk.testnet`, DAO
 
 ## In one command (about a minute)
 
+Without cloning anything (Node 20 or later):
+
 ```sh
-npm install && npm run verify
+curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs
 ```
 
-It reads every claim below from testnet and ends with **`every claim checks out`** (exit code 1 otherwise). CI runs it
-on every push and every day (`.github/workflows/tests.yml`).
+From a checkout: `npm install && npm run verify`. Both read every claim below from NEAR, Ethereum, Base and Arbitrum
+testnets and end with **`every claim checks out`** (exit code 1 otherwise). The one file is `npm run verify` bundled
+(`npm run build:verify`); it reads the deployment, the by-laws and the gate program from the page instead of a
+checkout, and CI fails if the file the repo holds is not what its source builds. CI runs the check on every push and
+every day (`.github/workflows/tests.yml`).
 
 ## On the live page: https://koperasi-kohl.vercel.app
 

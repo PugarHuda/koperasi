@@ -6,7 +6,18 @@ import { baseEncode } from "near-api-js";
 import { DEPLOYMENT, ROOT, rawQuery, sha256, accountUrl } from "./lib.mjs";
 import { SIGNER, PATH, SEPOLIA, daoAddress, rawTx, recover, signerOf, statement, txHash } from "./chainsig.mjs";
 
-const d = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
+// KOP_PAGE (set by web/verify.mjs, the one-file build anyone downloads from the page): the deployment, the by-laws
+// file and the gate program are read from the live page instead of a checkout. Everything else comes from the chain.
+const PAGE = process.env.KOP_PAGE;
+/** A file of the checkout (`rel`), or what the page serves at `served`. */
+async function file(rel, served) {
+  if (!PAGE) return fs.readFileSync(path.join(ROOT, rel));
+  const res = await fetch(`${PAGE}/${served}`, { signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`${PAGE}/${served}: HTTP ${res.status}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+const d = JSON.parse(String(await file(path.relative(ROOT, DEPLOYMENT), "deployment.json")));
+if (PAGE) console.log(`reading the deployment, the by-laws and the gate program from ${PAGE}; every claim from the chain\n`);
 // ponytail: rawQuery (plain fetch with a timeout, RPC failover) for every read, so a hung RPC fails instead of hanging
 const view = async (account_id, method_name, args = {}) => {
   const r = await rawQuery({ request_type: "call_function", account_id, method_name, args_base64: Buffer.from(JSON.stringify(args)).toString("base64") });
@@ -61,7 +72,7 @@ for (let from = 0; from < last; from += 100) proposals.push(...await view(d.dao,
 const approvedCall = (method, ok) => proposals.find((p) => p.status === "Approved" && argsOf(p).some((a) => a.method === method && ok(a.args)));
 
 // 1. by-laws
-const fileHash = sha256(fs.readFileSync(path.join(ROOT, d.configUri)));
+const fileHash = sha256(await file(d.configUri, d.configUri));
 const byLaws = approvedCall("set_config", (a) => a.hash === info.config.hash);
 check(fileHash === info.config.hash && byLaws, `the agent's by-laws ${d.configUri} are the ones the members voted`,
   `file sha256 ${fileHash.slice(0, 16)}…, contract ${info.config.hash.slice(0, 16)}… v${info.config.version}, voted in proposal #${byLaws?.id}`);
@@ -276,7 +287,7 @@ if (d.intents) {
 }
 
 // the by-laws gate, run inside an Intel TDX enclave by OutLayer: the tx ran this repo's wasm, and resumed with a match
-const GATE_WASM = sha256(fs.readFileSync(path.join(ROOT, "web/outlayer/bylaws-check.wasm")));
+const GATE_WASM = sha256(await file("web/outlayer/bylaws-check.wasm", "outlayer/bylaws-check.wasm"));
 // earlier builds of the same program (git history of web/outlayer/bylaws-check.wasm): gates already on-chain ran them
 const GATE_WASMS = [GATE_WASM, "725254a197b432cdb366ee6f3e4086d9ff9099ed350d114fcf6fb87d2e984fa0"];
 /**
