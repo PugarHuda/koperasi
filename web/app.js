@@ -570,8 +570,12 @@ if (lastRat) {
 
 // contract 0.2.9: the agent as a defendant, the mandatory dues, and this year's agenda
 Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_dues"), view(dep.contract, "get_agenda", { year: new Date().getUTCFullYear() }),
-  view(dep.contract, "get_share_funds").catch(() => []), view(dep.contract, "get_loan_rule").catch(() => null)])
-  .then(([agent, dues, agenda, funds, loans]) => {
+  view(dep.contract, "get_share_funds").catch(() => []), view(dep.contract, "get_loan_rule").catch(() => null),
+  // 0.3.2 and 0.3.3 (older contracts: nothing shown)
+  view(dep.contract, "get_agent_member").catch(() => null), view(dep.contract, "get_risk_fund").catch(() => null),
+  view(dep.contract, "get_reputation_share").catch(() => 0), view(dep.contract, "get_agent_proposals").catch(() => []),
+  view(dep.contract, "get_federation").catch(() => null)])
+  .then(([agent, dues, agenda, funds, loans, member, risk, repBps, proposals, fed]) => {
     const parts = [`<b>The agent answers to the court.</b> ${agent.strikes.length
       ? `${agent.strikes.length} case(s) upheld against its jobs in 90 days (${agent.strikes.map(([id]) => `#${esc(id)}`).join(", ")}): its daily inference budget is divided by ${2 ** agent.strikes.length}`
       : "No case upheld against its jobs in 90 days"}${agent.suspended ? "; <strong>suspended</strong> until the members reinstate it" : "; at 3 the contract suspends it"}.`];
@@ -579,6 +583,13 @@ Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_d
     // contract 0.3.0: funds from the surplus, and the savings-and-loan fund
     if (funds.length) parts.push(`<b>Funds from every profit share:</b> ${funds.map((f) => `${esc(f.name)} ${f.bps / 100}% to <a href="${explorer(f.to)}">${esc(f.to)}</a>`).join("; ")}, out of the reserve.`);
     if (loans) parts.push(`<b>Savings and loans:</b> a member in good standing with a guarantor borrows up to ${nearAmt(loans[0].max_loan)} NEAR for ${esc(loans[0].term_days)} days at ${loans[0].rate_bps / 100}% flat; the fund can lend ${nearAmt(loans[1])} NEAR now. A late loan costs the borrower and their guarantors good standing.`);
+    if (member && (member.share_bps || risk)) parts.push(`<b>The agent is a member too.</b> It gets ${member.share_bps / 100}% of every profit share, scaled by its standing (now ${member.standing_bps / 100}%: halved for each upheld case), into the risk fund that refunds its mistakes at once: ${risk ? `${usdc(risk[0])} USDC there now, it saves ${risk[1] / 100}% of its earnings` : ""}; ${usdc(member.shu_total)} USDC from its shares so far.`);
+    if (repBps) parts.push(`<b>Reputation dividend:</b> ${repBps / 100}% of every profit share is split among members in good standing by their work since the last one (finished tasks, pledges kept, juries served), plus half their last weight.`);
+    if (proposals.length) {
+      const last = proposals.at(-1);
+      parts.push(`<b>The agent proposes, the members decide:</b> ${proposals.length} proposal(s) by the agent, the last for by-laws v${esc(last.version)} (<a href="${explorer(dep.dao)}">DAO proposal #${esc(last.proposal)}</a>): “${esc(last.reason.slice(0, 220))}”`);
+    }
+    if (fed) parts.push(`<b>Bound by the federation</b> <a href="/coops.html">${esc(fed[0].split(".")[0])}</a>: ${fed[1] ? `loans at most ${fed[1].max_rate_bps / 100}% for ${esc(fed[1].max_term_days)} days, set by a resolution both co-ops voted; the contract refuses a loan rule above it` : "no ceiling set yet"}. A loan called late here is told to the sister co-ops.`);
     if (agenda.length) parts.push(`<b>This year's agenda:</b> ${agenda.map(([by, item]) => `“${esc(item)}” (${esc(by.split(".")[0])})`).join("; ")}.`);
     $("duties").hidden = false;
     $("duties").innerHTML = parts.join("<br>");

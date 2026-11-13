@@ -26,3 +26,15 @@ test("what members wrote is escaped in the feed", () => {
   const out = rss("a.testnet", [{ id: "p1", title: "Vote <now>", text: `"x" & </description><script>` }], NOW);
   assert.ok(!out.includes("<script>") && out.includes("&lt;script&gt;") && out.includes("&amp;"));
 });
+
+test("0.3.3: shares to claim, a loan due or late here or at a sister co-op, and the agent's own proposal", () => {
+  const loan = (status, dueMs) => ({ principal: String(3n * 10n ** 23n), interest: String(6n * 10n ** 21n), due: ns(dueMs), status });
+  const agentP = { id: 9, status: "InProgress", votes: {}, proposer: "c.testnet", description: "By-laws v8, proposed by the co-op's agent from its record: x" };
+  const items = inboxItems("a.testnet", { member: true, proposals: [agentP], claimable: "1500000", loan: loan("Open", NOW + 2 * 86_400_000),
+    lateElsewhere: ["sister.testnet"], contract: "c.testnet" }, NOW);
+  assert.deepEqual(items.map((i) => i.id), ["p9", "claim1500000", `loan${ns(NOW + 2 * 86_400_000)}`, "late-sister.testnet"]);
+  assert.match(items[0].title, /agent proposes/);
+  assert.match(items[2].text, /0\.306 NEAR/);
+  assert.equal(inboxItems("a.testnet", { loan: loan("Late", NOW) }, NOW)[0].id, "loan-late");
+  assert.deepEqual(inboxItems("a.testnet", { loan: loan("Repaid", NOW), claimable: "0" }, NOW), []);
+});
