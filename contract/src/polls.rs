@@ -14,6 +14,10 @@
 //!   (once per poll, attaching the 0.1 NEAR proposal bond) calls `poll_to_proposal`: the contract files a Sputnik
 //!   proposal calling its own `set_config` with that reference. The poll still binds nothing: the members vote it.
 //!
+//! - **The agent opens technical polls** (0.3.8): the founding agent (directly, or anyone with its ed25519 signature of
+//!   `get_agent_poll_message`) opens a technical poll with its reason (`agent_open_poll`), one at a time. Members vote
+//!   and anyone closes it as usual; a winning by-laws option goes to the DAO by `poll_to_proposal`.
+//!
 //! The last 100 polls are kept. State lives under its own storage keys, so the upgrade needs no state migration.
 
 use crate::tasks::{ext_dao_proposals, load, save, GAS_PROPOSE, PAYOUT_BOND};
@@ -32,6 +36,11 @@ pub const MODE_ONE_MEMBER: &str = "one_member";
 
 const GAS_POLL_PROPOSED: Gas = Gas::from_tgas(10);
 const MAX_URI: usize = 200;
+/// 0.3.8: ids of the polls the agent opened (the last 100); each one's reason under `agent_poll_key`.
+const KEY_AGENT_POLLS: &[u8] = b"agent_polls";
+/// 0.3.8: agent poll signatures consumed so far: only ever goes up (its own nonce).
+const KEY_AGENT_POLL_NONCE: &[u8] = b"agent_poll_nonce";
+const MAX_AGENT_REASON: usize = 280;
 
 fn poll_key(id: u32) -> Vec<u8> {
     format!("poll:{id}").into_bytes()
@@ -43,6 +52,33 @@ fn bylaws_key(id: u32) -> Vec<u8> {
 /// 0.3.7: the DAO proposal filed from the poll; `None` stored while the filing is in flight (once per poll)
 fn proposal_key(id: u32) -> Vec<u8> {
     format!("poll_proposal:{id}").into_bytes()
+}
+/// 0.3.8: the poll was opened by the agent (its `AgentPoll`)
+fn agent_poll_key(id: u32) -> Vec<u8> {
+    format!("poll_agent:{id}").into_bytes()
+}
+
+/// What the agent signs to open a technical poll. `content` is `agent_poll_content`; the free-text reason comes last.
+pub fn agent_poll_message(contract: &AccountId, nonce: u32, hours: u32, content: &str, reason: &str) -> String {
+    format!("koperasi-agent-poll/1 {contract} #{nonce} {hours} {content}\n{reason}")
+}
+
+/// sha256 (lowercase hex) of the compact JSON `{"question":..,"options":[..],"bylaws":..}`, in that key order
+/// (`bylaws` null when omitted, each reference `{"version","hash","uri"}`).
+pub fn agent_poll_content(question: &str, options: &[String], bylaws: &Option<Vec<Option<BylawsRef>>>) -> String {
+    use near_sdk::serde_json::to_string;
+    let json = format!("{{\"question\":{},\"options\":{},\"bylaws\":{}}}",
+        to_string(question).unwrap(), to_string(options).unwrap(), to_string(bylaws).unwrap());
+    env::sha256(json.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// A poll the agent opened, and why.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct AgentPoll {
+    pub id: u32,
+    pub reason: String,
+    pub at: U64,
 }
 
 /// A by-laws file, as `set_config` takes it: the version, its sha256 (64 lowercase hex) and where to read it.
@@ -61,6 +97,8 @@ pub struct PollView {
     pub poll: Poll,
     pub bylaws: Option<Vec<Option<BylawsRef>>>,
     pub proposal: Option<u64>,
+    /// 0.3.8: the agent's reason, when the agent opened it
+    pub agent_reason: Option<String>,
 }
 
 // ponytail: lets callers read `get_poll(id).unwrap().mode` as before
@@ -132,6 +170,56 @@ impl Koperasi {
                      bylaws: Option<Vec<Option<BylawsRef>>>) -> u32 {
         let by = env::predecessor_account_id();
         require!(self.members.contains_key(&by), "only a member");
+        self.new_poll(by, question, options, kind, hours, bylaws)
+    }
+
+    /// The founding agent opens a technical poll, with its reason: directly, or anyone submitting its ed25519 signature
+    /// (base64) of `get_agent_poll_message(...)`. The caller attaches the storage deposit, as for `open_poll`. One agent
+    /// poll open at a time. Members vote and anyone closes it as usual.
+    #[payable]
+    pub fn agent_open_poll(&mut self, question: String, options: Vec<String>, hours: u32,
+                           bylaws: Option<Vec<Option<BylawsRef>>>, reason: String, signature: Option<String>) -> u32 {
+        require!(!self.paused, "koperasi is paused");
+        require!(!crate::meeting::agent_suspended(), "the agent is suspended");
+        crate::solidarity::assert_tee_ok(&self.agent_id);
+        let nonce: u32 = load(KEY_AGENT_POLL_NONCE).unwrap_or(0);
+        crate::meeting::assert_agent_or_signed(&self.agent_id, signature.as_deref(), || agent_poll_message(
+            &env::current_account_id(), nonce, hours, &agent_poll_content(&question, &options, &bylaws), &reason));
+        save(KEY_AGENT_POLL_NONCE, &(nonce + 1)); // a signature counts once
+        require!(!reason.trim().is_empty() && reason.len() <= MAX_AGENT_REASON, "reason: 1 to 280 characters");
+        let mut ids: Vec<u32> = load(KEY_AGENT_POLLS).unwrap_or_default();
+        // past its deadline a poll is decided (anyone may close it), as the pruning in `new_poll` reads it
+        if let Some(p) = ids.last().and_then(|i| load::<Poll>(&poll_key(*i))) {
+            require!(p.closed || env::block_timestamp() >= p.closes_at.0, "the agent's last poll is still open");
+        }
+        let id = self.new_poll(self.agent_id.clone(), question, options, PollKind::Technical, hours, bylaws);
+        ids.push(id);
+        if ids.len() > MAX_POLLS as usize {
+            ids.remove(0);
+        }
+        save(KEY_AGENT_POLLS, &ids);
+        save(&agent_poll_key(id), &AgentPoll { id, reason: reason.clone(), at: U64(env::block_timestamp()) });
+        Event::AgentPollOpened { id, reason }.emit();
+        id
+    }
+
+    /// The exact text the agent signs for its next `agent_open_poll`.
+    pub fn get_agent_poll_message(&self, question: String, options: Vec<String>, hours: u32,
+                                  bylaws: Option<Vec<Option<BylawsRef>>>, reason: String) -> String {
+        agent_poll_message(&env::current_account_id(), load(KEY_AGENT_POLL_NONCE).unwrap_or(0), hours,
+            &agent_poll_content(&question, &options, &bylaws), &reason)
+    }
+
+    /// The polls the agent opened that are still kept, oldest first, with its reasons.
+    pub fn get_agent_polls(&self) -> Vec<AgentPoll> {
+        load::<Vec<u32>>(KEY_AGENT_POLLS).unwrap_or_default().into_iter().filter_map(|i| load(&agent_poll_key(i))).collect()
+    }
+}
+
+impl Koperasi {
+    /// The body of `open_poll`, for a member or the agent: checks the deposit and the terms, stores the poll.
+    fn new_poll(&mut self, by: AccountId, question: String, options: Vec<String>, kind: PollKind, hours: u32,
+                bylaws: Option<Vec<Option<BylawsRef>>>) -> u32 {
         let refs = bylaws.as_ref().map_or(0, |b| b.iter().flatten().count());
         require!(env::attached_deposit() >= crate::commons::PLEDGE_FEE.saturating_mul(1 + refs as u128),
             "attach 0.01 NEAR for the poll's storage, and 0.01 NEAR per by-laws reference");
@@ -161,6 +249,7 @@ impl Koperasi {
             env::storage_remove(&old);
             env::storage_remove(&bylaws_key(id - MAX_POLLS));
             env::storage_remove(&proposal_key(id - MAX_POLLS));
+            env::storage_remove(&agent_poll_key(id - MAX_POLLS));
         }
         save(KEY_POLL_COUNT, &(id + 1));
         let now = env::block_timestamp();
@@ -176,7 +265,10 @@ impl Koperasi {
         Event::PollOpened { id, kind, mode: mode.into(), by, options: n as u32, closes_at }.emit();
         id
     }
+}
 
+#[near]
+impl Koperasi {
     /// A member votes once for option `option` (0-based) before the deadline. Returns the weight counted.
     pub fn vote_poll(&mut self, id: u32, option: u32) -> U128 {
         let by = env::predecessor_account_id();
@@ -218,6 +310,7 @@ impl Koperasi {
     pub fn get_poll(&self, id: u32) -> Option<PollView> {
         load(&poll_key(id)).map(|poll| PollView {
             poll, bylaws: load(&bylaws_key(id)), proposal: load::<Option<u64>>(&proposal_key(id)).flatten(),
+            agent_reason: load::<AgentPoll>(&agent_poll_key(id)).map(|a| a.reason),
         })
     }
 

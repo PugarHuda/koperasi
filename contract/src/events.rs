@@ -358,4 +358,21 @@ pub enum Event {
     /// The agent asked the members to lend a sister co-op: the DAO proposal that calls `lend_to_sister`.
     #[event_version("1.0.0")]
     LoanSuggested { coop: AccountId, amount: U128, proposal: u64 },
+
+    // ---------- 0.3.8: the agent opens polls; the referral share is paid automatically ----------
+    /// The co-op's agent opened technical poll `id`, for this reason.
+    #[event_version("1.0.0")]
+    AgentPollOpened { id: u32, reason: String },
+    /// The members voted the share of a referred job's earnings paid to the co-op that referred it.
+    #[event_version("1.0.0")]
+    ReferralShareSet { bps: u16 },
+    /// The members named (or, None, removed) the treasury a sister co-op's referral share is paid to.
+    #[event_version("1.0.0")]
+    CoopTreasurySet { coop: AccountId, treasury: Option<AccountId> },
+    /// Part of a referred job's earnings was sent to the referring co-op's treasury.
+    #[event_version("1.0.0")]
+    ReferralSharePaid { job_id: String, from_coop: AccountId, to: AccountId, amount: U128 },
+    /// That transfer failed: the amount went to the DAO's unforwarded balance (`flush_to_dao`), for the members to pay.
+    #[event_version("1.0.0")]
+    ReferralShareFailed { job_id: String, from_coop: AccountId, amount: U128 },
 }

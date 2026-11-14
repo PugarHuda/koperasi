@@ -737,23 +737,27 @@ impl Koperasi {
 
     // ---------- money in: USDC ft_transfer_call ----------
 
-    /// `msg = "earnings"` from the steward: Agent Market earnings, forwarded to the DAO and counted for reconciliation.
+    /// `msg = "earnings"` (or 0.3.8 `"earnings:<job_id>"`) from the steward: Agent Market earnings, forwarded to the DAO
+    /// and counted for reconciliation; a referred job's referral share goes to the referring co-op first.
     /// `msg = "share"` from the DAO: split as a profit share. Anything else is returned.
     pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
         if env::predecessor_account_id() != self.usdc_id {
             return PromiseOrValue::Value(amount);
         }
         match msg.as_str() {
-            "earnings" if Some(&sender_id) == self.steward.as_ref() => {
+            // 0.3.8: "earnings:<job_id>" names the job, so a referred job pays the referring co-op its share
+            m if (m == "earnings" || m.starts_with("earnings:")) && Some(&sender_id) == self.steward.as_ref() => {
                 self.deposited += amount.0;
                 Event::EarningsDeposited { amount }.emit();
+                let referral = m.strip_prefix("earnings:").map_or(0, |job| self.pay_referral_share(job, amount.0));
+                let rest = amount.0 - referral;
                 // 0.3.2: the agent saves a voted share of what it earned into the risk fund, for its own mistakes
-                let saved = amount.0 * crate::lending::agent_saves_bps() as u128 / BPS;
+                let saved = rest * crate::lending::agent_saves_bps() as u128 / BPS;
                 if saved > 0 {
                     crate::lending::add_risk(saved);
                     Event::AgentSaved { amount: U128(saved) }.emit();
                 }
-                self.forward_to_dao(amount.0 - saved);
+                self.forward_to_dao(rest - saved);
                 PromiseOrValue::Value(U128(0))
             }
             "share" if sender_id == self.dao_id => {
