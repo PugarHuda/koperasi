@@ -29,7 +29,12 @@ function say(html) {
   let line = box.querySelector(".note-line");
   if (!line) { line = document.createElement("p"); line.className = "note-line"; box.append(line); }
   line.innerHTML = html;
+  told();
 }
+/** The dashboard (dashboard.js) shows who is signed in and the last transaction's state outside this panel. */
+const told = () => window.dispatchEvent(new CustomEvent("koperasi:wallet", { detail: { me, note } }));
+/** The account signed in (or previewed with ?as=), "" when none. */
+export const account = () => me;
 
 /** Thrown before the wallet opens: nothing was signed or sent. */
 const notSent = (msg) => Object.assign(new Error(msg), { notSent: true });
@@ -78,7 +83,7 @@ const argsOf = (b64) => {
   try { return JSON.stringify(JSON.parse(atob(b64)), null, 1); } catch { return null; }
 };
 // a proposal whose args we cannot show in full is not voted on from here
-const opaque = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.actions.some((a) => argsOf(a.args) === null)
+export const opaque = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.actions.some((a) => argsOf(a.args) === null)
   || !["AddMemberToRole", "RemoveMemberFromRole", "Transfer", "FunctionCall", "AddBounty", "BountyDone"].includes(kindOf(p))
   || (kindOf(p) === "AddBounty" && !validToken(p.kind.AddBounty.bounty.token));
 // a NEAR account id (or "" for NEAR itself); anything else is not voted on from here
@@ -163,7 +168,7 @@ function ethBatch(p) {
 }
 
 // proposals are anyone's on-chain data: one malformed proposal must not take the panel down for every member
-const safeDescribe = (p, s) => {
+export const safeDescribe = (p, s) => {
   try { return describe(p, s); } catch { return t(`${kindOf(p)} (malformed: inspect it in the DAO)`, `${kindOf(p)} (rusak: periksa di DAO)`); }
 };
 
@@ -589,6 +594,12 @@ const whoBar = () => `<div class="who-bar"><span>${t("Signed in as", "Masuk seba
 const step = (state, title, body) => `<li class="${state}"><b>${title}</b>${body ? `<div>${body}</div>` : ""}</li>`;
 
 async function render() {
+  told();
+  await paint();
+  told();
+}
+
+async function paint() {
   if (!me) {
     box.innerHTML = t(`<p>Connect a NEAR <strong>testnet</strong> wallet (Meteor, Intear, Nightly…) to join this co-op from here.
       New to testnet? Meteor creates a free testnet account with faucet NEAR.</p>
@@ -913,20 +924,23 @@ async function render() {
     }
     act(t(`Post a ${nearAmt(amt)} NEAR task`, `Pasang tugas ${nearAmt(amt)} NEAR`), () => send(dep.contract, "post_task", { description: desc, amount: amt.toString() }, { deposit: TASK_FEE, tgas: 30 }));
   };
-  box.querySelectorAll("[data-vote]").forEach((b) => {
-    let p;
-    b.onclick = () => act(b.dataset.vote === "VoteApprove" ? t("Approve", "Setuju") : t("Reject", "Tolak"),
-      async () => {
-        const hash = await send(dep.dao, "act_proposal", { id: p.id, action: b.dataset.vote, proposal: p.kind }, { tgas: 200 });
-        if (b.dataset.vote === "VoteApprove") extra = await sendSigned(p);
-        return hash;
-      },
-      async () => {
-        p = await view(dep.dao, "get_proposal", { id: Number(b.dataset.id) });
-        if (p.status !== "InProgress") return t(`Proposal #${p.id} already ended: ${p.status}.`, `Usulan #${p.id} sudah berakhir: ${p.status}.`);
-        return p.votes[me] ? t(`You already voted on proposal #${p.id}.`, `Anda sudah memilih pada usulan #${p.id}.`) : null;
-      });
-  });
+  box.querySelectorAll("[data-vote]").forEach((b) => { b.onclick = () => vote(Number(b.dataset.id), b.dataset.vote); });
+}
+
+/** Vote on a DAO proposal from this wallet ("VoteApprove" or "VoteReject"); also used by the dashboard's proposals view. */
+export function vote(id, action) {
+  let p;
+  return act(action === "VoteApprove" ? t("Approve", "Setuju") : t("Reject", "Tolak"),
+    async () => {
+      const hash = await send(dep.dao, "act_proposal", { id: p.id, action, proposal: p.kind }, { tgas: 200 });
+      if (action === "VoteApprove") extra = await sendSigned(p);
+      return hash;
+    },
+    async () => {
+      p = await view(dep.dao, "get_proposal", { id });
+      if (p.status !== "InProgress") return t(`Proposal #${p.id} already ended: ${p.status}.`, `Usulan #${p.id} sudah berakhir: ${p.status}.`);
+      return p.votes[me] ? t(`You already voted on proposal #${p.id}.`, `Anda sudah memilih pada usulan #${p.id}.`) : null;
+    });
 }
 
 // a new event on-chain (live.js) refreshes the panel, unless a transaction is in progress

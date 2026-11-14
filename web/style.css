@@ -477,26 +477,10 @@ h2 .dim { color: var(--grey); }
 .card-out blockquote { margin: 0 0 .5rem; padding-left: .8rem; border-left: 2px solid var(--rule); color: var(--ink); }
 .card-out ul { margin: 0 0 .5rem; padding-left: 1.1rem; }
 
-/* the sidebar: desktop only; phones and tablets keep the top bar (web/sidebar.js marks the section in view) */
-.sidebar { display: none; }
-@media (min-width: 1280px) {
-  body { padding-left: 232px; }
-  .sidebar {
-    display: flex; flex-direction: column; gap: 1rem; position: fixed; inset: 0 auto 0 0; width: 232px; z-index: 5;
-    padding: 1.4rem 1.2rem; overflow-y: auto; background: #030a2a; color: #fff; border-right: 1px solid rgba(255,255,255,.08);
-  }
-  .sidebar nav { display: flex; flex-direction: column; gap: .15rem; font-size: .88rem; }
-  .sidebar nav p { margin: .9rem 0 .2rem; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: #9fb4ff; }
-  .sidebar nav a { color: #dfe6ff; text-decoration: none; padding: .28rem .55rem; border-radius: 6px; border-left: 2px solid transparent; }
-  .sidebar nav a:hover { background: rgba(255,255,255,.06); color: #fff; }
-  .sidebar nav a[aria-current] { border-left-color: #ffd54a; background: rgba(43,92,255,.22); color: #fff; }
-  .sidebar nav a:focus-visible, .sidebar .side-app:focus-visible { outline: 2px solid #ffd54a; outline-offset: 2px; }
-  .sidebar .side-app { margin-top: auto; text-align: center; }
-  .top .brand, .top nav { display: none; }
-}
 /* repeated tasks (scripts/scenarios.mjs ran twice) */
 .tag-repeat { font-size: .75rem; padding: .05rem .4rem; border-radius: 4px; background: rgba(43,92,255,.12); color: var(--blue, #2b5cff); white-space: nowrap; }
 #open-app, .top .lang-btn { white-space: nowrap; }
+#open-app { gap: .28em; }
 @media (max-width: 700px) {
   #open-app .long { display: none; }
   #open-app { text-transform: capitalize; padding: .55rem .9rem; }
