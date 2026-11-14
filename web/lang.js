@@ -105,6 +105,17 @@ const ID = [
   ["#network .sub", "Koperasi sekunder, sebagaimana diizinkan hukum perkoperasian Indonesia (UU 25/1992 pasal 15–16): Sputnik DAO tanpa modifikasi yang anggotanya hanya DAO koperasi, satu koperasi satu suara. Sebuah koperasi memilih di sana hanya jika anggotanya sendiri menyetujui usulan yang memberikan suara itu. Koperasi yang saling mengakui menghitung catatan kerja satu sama lain (paspor)."],
   ["#resolutions caption", 'Resolusi <span class="muted">(setiap suara diberikan lewat usulan DAO koperasi anggota itu sendiri)</span>'],
   ["#resolutions thead tr", '<th scope="col">#</th><th scope="col">Resolusi</th><th scope="col">Suara</th><th scope="col">Status</th>'],
+  // static captions and headers app.js never rewrites (QA, 14 Nov)
+  ["#members details.all > summary", "Semua anggota"],
+  [".pb-head > span:first-child", "Buku anggota"],
+  ["#work figcaption", "Langsung dari kontrak"],
+  ["#receipts > caption", "Tanda terima"],
+  ["#receipts > thead > tr", '<th scope="col">Pekerjaan</th><th scope="col" class="num">Harga</th><th scope="col" class="num">Inferensi</th><th scope="col">Anggaran dasar</th><th scope="col">Bukti</th><th scope="col">Status</th>'],
+  ["#audit-note", 'Ini koperasi demo. Pada langkah terakhir <code>npm run demo</code> steward sengaja menahan satu pembayaran, supaya audit menunjukkan apa yang dilihat anggota saat uang hilang.'],
+  ["#periods > caption", 'Pembagian SHU sebelumnya <span class="muted">(bagian yang tidak dimiliki siapa pun, mis. jasa saat tidak ada anggota dengan poin sejak pembagian terakhir, tetap di dana cadangan)</span>'],
+  ["#periods > thead > tr", '<th scope="col">Periode</th><th scope="col">Tanggal</th><th scope="col" class="num">Dibagikan</th><th scope="col" class="num">Disimpan sebagai cadangan</th><th scope="col" class="num">Anggota</th>'],
+  ["#tasks > caption", 'Tugas di papan <span class="muted">(anggota memasang, siapa pun mengambil; siapa yang harus menyetujui pembayaran bergantung pada besarnya dan rekam jejak kontributor)</span>'],
+  ["#tasks > thead > tr", '<th scope="col">Tugas</th><th scope="col" class="num">Bayaran</th><th scope="col">Status</th><th scope="col">Kontributor</th><th scope="col">Cara dibayar</th>'],
 ];
 const RAILS = ["Langsung", "Anggota", "Anggaran dasar", "Kerja", "Audit", "SHU", "Tugas & kepercayaan", "Bersama"];
 
