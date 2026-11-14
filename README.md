@@ -192,11 +192,11 @@ quotes its line.
 | Members pay no gas | NEP-366 relayer, calls without a deposit: [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) | (unit tests of `api/relay.mjs`) |
 | The model runs in a TEE, checkable by you | The voted model, deepseek-v3.2, is served through Chutes on NEAR AI Cloud: Intel TDX and 8 NVIDIA GPUs, re-verified by the agent within the hour before each job (saved daily in [`evidence/`](evidence)). The page checks it with your browser's nonce: the TDX quote against Intel's collateral, its report data bound to your nonce and to the instance's certificate, and the measurements (MRTD, RTMR0–3) equal to Chutes' pinned ones ([`web/chutes-measurements.json`](web/chutes-measurements.json), kept equal to the agent's by a unit test). Fixed 13 Nov: from by-laws v6 the page said *Not verified*, because it could not read a Chutes attestation | `node agent/tee.mjs deepseek/deepseek-v3.2` → `VERIFIED` |
 
-Live page: **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR). The member dashboard: **https://koperasi-kohl.vercel.app/dashboard.html** (overview, membership, proposals, the agent, money, commons, federation, verify; `?as=<account>` previews a member on localhost).
+Live page: **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR). The member dashboard: **https://koperasi-kohl.vercel.app/dashboard.html** (overview, membership, proposals, the agent, the agent's report card, money, commons, federation, verify; `?as=<account>` shows any member's view read-only). The docs page, with how it works and a glossary: **https://koperasi-kohl.vercel.app/docs.html**.
 
 The members (alice, bob, the steward, guest-984702 and one who joined with a signed vouch) and carol, a contributor who
 is not a member, are the builder's demo accounts. They show that the mechanism works,
-but they are not independent people. The agent has done **no real paid job yet**: the first 4 receipts come from `npm run
+but they are not independent people. The agent has done **no Agent Market job yet** (its paid outside jobs are the 6 from Taskbond above): the first 4 receipts come from `npm run
 demo` against a local stand-in for Agent Market, which has no testnet. The co-op's NEAR AI credits are in place and the
 agent has bid on 9 real Agent Market jobs; none was awarded yet. One receipt shows the real path end to end: job
 `demo-72a0451c…` came from the same local stand-in buyer, but the agent did it on NEAR AI Cloud after checking the
@@ -373,7 +373,7 @@ Rules in plain words: [`RULES.md`](RULES.md).
 | A job's margin | the buyer: 5 USDC a job (by-laws v7, raised from 4 at the agent's own proposal), minus Agent Market's 5% fee and the inference, leaves at least 4.25 USDC for the treasury | the audit nets out the fee and checks every payout reached the DAO |
 | Task payouts | the treasury, within the task budget the members voted (`set_task_budget`) | the trust tiers and the daily limit per poster |
 | Members' gas | the co-op's relayer account (`api/relay.mjs`) for contract and DAO calls without a deposit; the keeper reads stakes twice a day (`api/keeper.mjs`) | members and joiners only; refills by vote like any transfer |
-| Code changes | whoever publishes the global contract (about 66 NEAR for 662 KB); the switch is a vote | members only; nobody holds a full-access key |
+| Code changes | whoever publishes the global contract (about 80 NEAR for the 799 KB of 0.3.7); the switch is a vote | members only; nobody holds a full-access key |
 
 **What the members do, and what nobody has to.** Members vote on the by-laws, tasks above the trust limit, profit
 shares and code. Small tasks pay on earned trust without a quorum. Stakes are read by the keeper, and the agent works
@@ -416,7 +416,7 @@ person is why the steward exists. Both are listed under *Trust assumptions*.
    DAO, and the contract account has no full-access key left, so nobody can deploy code without a vote, the builder
    included. The live page shows the key count from the chain. Every upgrade and what it fixed:
    [`docs/DETAILS.md`](docs/DETAILS.md#code-upgrades-each-by-a-members-vote). Each upgrade publishes a global contract
-   (about 66 NEAR for this 662 KB contract).
+   (about 80 NEAR for the 799 KB of 0.3.7).
 5. **Demand.** Agent Market pays in USDC on NEAR mainnet and has no testnet. The demo uses a local stand-in with the
    same API; the agent is registered on the real market (pricing plan live) and talks to the real API with the same
    code. The co-op's NEAR AI organization has credits, and the agent bids on real jobs; none was awarded yet.
