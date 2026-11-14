@@ -701,6 +701,52 @@ if (d.v036?.recovery?.plan_sha256) {
     `upheld cases ${struck.map((c) => `#${c?.id} ${c?.status}`).join(", ")} suspended it (the last two refunded ${r.cases.map((x) => usd(cases.find((y) => y.id === x.id)?.amount ?? "0")).join(" and ")} USDC from the risk fund); plan ${rec?.plan_uri} (sha256 ${r.plan_sha256.slice(0, 8)}…, matches the file: ${planHash === r.plan_sha256}) approved by DAO #${r.proposal}; ramp now ${bps / 100}% of ${rec?.ramp_days} days`);
 }
 
+// contract 0.3.7 (scripts/v037.mjs): juries by reputation, the agent asks for a loan to a sister co-op at interest, a poll's by-laws go to the DAO
+if (d.v037?.jury) {
+  const p = await view(d.dao, "get_proposal", { id: d.v037.jury.proposal });
+  check(await view(d.contract, "get_jury_by_reputation") && p.status === "Approved" && argsOf(p).some((x) => x.method === "set_jury_by_reputation" && x.args.on === true),
+    "court juries are drawn by reputation weight (square-root flattened), by the members' vote",
+    `DAO #${p.id} ${p.status}: set_jury_by_reputation(true); get_jury_by_reputation ${await view(d.contract, "get_jury_by_reputation")}`);
+}
+if (d.v037?.loan) {
+  const l = d.v037.loan;
+  // the suggestion is cleared once the loan is made: the relayed transaction shows it (the contract's loan_suggested event)
+  const [t, p] = await Promise.all([rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: l.suggest_tx, sender_account_id: l.relayer, wait_until: "FINAL" }).catch(() => null),
+    view(d.dao, "get_proposal", { id: l.proposal })]);
+  const a = argsOf(p)[0];
+  const act = t?.transaction.actions[0]?.FunctionCall;
+  const ev = (t?.receipts_outcome ?? []).flatMap((o) => o.outcome.logs).filter((x) => x.startsWith("EVENT_JSON:")).map((x) => JSON.parse(x.slice(11)))
+    .find((e) => e.standard === "koperasi" && e.event === "loan_suggested");
+  check(t?.transaction.receiver_id === d.contract && act?.method_name === "agent_suggest_sister_loan" && JSON.parse(Buffer.from(act.args, "base64").toString()).signature
+    && ev?.data.proposal === l.proposal && p.status === "Approved" && p.proposer === d.contract && a?.method === "lend_to_sister"
+    && a.args.coop === l.coop && a.args.amount === l.amount && a.args.interest_bps === l.interest_bps && a.args.days === l.days,
+    "the agent asked the members to lend a sister co-op (its signature, checked by the contract, which filed the proposal); the members approved it",
+    `DAO #${p.id} ${p.status}, filed by ${p.proposer}: lend ${Number(l.amount) / 1e6} USDC to ${l.coop} for ${l.days} days at ${l.interest_bps} bps (relayed by ${l.relayer}, tx ${l.suggest_tx.slice(0, 10)}…)`);
+}
+if (d.v037?.repay) {
+  const r = d.v037.repay;
+  const [loans, interest, p, t] = await Promise.all([view(d.contract, "get_sister_loans"), view(d.contract, "get_sister_interest"), view(r.dao, "get_proposal", { id: r.proposal }),
+    rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r.vote_tx, sender_account_id: r.voter, wait_until: "FINAL" }).catch(() => null)]);
+  const l = loans.find((x) => x.id === r.loan), [, due, paid] = interest.find(([x]) => x === r.loan) ?? [];
+  const a = argsOf(p)[0];
+  const ev = (t?.receipts_outcome ?? []).flatMap((o) => o.outcome.logs).filter((x) => x.startsWith("EVENT_JSON:")).map((x) => JSON.parse(x.slice(11)))
+    .find((e) => e.standard === "koperasi" && e.event === "sister_interest" && e.data.id === r.loan);
+  check(l?.status === "Repaid" && l.repaid === l.amount && BigInt(due ?? 0) > 0n && due === paid && p.status === "Approved" && a?.method === "ft_transfer_call"
+    && a.args.receiver_id === d.contract && a.args.msg === `sister_repay:${r.loan}` && BigInt(a.args.amount) === BigInt(l.amount) + BigInt(due) && ev?.data.amount === due,
+    "a sister co-op repaid a loan with interest: the principal back into the risk fund, the interest forwarded to the DAO treasury (the surplus)",
+    `loan #${r.loan}: ${usd(l?.repaid ?? 0)} USDC principal + ${usd(paid ?? 0)} interest of ${usd(due ?? 0)} due, ${l?.status}; ${r.dao} #${r.proposal} ${p.status}; event sister_interest ${ev ? usd(ev.data.amount) : "not found"} USDC (treasury ${usd(r.treasury_before)} → ${usd(r.treasury_after)})`);
+}
+if (d.v037?.poll?.proposal !== undefined) {
+  const q = d.v037.poll;
+  const [poll, p] = await Promise.all([view(d.contract, "get_poll", { id: q.id }), view(d.dao, "get_proposal", { id: q.proposal })]);
+  const a = argsOf(p)[0];
+  const h = sha256(await file(q.bylaws.uri, q.bylaws.uri));
+  check(poll?.closed && poll.kind === "Technical" && poll.proposal === q.proposal && poll.bylaws?.[poll.result]?.hash === q.bylaws.hash && p.proposer === d.contract
+    && a?.method === "set_config" && a.args.version === q.bylaws.version && a.args.hash === q.bylaws.hash && a.args.uri === q.bylaws.uri && h === q.bylaws.hash,
+    "a technical poll's winning by-laws became a DAO proposal, filed by the contract; the members vote it",
+    `poll #${q.id}: "${poll?.options[poll.result]}" won (${JSON.stringify(poll?.tallies)}, ${poll?.mode}); DAO #${p.id} set_config v${a?.args.version} ${q.bylaws.uri} (sha256 matches the file: ${h === q.bylaws.hash}), ${p.status}`);
+}
+
 // an outside buyer: a fresh wallet the testnet faucet created, not a member, posted (and paid) the agent's jobs
 if (d.outside_buyer) {
   const b = d.outside_buyer, tb = b.taskbond, dj = b.direct;

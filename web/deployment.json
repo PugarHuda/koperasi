@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "bc829c101675b0893de63ae063819d3e00a0be5713b329d47dc26ccfda3b991f",
   "configUri": "config/config.v10.yaml",
-  "codeSha256": "98c1e7fdce3d9d4c100edce98bd1839519d309e14447b2a2d178af6cf5969d8c",
+  "codeSha256": "e142e3d10d796f38a055cbf1ece4bc419628ef28393e136821652567e525e0f0",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -291,7 +291,7 @@
     "program": "outlayer/bylaws-check",
     "wasm": "https://koperasi-kohl.vercel.app/outlayer/bylaws-check.wasm?v=b7b95a15712c",
     "wasm_sha256": "b7b95a15712cedbfcdc7f5ec0a7f23340e1f17abdb0e1a5efec95cec608867d4",
-    "tx": "7Vv8dBitc1njrPT3edFhP7AEh44Cb8STtVCijeKZ5GMk",
+    "tx": "GfEMD6iLqC9HPBgKTRiXa1e5HeNoF3L2GjPVh5q2viCo",
     "sender": "kop-alice-mw4i3w8f.testnet",
     "version": 10
   },
@@ -1178,5 +1178,89 @@
     },
     "direct": null,
     "direct_skipped": "the co-op is paid in Circle testnet USDC; its mint is minter-only and its faucet is a web form (faucet.circle.com), so this wallet holds none. Fund it there and run KOP_BUYER=buyer-lda4zjo8.testnet node --env-file=.env scripts/job.mjs"
+  },
+  "v037": {
+    "jury": {
+      "proposal": 150,
+      "on": true
+    },
+    "loan": {
+      "coop": "koperasi-mw80aczw.testnet",
+      "paid_to": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "amount": "1000000",
+      "days": 30,
+      "interest_bps": 500,
+      "reason": "The sister co-op took our referral and has paid work booked; 1 USDC for 30 days at 5% bridges it, half our risk fund stays untouched",
+      "nonce": 0,
+      "suggest_tx": "8NG2tWTX9GvQJPnLMft14GssZbEFJ65dUr9mhTqzA1YC",
+      "relayer": "kop-relayer-mw4i2iwk.testnet",
+      "proposal": 151,
+      "vote_tx": "BzspakS5jzDx12PYfXSa8K9NuC59SKmGHekEFzTcKYzr",
+      "id": 2,
+      "status": "Open",
+      "interest_due": "50000",
+      "risk_before": "2455001"
+    },
+    "poll": {
+      "id": 1,
+      "open_tx": "m5i5gXrVRGYKqqmuX3wimXbBACmaCUTQ45QgboaY56Y",
+      "options": [
+        "keep v10",
+        "adopt v11: the prompt asks for a link to each cited source"
+      ],
+      "bylaws": {
+        "version": 11,
+        "hash": "aa12afd70e2a1c1e7a326f6245031e1061bfd39a42917343edec2f47d6fa3eee",
+        "uri": "config/config.v11.yaml"
+      },
+      "closes_at": "1794659432651091890",
+      "votes": [
+        {
+          "by": "kop-alice-mw4i3w8f.testnet",
+          "option": 1,
+          "weight": "480",
+          "tx": "3X925eKuamTqjm7geCASXNtGi7ydsUgkD6c6bEFNikzi"
+        },
+        {
+          "by": "kop-bob-mw4i3w8f.testnet",
+          "option": 0,
+          "weight": "260",
+          "tx": "GWeXwEZDwaAKgarZEuwjT3ExFKm2QaL38bLpe7U6RFzQ"
+        },
+        {
+          "by": "kop-steward-mw4i2iwk.testnet",
+          "option": 1,
+          "weight": "0",
+          "tx": "BfhCeRsfqv4SgL2RauWtGQ68uoFnrK4GPxHtJSRMeqQR"
+        }
+      ],
+      "change": "system_prompt: \"Cite every source you use.\" -> \"Cite every source you use, with a link where one exists.\"; nothing else"
+    },
+    "repay": {
+      "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "proposal": 32,
+      "voter": "kop-steward-mw80aczw.testnet",
+      "vote_tx": "42fT8FtDyrtxNafSi36WyjWNe2Z4hLrGUdjCxSVa3U1y",
+      "loan": 2,
+      "amount": "1050000",
+      "topup": {
+        "from": "kop-steward-mw4i2iwk.testnet",
+        "amount": "50000",
+        "tx": "BXTyTZ1wdochqkTAYXoY6DVhDizP6tAzW4XbCmaWj6eu",
+        "note": "from the steward's USDC, which holds the agent's Agent Market earnings: the sister co-op had no income of its own to pay the interest from"
+      },
+      "status": "Repaid",
+      "repaid": "1000000",
+      "interest": {
+        "due": "50000",
+        "paid": "50000"
+      },
+      "treasury_before": "43685024",
+      "treasury_after": "43735024",
+      "events": [
+        "EVENT_JSON:{\"standard\":\"koperasi\",\"version\":\"1.0.0\",\"event\":\"sister_interest\",\"data\":{\"id\":2,\"coop\":\"koperasi-mw80aczw.testnet\",\"amount\":\"50000\"}}",
+        "EVENT_JSON:{\"standard\":\"koperasi\",\"version\":\"1.0.0\",\"event\":\"sister_repaid\",\"data\":{\"id\":2,\"coop\":\"koperasi-mw80aczw.testnet\",\"amount\":\"1000000\",\"outstanding\":\"0\"}}"
+      ]
+    }
   }
 }

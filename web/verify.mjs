@@ -12942,6 +12942,57 @@ var init_verify = __esm({
         `upheld cases ${struck.map((c) => `#${c?.id} ${c?.status}`).join(", ")} suspended it (the last two refunded ${r2.cases.map((x2) => usd(cases.find((y2) => y2.id === x2.id)?.amount ?? "0")).join(" and ")} USDC from the risk fund); plan ${rec?.plan_uri} (sha256 ${r2.plan_sha256.slice(0, 8)}\u2026, matches the file: ${planHash === r2.plan_sha256}) approved by DAO #${r2.proposal}; ramp now ${bps / 100}% of ${rec?.ramp_days} days`
       );
     }
+    if (d2.v037?.jury) {
+      const p2 = await view2(d2.dao, "get_proposal", { id: d2.v037.jury.proposal });
+      check(
+        await view2(d2.contract, "get_jury_by_reputation") && p2.status === "Approved" && argsOf(p2).some((x2) => x2.method === "set_jury_by_reputation" && x2.args.on === true),
+        "court juries are drawn by reputation weight (square-root flattened), by the members' vote",
+        `DAO #${p2.id} ${p2.status}: set_jury_by_reputation(true); get_jury_by_reputation ${await view2(d2.contract, "get_jury_by_reputation")}`
+      );
+    }
+    if (d2.v037?.loan) {
+      const l2 = d2.v037.loan;
+      const [t2, p2] = await Promise.all([
+        rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: l2.suggest_tx, sender_account_id: l2.relayer, wait_until: "FINAL" }).catch(() => null),
+        view2(d2.dao, "get_proposal", { id: l2.proposal })
+      ]);
+      const a = argsOf(p2)[0];
+      const act = t2?.transaction.actions[0]?.FunctionCall;
+      const ev = (t2?.receipts_outcome ?? []).flatMap((o) => o.outcome.logs).filter((x2) => x2.startsWith("EVENT_JSON:")).map((x2) => JSON.parse(x2.slice(11))).find((e) => e.standard === "koperasi" && e.event === "loan_suggested");
+      check(
+        t2?.transaction.receiver_id === d2.contract && act?.method_name === "agent_suggest_sister_loan" && JSON.parse(Buffer.from(act.args, "base64").toString()).signature && ev?.data.proposal === l2.proposal && p2.status === "Approved" && p2.proposer === d2.contract && a?.method === "lend_to_sister" && a.args.coop === l2.coop && a.args.amount === l2.amount && a.args.interest_bps === l2.interest_bps && a.args.days === l2.days,
+        "the agent asked the members to lend a sister co-op (its signature, checked by the contract, which filed the proposal); the members approved it",
+        `DAO #${p2.id} ${p2.status}, filed by ${p2.proposer}: lend ${Number(l2.amount) / 1e6} USDC to ${l2.coop} for ${l2.days} days at ${l2.interest_bps} bps (relayed by ${l2.relayer}, tx ${l2.suggest_tx.slice(0, 10)}\u2026)`
+      );
+    }
+    if (d2.v037?.repay) {
+      const r2 = d2.v037.repay;
+      const [loans, interest, p2, t2] = await Promise.all([
+        view2(d2.contract, "get_sister_loans"),
+        view2(d2.contract, "get_sister_interest"),
+        view2(r2.dao, "get_proposal", { id: r2.proposal }),
+        rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.vote_tx, sender_account_id: r2.voter, wait_until: "FINAL" }).catch(() => null)
+      ]);
+      const l2 = loans.find((x2) => x2.id === r2.loan), [, due, paid] = interest.find(([x2]) => x2 === r2.loan) ?? [];
+      const a = argsOf(p2)[0];
+      const ev = (t2?.receipts_outcome ?? []).flatMap((o) => o.outcome.logs).filter((x2) => x2.startsWith("EVENT_JSON:")).map((x2) => JSON.parse(x2.slice(11))).find((e) => e.standard === "koperasi" && e.event === "sister_interest" && e.data.id === r2.loan);
+      check(
+        l2?.status === "Repaid" && l2.repaid === l2.amount && BigInt(due ?? 0) > 0n && due === paid && p2.status === "Approved" && a?.method === "ft_transfer_call" && a.args.receiver_id === d2.contract && a.args.msg === `sister_repay:${r2.loan}` && BigInt(a.args.amount) === BigInt(l2.amount) + BigInt(due) && ev?.data.amount === due,
+        "a sister co-op repaid a loan with interest: the principal back into the risk fund, the interest forwarded to the DAO treasury (the surplus)",
+        `loan #${r2.loan}: ${usd(l2?.repaid ?? 0)} USDC principal + ${usd(paid ?? 0)} interest of ${usd(due ?? 0)} due, ${l2?.status}; ${r2.dao} #${r2.proposal} ${p2.status}; event sister_interest ${ev ? usd(ev.data.amount) : "not found"} USDC (treasury ${usd(r2.treasury_before)} \u2192 ${usd(r2.treasury_after)})`
+      );
+    }
+    if (d2.v037?.poll?.proposal !== void 0) {
+      const q2 = d2.v037.poll;
+      const [poll, p2] = await Promise.all([view2(d2.contract, "get_poll", { id: q2.id }), view2(d2.dao, "get_proposal", { id: q2.proposal })]);
+      const a = argsOf(p2)[0];
+      const h = sha2562(await file(q2.bylaws.uri, q2.bylaws.uri));
+      check(
+        poll?.closed && poll.kind === "Technical" && poll.proposal === q2.proposal && poll.bylaws?.[poll.result]?.hash === q2.bylaws.hash && p2.proposer === d2.contract && a?.method === "set_config" && a.args.version === q2.bylaws.version && a.args.hash === q2.bylaws.hash && a.args.uri === q2.bylaws.uri && h === q2.bylaws.hash,
+        "a technical poll's winning by-laws became a DAO proposal, filed by the contract; the members vote it",
+        `poll #${q2.id}: "${poll?.options[poll.result]}" won (${JSON.stringify(poll?.tallies)}, ${poll?.mode}); DAO #${p2.id} set_config v${a?.args.version} ${q2.bylaws.uri} (sha256 matches the file: ${h === q2.bylaws.hash}), ${p2.status}`
+      );
+    }
     if (d2.outside_buyer) {
       const b2 = d2.outside_buyer, tb = b2.taskbond, dj = b2.direct;
       const txOf = (hash, by) => rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: hash, sender_account_id: by, wait_until: "FINAL" });
