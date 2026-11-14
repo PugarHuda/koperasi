@@ -6,9 +6,9 @@
   "steward": "kop-steward-mw4i2iwk.testnet",
   "contract": "koperasi-mw4i2iwk.testnet",
   "agent": "agent.koperasi-mw4i2iwk.testnet",
-  "configHash": "bc829c101675b0893de63ae063819d3e00a0be5713b329d47dc26ccfda3b991f",
-  "configUri": "config/config.v10.yaml",
-  "codeSha256": "e142e3d10d796f38a055cbf1ece4bc419628ef28393e136821652567e525e0f0",
+  "configHash": "aa12afd70e2a1c1e7a326f6245031e1061bfd39a42917343edec2f47d6fa3eee",
+  "configUri": "config/config.v11.yaml",
+  "codeSha256": "4053062666b58bd9ebbe5226961fdbaf4e56217ec16b50ceb492f0abf37994ed",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -291,9 +291,9 @@
     "program": "outlayer/bylaws-check",
     "wasm": "https://koperasi-kohl.vercel.app/outlayer/bylaws-check.wasm?v=b7b95a15712c",
     "wasm_sha256": "b7b95a15712cedbfcdc7f5ec0a7f23340e1f17abdb0e1a5efec95cec608867d4",
-    "tx": "GfEMD6iLqC9HPBgKTRiXa1e5HeNoF3L2GjPVh5q2viCo",
+    "tx": "2ZP4onBYEV8aUGJGSvVfECDParjhCgABLQpn91PcNwo1",
     "sender": "kop-alice-mw4i3w8f.testnet",
-    "version": 10
+    "version": 11
   },
   "redteam": [
     {
@@ -1276,6 +1276,57 @@
       "events": [
         "EVENT_JSON:{\"standard\":\"koperasi\",\"version\":\"1.0.0\",\"event\":\"sister_interest\",\"data\":{\"id\":2,\"coop\":\"koperasi-mw80aczw.testnet\",\"amount\":\"50000\"}}",
         "EVENT_JSON:{\"standard\":\"koperasi\",\"version\":\"1.0.0\",\"event\":\"sister_repaid\",\"data\":{\"id\":2,\"coop\":\"koperasi-mw80aczw.testnet\",\"amount\":\"1000000\",\"outstanding\":\"0\"}}"
+      ]
+    }
+  },
+  "v038": {
+    "poll": {
+      "id": 2,
+      "tx": "5HtP6fmVWvX9efzd2K8VdwqGHeeJZz7HUU4fdHQjRCF3",
+      "relayer": "kop-relayer-mw4i2iwk.testnet",
+      "nonce": 0,
+      "question": "Inference averages $0.001476 per job under by-laws v11: keep the current model or try a cheaper one?",
+      "options": [
+        "keep deepseek-v3.2",
+        "try a cheaper model"
+      ],
+      "reason": "My receipts: 19 TEE-proven jobs of 42 cost $0.028035 of inference in all, $0.001476 each on average. The members should decide whether that is worth it.",
+      "hours": 1,
+      "content": "26e1e16d44e1336b7073724f4e6d584a794e5f3c039b70b0884adb35a35be23e",
+      "proven": 19,
+      "receipts": 42,
+      "inference_total": "28035",
+      "closes_at": "1794673941413242076",
+      "left_to_members": "the script does not vote: the members vote the agent's poll"
+    },
+    "share": {
+      "share_proposal": 34,
+      "treasury_proposal": 35,
+      "coop": "koperasi-mw80aczw.testnet",
+      "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "from": "koperasi-mw4i2iwk.testnet",
+      "treasury": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+      "bps": 3000,
+      "job": "demo-referral-mwg7spzp",
+      "referral": 2,
+      "budget": "4000000",
+      "price": "4000000",
+      "receipt_tx": "4afYqqQh7t4maCBrXjFMuw5RaubUBeKKFoUuEz8a6YU8",
+      "token": "usdc.fakes.testnet",
+      "mint_tx": "3HL9ebd55vuAH6SyPGPWMrYHX1ncrEVkbaDfvg63xCEt",
+      "deposit_tx": "F1ceX5LXG8Nrf6dPTMPPiMVF6ZjpRkQnGsanUNYAjYg",
+      "steward": "kop-steward-mw80aczw.testnet",
+      "paid": {
+        "from_coop": "koperasi-mw4i2iwk.testnet",
+        "to": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+        "amount": "1200000",
+        "failed": false,
+        "at": "1794670383764704378"
+      },
+      "treasury_before": "3800000",
+      "treasury_after": "5000000",
+      "events": [
+        "EVENT_JSON:{\"standard\":\"koperasi\",\"version\":\"1.0.0\",\"event\":\"referral_share_paid\",\"data\":{\"job_id\":\"demo-referral-mwg7spzp\",\"from_coop\":\"koperasi-mw4i2iwk.testnet\",\"to\":\"koperasi-mw4i2iwk.sputnik-v2.testnet\",\"amount\":\"1200000\"}}"
       ]
     }
   }
