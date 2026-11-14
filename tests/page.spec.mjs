@@ -253,6 +253,47 @@ test("the page reads in Bahasa Indonesia, and back in English", async ({ page })
   await expect(page.locator("#panel-q")).toHaveText("Who controls this AI agent?");
 });
 
+test("the sentences read from the chain follow the language switch",async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => { if (!network(e.message)) errors.push(e.message); });
+  await page.goto("/#brief");
+  await expect(page.locator("#proofline")).toContainText(/Right now on NEAR testnet: \d+ members/);
+  await expect(page.locator("#status")).toContainText(/Allowed to work|Paused by vote/);
+  await expect(page.locator("#treasury")).toContainText(/holds \d+\.\d\d USDC/);
+  await page.locator(".lang-btn").click();
+  await expect(page.locator("#proofline")).toContainText(/Saat ini di testnet NEAR: \d+ anggota, \d+ pemungutan suara DAO/);
+  await expect(page.locator("#br-own")).toContainText(/\d+ anggota memegang peran DAO member.*keputusan perlu \d+ dari \d+/s);
+  await expect(page.locator("#counts")).toContainText("Usulan DAO");
+  await expect(page.locator("#status")).toContainText(/Boleh bekerja|Dihentikan lewat suara/);
+  await expect(page.locator("#treasury")).toContainText(/Kas DAO saat ini berisi \d+\.\d\d USDC/);
+  await expect(page.locator("#ck-money .ck-out")).toContainText(/pekerjaan yang dibayar|belum sampai di koperasi/);
+  await page.locator(".lang-btn").click();
+  await expect(page.locator("#proofline")).toContainText("Right now on NEAR testnet");
+  expect(errors).toEqual([]);
+});
+
+test("a work record reads in Bahasa Indonesia", async ({ page }) => {
+  await page.goto("/cert.html?who=kop-bob-mw4i3w8f.testnet");
+  await expect(page.locator("#cert-sum")).toContainText(/yes, since/);
+  await page.getByRole("button", { name: /Bahasa Indonesia/ }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "id");
+  await expect(page.locator("#cert-sum")).toContainText(/ya, sejak/);
+  await expect(page.locator("#cert-sum th").first()).toHaveText("Anggota");
+  await expect(page.locator("#cert-who")).toContainText("Catatan kerja kop-bob-mw4i3w8f.testnet");
+  await expect(page.locator("#cert-sub")).toContainText("Setiap baris di bawah dibaca");
+  await expect(page.locator("#cert-input")).toHaveValue("kop-bob-mw4i3w8f.testnet"); // the form survives the switch
+});
+
+test("the co-ops page reads in Bahasa Indonesia", async ({ page }) => {
+  await page.goto("/coops.html");
+  await expect(page.locator("#coops tbody")).toContainText("showcase");
+  await page.getByRole("button", { name: /Bahasa Indonesia/ }).click();
+  await expect(page.locator("#coops-title")).toHaveText("Koperasi dengan kode ini");
+  await expect(page.locator("#coops tbody")).toContainText("unggulan");
+  await expect(page.locator("#coops tbody")).toContainText(/hanya pemungutan suara anggota|kunci full-access/);
+  await expect(page.locator("#fed")).toContainText("tidak ada pihak lain yang bisa memilih");
+});
+
 test("the wallet panel follows the language switch", async ({ page }, testInfo) => {
   test.skip(!local(testInfo), "?as= previews run on localhost only");
   const errors = [];
