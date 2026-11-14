@@ -683,5 +683,41 @@ console.log(`INFO  audit: expected ${usd(audit.expected)} USDC, deposited ${usd(
 const usdc = await view(info.usdc_id, "ft_balance_of", { account_id: d.dao });
 console.log(`INFO  DAO treasury: ${usd(usdc)} USDC (${info.usdc_id.slice(0, 12)}…)`);
 
+// each cross-chain payout from the Intents wallet, both sides re-read: on NEAR testnet the agent's signed `ft_withdraw`
+// intent, executed by Tidepool's verifier (the same contract code as mainnet `intents.near`, compared live), and on the
+// EVM chain an ERC-20 Transfer of exactly the withdrawn amount of that token to the address the intent named.
+// ponytail: Tidepool's relayer and verifier are fixed here; move them into deployment.json if the provider changes
+const TP_VERIFIER = "verifier.tidepool-sandbox.testnet", TP_RELAYER = "maker.tidepool-sandbox.testnet";
+const crossChain = [...(d.intents?.payouts ?? []), ...(d.intents?.shares ?? []).flatMap((s) => s.payouts)].filter((p) => p.chain !== "near" && p.destination_tx);
+if (crossChain.length) {
+  const codeHash = async (urls, account_id) => (await rpcCall(urls, "query", { request_type: "view_account", finality: "final", account_id }))?.code_hash;
+  const ours = await codeHash(NEAR_TX_RPCS, TP_VERIFIER), mainnet = await codeHash(["https://rpc.mainnet.fastnear.com", "https://rpc.mainnet.near.org"], "intents.near");
+  const pad = (a) => `0x${a.slice(2).toLowerCase().padStart(64, "0")}`;
+  const lines = [];
+  for (const p of crossChain) lines.push(await (async () => { // one at a time: public RPCs rate-limit bursts
+    const address = p.address?.startsWith("0x") ? p.address : await daoAddress(p.to);
+    const t = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: p.tx, sender_account_id: TP_RELAYER, wait_until: "FINAL" });
+    const call = t?.transaction.actions[0]?.FunctionCall;
+    let w = null, signer = null;
+    try {
+      const msg = JSON.parse(JSON.parse(Buffer.from(call.args, "base64").toString()).signed[0].payload.message);
+      signer = msg.signer_id;
+      w = msg.verifying_contract === TP_VERIFIER ? msg.intents.find((x) => x.intent === "ft_withdraw") : null;
+    } catch { /* not an intents call: w stays null */ }
+    const nearOk = t?.transaction.receiver_id === TP_VERIFIER && call?.method_name === "execute_intents" && t.status?.SuccessValue !== undefined
+      && !t.receipts_outcome.some((o) => o.outcome.status.Failure) && w?.memo === `WITHDRAW_TO:${address}`;
+    const token = w?.token.match(/^(\w+)-(0x[0-9a-f]{40})\.tp-omft\.testnet$/);
+    const r = await rpcCall(EVM_RPCS[p.chain] ?? [], "eth_getTransactionReceipt", [p.destination_tx]);
+    const transfer = r?.logs.find((l) => l.address.toLowerCase() === token?.[2] && l.topics[0] === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+      && l.topics[2] === pad(address));
+    const ok = nearOk && token?.[1] === p.chain && r?.status === "0x1" && transfer && BigInt(transfer.data) === BigInt(w.amount);
+    return { ok, signer, line: `${p.to.split(".")[0]} on ${CHAIN_NAME[p.chain]}: NEAR ${p.tx.slice(0, 8)}… ft_withdraw ${w?.amount ?? "?"} → ${address.slice(0, 10)}…; `
+      + `${p.destination_tx.slice(0, 10)}… Transfer ${transfer ? BigInt(transfer.data) : "none"} (${ok ? "match" : "MISMATCH"})` };
+  })());
+  check(ours && ours === mainnet && lines.every((x) => x.ok) && new Set(lines.map((x) => x.signer)).size === 1,
+    "each cross-chain payout is one intent on NEAR testnet and one token transfer on the other chain, same amount, same recipient",
+    `${TP_VERIFIER} runs code ${ours} (mainnet intents.near: ${mainnet}); agent intents account ${lines[0].signer?.slice(0, 12)}…; ${lines.map((x) => x.line).join("; ")}`);
+}
+
 console.log(`\n${failed ? `${failed} claim(s) FAILED` : "every claim checks out"}. Explorer: ${accountUrl(d.contract)}`);
 process.exit(failed ? 1 : 0);

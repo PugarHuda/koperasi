@@ -12218,7 +12218,7 @@ async function gate(tx, sender, voted, jobId) {
   const job = out.job ? `; job ${String(out.job.id).slice(0, 14)}\u2026 ${out.job.allowed ? "allowed" : "REFUSED"} by the by-laws (${out.job.reason})` : "";
   return { ok, out, line: `tx ${tx} by ${sender}: read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}\u2026 = voted ${String(out.voted_sha256).slice(0, 12)}\u2026${job}` };
 }
-var PAGE, d2, view2, argsOf, near, usd, failed, SEPOLIA_RPCS, BASE_SEPOLIA_RPCS, EVM_RPCS, CHAIN_NAME, NEAR_TX_RPCS, check, info, policy, board, contributors, audit, proposal, last, proposals, approvedCall, fileHash, byLaws, acct, code, want, upgraded, keys, full, agentKeys, scoped, role, daoMembers, members, outside, vp, wide, tasksRole, r, ruleVote, vetoVote, tasks, steward, overdue, termDays, termEnds, cases, allReceipts, routes, tokens, pledges, pclaims, GATE_WASM, GATE_WASMS, shares, receipts, proofs, parsedProofs, proven, gated, third, market, usdc;
+var PAGE, d2, view2, argsOf, near, usd, failed, SEPOLIA_RPCS, BASE_SEPOLIA_RPCS, EVM_RPCS, CHAIN_NAME, NEAR_TX_RPCS, check, info, policy, board, contributors, audit, proposal, last, proposals, approvedCall, fileHash, byLaws, acct, code, want, upgraded, keys, full, agentKeys, scoped, role, daoMembers, members, outside, vp, wide, tasksRole, r, ruleVote, vetoVote, tasks, steward, overdue, termDays, termEnds, cases, allReceipts, routes, tokens, pledges, pclaims, GATE_WASM, GATE_WASMS, shares, receipts, proofs, parsedProofs, proven, gated, third, market, usdc, TP_VERIFIER, TP_RELAYER, crossChain;
 var init_verify = __esm({
   async "scripts/verify.mjs"() {
     init_lib();
@@ -12932,6 +12932,38 @@ var init_verify = __esm({
     console.log(`INFO  audit: expected ${usd(audit.expected)} USDC, deposited ${usd(audit.deposited)}, owed ${usd(audit.owed)} (red on purpose: the demo's last step has the steward keep a payout)`);
     usdc = await view2(info.usdc_id, "ft_balance_of", { account_id: d2.dao });
     console.log(`INFO  DAO treasury: ${usd(usdc)} USDC (${info.usdc_id.slice(0, 12)}\u2026)`);
+    TP_VERIFIER = "verifier.tidepool-sandbox.testnet";
+    TP_RELAYER = "maker.tidepool-sandbox.testnet";
+    crossChain = [...d2.intents?.payouts ?? [], ...(d2.intents?.shares ?? []).flatMap((s) => s.payouts)].filter((p2) => p2.chain !== "near" && p2.destination_tx);
+    if (crossChain.length) {
+      const codeHash = async (urls, account_id) => (await rpcCall(urls, "query", { request_type: "view_account", finality: "final", account_id }))?.code_hash;
+      const ours = await codeHash(NEAR_TX_RPCS, TP_VERIFIER), mainnet = await codeHash(["https://rpc.mainnet.fastnear.com", "https://rpc.mainnet.near.org"], "intents.near");
+      const pad = (a) => `0x${a.slice(2).toLowerCase().padStart(64, "0")}`;
+      const lines = [];
+      for (const p2 of crossChain) lines.push(await (async () => {
+        const address2 = p2.address?.startsWith("0x") ? p2.address : await daoAddress(p2.to);
+        const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: p2.tx, sender_account_id: TP_RELAYER, wait_until: "FINAL" });
+        const call2 = t2?.transaction.actions[0]?.FunctionCall;
+        let w2 = null, signer = null;
+        try {
+          const msg = JSON.parse(JSON.parse(Buffer.from(call2.args, "base64").toString()).signed[0].payload.message);
+          signer = msg.signer_id;
+          w2 = msg.verifying_contract === TP_VERIFIER ? msg.intents.find((x2) => x2.intent === "ft_withdraw") : null;
+        } catch {
+        }
+        const nearOk = t2?.transaction.receiver_id === TP_VERIFIER && call2?.method_name === "execute_intents" && t2.status?.SuccessValue !== void 0 && !t2.receipts_outcome.some((o) => o.outcome.status.Failure) && w2?.memo === `WITHDRAW_TO:${address2}`;
+        const token = w2?.token.match(/^(\w+)-(0x[0-9a-f]{40})\.tp-omft\.testnet$/);
+        const r2 = await rpcCall(EVM_RPCS[p2.chain] ?? [], "eth_getTransactionReceipt", [p2.destination_tx]);
+        const transfer4 = r2?.logs.find((l2) => l2.address.toLowerCase() === token?.[2] && l2.topics[0] === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" && l2.topics[2] === pad(address2));
+        const ok = nearOk && token?.[1] === p2.chain && r2?.status === "0x1" && transfer4 && BigInt(transfer4.data) === BigInt(w2.amount);
+        return { ok, signer, line: `${p2.to.split(".")[0]} on ${CHAIN_NAME[p2.chain]}: NEAR ${p2.tx.slice(0, 8)}\u2026 ft_withdraw ${w2?.amount ?? "?"} \u2192 ${address2.slice(0, 10)}\u2026; ${p2.destination_tx.slice(0, 10)}\u2026 Transfer ${transfer4 ? BigInt(transfer4.data) : "none"} (${ok ? "match" : "MISMATCH"})` };
+      })());
+      check(
+        ours && ours === mainnet && lines.every((x2) => x2.ok) && new Set(lines.map((x2) => x2.signer)).size === 1,
+        "each cross-chain payout is one intent on NEAR testnet and one token transfer on the other chain, same amount, same recipient",
+        `${TP_VERIFIER} runs code ${ours} (mainnet intents.near: ${mainnet}); agent intents account ${lines[0].signer?.slice(0, 12)}\u2026; ${lines.map((x2) => x2.line).join("; ")}`
+      );
+    }
     console.log(`
 ${failed ? `${failed} claim(s) FAILED` : "every claim checks out"}. Explorer: ${accountUrl(d2.contract)}`);
     process.exit(failed ? 1 : 0);

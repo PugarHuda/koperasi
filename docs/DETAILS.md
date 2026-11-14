@@ -283,3 +283,25 @@ upgrade after a lagging RPC made the script stop early), and `upgrade` only obey
 DAO. Both the showcase and the demo co-op are locked: their contract accounts have no full-access key left, so no
 one, the builder included, can deploy code without a vote; the live page shows the key count from the chain. Each upgrade publishes a global contract, which burns ~10x normal storage
 (about 41 NEAR for this 413 KB contract).
+
+## Cross-chain payouts through NEAR Intents (testnet), both sides checkable
+
+NEAR Intents has no testnet of its own (`intents.testnet` holds no contract). [Tidepool](https://www.usetidepool.tech) runs one:
+`verifier.tidepool-sandbox.testnet` runs the same contract code as mainnet `intents.near` (code hash `BtA1BEFN…`, compared
+live by `verify`). The agent's wallet there (`scripts/intents.mjs`, owned by the DAO's Chain Signatures address, see above)
+has paid three members on another chain. Each payout is two transactions:
+
+| Payout | NEAR testnet: the agent's signed `ft_withdraw` intent | Other chain: the token transfer |
+|---|---|---|
+| bob, 2.9997 USDC, 12 Nov | [AUqgNpNU…](https://testnet.nearblocks.io/txns/AUqgNpNUbGfvV1NzFkyS7H7w3RdHN1gqzVpeFnTJWSWK) | Base Sepolia [0xba7491b2…](https://sepolia.basescan.org/tx/0xba7491b252fe172bcc30b75647bfed5d7baddfc87cdfb107ca3e0a3c2ac763d8) |
+| alice, 0.833193 USDC (profit share), 13 Nov | [CPRuEfN9…](https://testnet.nearblocks.io/txns/CPRuEfN9uaeJY6f81eEx7uyPzEfRUBAbPbV92vAMCArv) | Arbitrum Sepolia [0x934a3052…](https://sepolia.arbiscan.io/tx/0x934a30527fca9c8eafd068890e6ff22109124142a73c2df6c550b5da6d49deb2) |
+| bob, 0.618929 USDC (profit share), 13 Nov | [14N1NLaK…](https://testnet.nearblocks.io/txns/14N1NLaKaxzdVVJAY7AVrc6ChuZSzzUmqMWGQnw7XZDw) | Base Sepolia [0x759bf2e1…](https://sepolia.basescan.org/tx/0x759bf2e17afb1fa72cbb0bc2edcfd069e99f762f3934303df64c9c3fedfc97cd) |
+
+`npm run verify` re-reads each pair from the chains: the NEAR transaction is a successful `execute_intents` on Tidepool's
+verifier, signed by the same agent intents account each time, withdrawing the chain's token with memo
+`WITHDRAW_TO:<the member's address>`; the EVM receipt holds an ERC-20 Transfer of that token, of exactly the withdrawn
+amount, to that address.
+
+What it does not prove: the hop between the chains is Tidepool's own bridge. The EVM transfer is sent by Tidepool's
+operator (`0x55f2c804…`), not by a trustless light client, and the test USDC (`0x38d81431…`) has no value. Tidepool is
+community-built and not affiliated with NEAR. On mainnet the same intents would go to `intents.near` and its bridges.
