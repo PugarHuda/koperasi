@@ -227,7 +227,10 @@ const Subtitles: React.FC<{ words: Word[] }> = ({ words }) => {
 const Chapter: React.FC<{ s: Scene }> = ({ s }) => {
   const frame = useCurrentFrame();
   if (!s.chapter) return null;
-  const o = interpolate(frame, [0, 10, f(s.durMs) - 10, f(s.durMs)], [0, 1, 1, 0], { extrapolateRight: "clamp" });
+  const ms = (frame / FPS) * 1000;
+  // the chip steps aside while a highlight sits under it (top right), e.g. the "Open the member app" button
+  const under = (s.marks ?? []).some((m) => m.rect && m.rect.x + m.rect.width > 1400 && m.rect.y < 110 && ms > m.t - 300 && ms < m.t + (m.dur ?? 0) + 300);
+  const o = interpolate(frame, [0, 10, f(s.durMs) - 10, f(s.durMs)], [0, 1, 1, 0], { extrapolateRight: "clamp" }) * (under ? 0 : 1);
   return (
     <div style={{ position: "absolute", top: 28, right: 32, opacity: o, display: "flex", gap: 12, alignItems: "center", font: `700 24px ${SANS}`,
       background: "rgba(5,8,22,.85)", color: "white", padding: "10px 18px", borderRadius: 12, border: `1px solid ${BLUE}` }}>

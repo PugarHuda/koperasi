@@ -29,6 +29,6 @@ for (const s of timeline) {
   from = to + 1;
 }
 fs.writeFileSync(out(`${tag}s.txt`), parts.map((p) => `file '${p.replace(/\\/g, "/")}'`).join("\n"));
-// video copied as is; audio re-encoded once so the joins have no gaps
-execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", out(`${tag}s.txt`), "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", out(short ? "koperasi-60.mp4" : "koperasi.mp4")]);
+// video re-encoded once (a stream-copied join seeks badly in some players); audio re-encoded so the joins have no gaps
+execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", out(`${tag}s.txt`), "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", out(short ? "koperasi-60.mp4" : "koperasi.mp4")]);
 console.log(short ? "out/koperasi-60.mp4" : "out/koperasi.mp4");

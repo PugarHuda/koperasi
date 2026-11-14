@@ -77,7 +77,7 @@ async function scene(id, url, act) {
   const page = await ctx.newPage();
   const marks = [];
   const W = words(id);
-  let start = 0;
+  let start = 0, flash = -1;
   const now = () => Date.now() - t0 - start;
   /** ms into the scene where the narration says `w` (its nth time), a little ahead so the eye is there first */
   const word = (w, nth = 0, lead = 350) => {
@@ -86,6 +86,17 @@ async function scene(id, url, act) {
     return Math.max(0, hits[nth].start - lead);
   };
   const rect = (t) => page.evaluate(locate, t);
+  /** the target's rect once it has stopped moving (late content, a scroll still easing out), up to 2.5 s */
+  const stableRect = async (t) => {
+    let r = await rect(t);
+    for (let i = 0; i < 20; i++) {
+      await page.waitForTimeout(125);
+      const r2 = await rect(t);
+      if (r && r2 && Math.abs(r.x - r2.x) + Math.abs(r.y - r2.y) + Math.abs(r.width - r2.width) + Math.abs(r.height - r2.height) < 3) return r2;
+      r = r2;
+    }
+    return r;
+  };
   // while a mark is on screen, follow its target: if the page moves it (content loading above it), the mark ends there
   // and a new one starts at the new place, so the zoom never frames a stale spot
   let watching = null;
@@ -107,11 +118,32 @@ async function scene(id, url, act) {
   const h = {
     page, word,
     /** the scene begins here: everything before is cut */
-    ready: async () => { start = Date.now() - t0; },
+    ready: async () => {
+      // a magenta square for half a second before the scene: found in the video later, it ties the video's clock to
+      // this one (Playwright's video starts a little after the context, by a varying delay)
+      await page.evaluate(() => new Promise((ok) => {
+        const d = document.createElement("div");
+        d.id = "kop-sync";
+        d.style.cssText = "position:fixed;left:0;top:0;width:48px;height:48px;background:#ff00ff;z-index:100000";
+        document.body.append(d);
+        requestAnimationFrame(() => requestAnimationFrame(ok));
+      }));
+      flash = Date.now() - t0;
+      await page.waitForTimeout(500);
+      await page.evaluate(() => document.getElementById("kop-sync")?.remove());
+      await page.waitForTimeout(400);
+      start = Date.now() - t0;
+    },
     /** wait until `ms` into the scene (a number, or a narration word) */
     at: async (ms) => { if (typeof ms === "string") ms = word(ms); const d = ms - now(); if (d > 0) await page.waitForTimeout(d); },
+    /** end every mark still on screen: the page is about to move */
+    cut: () => {
+      watching = null;
+      const t = now();
+      for (const m of marks) if (m.t + m.dur > t) m.dur = Math.max(300, t - m.t);
+    },
     glide: async (t, offset = 90) => {
-      watching = null; // the page moves on purpose: the mark before has ended
+      h.cut(); // the page moves on purpose: the mark before has ended
       await page.locator(sel(t)).first().evaluate((el, o) => { window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - o, behavior: "smooth" }); }, offset);
       await h.settle();
     },
@@ -122,7 +154,7 @@ async function scene(id, url, act) {
     },
     /** a real click on a link of the page's header (the page scrolls there); the camera stays wide while it moves */
     nav: async (link, label) => {
-      watching = null;
+      h.cut();
       await h.click(link, label, 1300, undefined, false);
       await h.settle();
     },
@@ -130,7 +162,7 @@ async function scene(id, url, act) {
     point: async (t) => { const r = await rect(t); if (r) await page.mouse.move(Math.min(r.x + r.width - 18, 1900), Math.max(r.y + 14, 10), { steps: 25 }); },
     /** look at a target until `until` (ms or word; default 3500 ms on) */
     show: async (t, label, until) => {
-      const r = await rect(t);
+      const r = await stableRect(t);
       if (!r) console.warn(`${id}: nothing at`, t);
       const end = typeof until === "string" ? word(until) : until ?? now() + 3500;
       const m = { t: now(), kind: "zoom", rect: r, label, dur: Math.max(1500, end - now()) };
@@ -140,9 +172,10 @@ async function scene(id, url, act) {
     },
     /** move to a target and really click it; the zoom frames `focus` (default the target) */
     click: async (t, label, dur = 2200, focus, zoom = true) => {
-      const r = await rect(t);
+      const r = await stableRect(t);
       await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2, { steps: 22 });
-      const m = { t: now(), kind: "click", rect: focus ? await rect(focus) : r, label, dur, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), ...(zoom ? {} : { zoom: false }) };
+      h.cut(); // a click changes the page: the marks before it end here
+      const m = { t: now(), kind: "click", rect: focus ? await stableRect(focus) : r, label, dur, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), ...(zoom ? {} : { zoom: false }) };
       marks.push(m);
       await page.waitForTimeout(500);
       m.click = now();
@@ -163,8 +196,15 @@ async function scene(id, url, act) {
   fs.renameSync(await video.path(), webm);
   execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-i", webm, "-c:v", "libx264", "-crf", "16", "-preset", "fast", "-g", "15", "-pix_fmt", "yuv420p", "-r", "30", path.join(CLIPS, `${id}.mp4`)]);
   fs.rmSync(webm);
-  fs.writeFileSync(path.join(CLIPS, `${id}.json`), JSON.stringify({ start, marks }, null, 1));
-  console.log(id, `${(length(id) / 1000).toFixed(1)}s`, marks.length, "marks", marks.filter((m) => !m.rect).length ? "(SOME WITHOUT RECT)" : "");
+  // where the magenta square first shows in the video: video time = this clock + offset
+  const px = execFileSync("ffmpeg", ["-loglevel", "error", "-i", path.join(CLIPS, `${id}.mp4`), "-vf", "crop=16:16:16:16,scale=1:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { maxBuffer: 1 << 26 });
+  let frame = -1;
+  for (let i = 0; i + 2 < px.length; i += 3) if (px[i] > 200 && px[i + 1] < 90 && px[i + 2] > 200) { frame = i / 3; break; }
+  const offset = frame >= 0 ? Math.round((frame / 30) * 1000 - flash) : 0;
+  if (frame < 0) console.warn(`${id}: sync square not found; the marks may be off`);
+  start += offset;
+  fs.writeFileSync(path.join(CLIPS, `${id}.json`), JSON.stringify({ start, offset, marks }, null, 1));
+  console.log(id, `${(length(id) / 1000).toFixed(1)}s`, marks.length, "marks", `video offset ${offset} ms`, marks.filter((m) => !m.rect).length ? "(SOME WITHOUT RECT)" : "");
 }
 
 /** wait until the page shows `re` in `sel` (live data from testnet) */
@@ -225,7 +265,7 @@ const scenes = {
     await h.page.waitForTimeout(1200);
     await h.ready();
     await h.at(200); await h.show("#status > div:nth-child(3)", "Jobs on-chain, with TEE proof", "Taskbond");
-    await h.at("Taskbond"); await h.show("#p-agent", "4 Taskbond wins, scored 95/100", "Every");
+    await h.at("Taskbond"); await h.show("#p-agent", "5 Taskbond wins: 95, 95, 95, 95, 85", "Every");
     await h.at("Every"); await h.glide("#receipts", 60);
     await h.show({ sel: "#receipts tbody tr:nth-child(-n+5)", all: true }, "Price, inference, by-laws, TEE proof", length("s05") - 500);
   }),
@@ -309,7 +349,9 @@ const scenes = {
     await h.page.keyboard.press("Control+A");
     await h.page.keyboard.type("kop-alice-mw4i3w8f.testnet", { delay: 45 });
     await h.click("#cert-form button, #cert-form [type=submit]", "Show", 1000);
+    h.cut();
     await h.page.waitForURL(/alice/);
+    await until(h.page, "#cert-who", /kop-alice/, 60000);
     await h.page.waitForSelector("#cert-juries tr td", { timeout: 60000 });
     await h.page.waitForTimeout(400);
     await h.show("#cert-sum", "Alice: pledges kept, jury rulings", "Nobody");
@@ -321,7 +363,7 @@ const scenes = {
     await h.page.waitForTimeout(800);
     await h.ready();
     await h.at("Open");
-    await h.click("#open-app", "Open the member app", 1500);
+    await h.click("#open-app", "Open the member app", 800); // the page leaves right after the click
     await h.page.waitForURL(/dashboard/);
     await h.page.waitForTimeout(1500);
   }),
@@ -352,12 +394,12 @@ const scenes = {
     await h.click("#w-share-amt", "Propose a profit share", 1200);
     await h.page.keyboard.type("10", { delay: 160 });
     await h.page.waitForTimeout(300);
-    await h.show(sec("Members' meeting"), "Each member's part, before the vote", "Below");
-    await h.at("Below"); await h.glide("#joinapp h3:has-text('Tasks with earned trust')", 80);
-    await h.show(sec("Tasks with earned trust"), "Tasks to take", "pledges");
-    await h.at("pledges"); await h.glide("#joinapp h3:has-text('Pledges and the co-op court')", 80);
-    await h.show(sec("Pledges and the co-op court"), "Pledges to call in", "surety");
-    await h.at("surety"); await h.glide("#joinapp h3:has-text('Surety and loans')", 80);
+    await h.show(sec("Members' meeting"), "Each member's part, before the vote", h.word("Below", 0, 600));
+    await h.at(h.word("Below", 0, 600)); await h.glide("#joinapp h3:has-text('Tasks with earned trust')", 80); 
+    await h.show(sec("Tasks with earned trust"), "Tasks to take", h.word("Then", 0, 600));
+    await h.at(h.word("Then", 0, 600)); await h.glide("#joinapp h3:has-text('Pledges and the co-op court')", 80); 
+    await h.show(sec("Pledges and the co-op court"), "Pledges to call in", h.word("surety", 0, 1000));
+    await h.at(h.word("surety", 0, 1000)); await h.glide("#joinapp h3:has-text('Surety and loans')", 80); 
     await h.show(sec("Surety and loans"), "Surety and loans", "app");
     await h.at("app"); await h.glide("body", 0);
     await h.click(".lang-btn", "Bahasa Indonesia", 2000);

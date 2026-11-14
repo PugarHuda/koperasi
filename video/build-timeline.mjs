@@ -46,9 +46,9 @@ const scenes = narration.map((nar, i) => {
     }
     const clipMs = probe(pub(`clips/${src}.mp4`));
     const shift = (m) => ({ ...m, t: m.t - from, ...(m.click !== undefined ? { click: m.click - from } : {}) });
-    // a mark the recorder continued at a new place (the page moved its target) is seen ~0.6 s late: start it earlier
-    const early = meta.marks.map((m, k, all) => (m.cont ? { ...m, t: m.t - 600, dur: m.dur + 600 }
-      : all[k + 1]?.cont ? { ...m, dur: Math.max(300, m.dur - 600) } : m));
+    // a mark the recorder continued at a new place (the page moved its target) is seen up to one poll late
+    const early = meta.marks.map((m, k, all) => (m.cont ? { ...m, t: m.t - 200, dur: m.dur + 200 }
+      : all[k + 1]?.cont ? { ...m, dur: Math.max(300, m.dur - 200) } : m));
     let marks = early.map(shift);
     if (short) {
       // cut marks to the scene: those still on screen, ending by the scene's end
