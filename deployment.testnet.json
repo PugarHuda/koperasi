@@ -976,5 +976,20 @@
     },
     "upgrade": 133,
     "teeRegistryVote": 134
+  },
+  "agentReview": {
+    "year": 2026,
+    "proposal": 142,
+    "report": "rat/agent-2026.md",
+    "facts": "rat/agent-2026.facts.json",
+    "report_sha256": "404194c03bb661a60ce003609b77b88fb723841b7f271e361576ab52fb4afd9c",
+    "facts_sha256": "29cfd8c37fba6e22edb587f7a08212868efeacc6a09b890e51ee4194262fd069",
+    "inference": "2d833d6c-cefc-5499-b964-b06535291228",
+    "rejected": {
+      "proposal": 141,
+      "report": "rat/agent-2026.rejected.md",
+      "why": "it read the stand-in market as an outside market, took the TEE worker for itself, and called its scaled share a fee"
+    },
+    "note": "accepted with one slip: its section 6 speaks of lower prices and narrowed tags, which v10 reverted"
   }
 }

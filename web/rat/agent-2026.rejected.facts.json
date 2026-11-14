@@ -1,0 +1,150 @@
+{
+  "agent": "agent.koperasi-mw4i2iwk.testnet",
+  "contract": "koperasi-mw4i2iwk.testnet",
+  "year": 2026,
+  "read_at": "2026-11-14T05:55:38.583Z",
+  "jobs": {
+    "total": 37,
+    "by_kind": {
+      "taskbond": 4,
+      "stand_in_market": 22,
+      "court_demo": 11
+    },
+    "by_status": {
+      "Paid": 25,
+      "Submitted": 8,
+      "Refunded": 2,
+      "Disputed": 2
+    },
+    "with_tee_proof_or_taskbond": 16,
+    "taskbond_scores": [
+      {
+        "job": 13,
+        "receipt": "taskbond-13"
+      },
+      {
+        "job": 14,
+        "receipt": "taskbond-14"
+      },
+      {
+        "job": 15,
+        "receipt": "taskbond-15"
+      },
+      {
+        "job": 16,
+        "receipt": "taskbond-16"
+      }
+    ]
+  },
+  "court": {
+    "cases_against_its_jobs": 11,
+    "upheld": 7,
+    "live_strikes": 1,
+    "suspended_now": false,
+    "was_suspended_and_reinstated": true
+  },
+  "money": {
+    "risk_fund_usdc": 2.455003,
+    "saves_bps_of_earnings": 1000,
+    "surplus_share_bps": 500,
+    "standing_bps": 5000,
+    "surplus_received_usdc": 0.100003
+  },
+  "by_laws_proposals": [
+    {
+      "version": 7,
+      "dao_proposal": 123,
+      "status": "Approved",
+      "reason": "23 jobs settled, 4 refunded or disputed (17%), 19 paid at an average inference cost of $0.0003: the price can go from 4 to 5 USDC"
+    },
+    {
+      "version": 8,
+      "dao_proposal": 136,
+      "status": "Approved",
+      "reason": "Version 7 by-laws: 4 jobs, 4 paid, 0 refunded/disputed. Avg price $4 (below our $5 ask), avg inference $0.0005 (well below $0.5 per-job limit). Risk fund low ($1.5). | facts sha256 c09895db22a7615e…, inference 94386817-9e11… (TEE)"
+    },
+    {
+      "version": 9,
+      "dao_proposal": 139,
+      "status": "Approved",
+      "reason": "Current by-laws: 4 jobs, avg price $3.75 (below our $5 ask), inference $0.001 (well below $0.5 limit). Lowering bid to $3 and min price to $2 could attract more work like pre-version-8 jobs (33 jobs, avg $1.94). Narrowing tags to top categories (research, translation, writing, web3) focuses scope. R"
+    }
+  ],
+  "by_laws_history": [
+    {
+      "version": 1,
+      "contributor": null,
+      "at": "2026-11-06"
+    },
+    {
+      "version": 2,
+      "contributor": "kop-alice-mw4i3w8f.testnet",
+      "at": "2026-11-06"
+    },
+    {
+      "version": 3,
+      "contributor": "kop-bob-mw4i3w8f.testnet",
+      "at": "2026-11-06"
+    },
+    {
+      "version": 4,
+      "contributor": "kop-bob-mw4i3w8f.testnet",
+      "at": "2026-11-10"
+    },
+    {
+      "version": 5,
+      "contributor": "kop-alice-mw4i3w8f.testnet",
+      "at": "2026-11-13"
+    },
+    {
+      "version": 6,
+      "contributor": "kop-bob-mw4i3w8f.testnet",
+      "at": "2026-11-13"
+    },
+    {
+      "version": 7,
+      "contributor": null,
+      "at": "2026-11-13"
+    },
+    {
+      "version": 8,
+      "contributor": "agent.koperasi-mw4i2iwk.testnet",
+      "at": "2026-11-13"
+    },
+    {
+      "version": 9,
+      "contributor": "agent.koperasi-mw4i2iwk.testnet",
+      "at": "2026-11-14"
+    },
+    {
+      "version": 10,
+      "contributor": "kop-alice-mw4i3w8f.testnet",
+      "at": "2026-11-14"
+    }
+  ],
+  "known_mistakes": [
+    "by-laws proposal for v7 (DAO #123) named the agent as contributor, so its call failed; the members passed the same file by #124",
+    "by-laws v9 (DAO #139) cut the price from an average that counted a Taskbond job (paid in testnet NEAR, 0 USDC on its receipt) as a sale; the members approved it, then restored v8 as v10 (#140); the agent's facts now average USDC sales only"
+  ],
+  "tee_worker": {
+    "worker": "c4ebe4dbc1e09c961ac5ddaf74f6cfa65e169a1b9d8e118ae4d18dc9050d48e6",
+    "registry": "kop-tee-mwfb5bj2.testnet",
+    "receipt": "demo-33693cb6-ee99-486b-8e37-05a9b3095601",
+    "approved_by": 137,
+    "admitted_by": 138
+  },
+  "work_passed_between_coops": [
+    {
+      "job": "demo-b3f5d590-f77f-4822-8d49-b53d692799f6",
+      "coop": "koperasi-mw80aczw.testnet",
+      "share": 1.14,
+      "proposal": 21
+    },
+    {
+      "job": "demo-c7a66c9f-f86c-42a0-a523-bad931297a23",
+      "coop": "koperasi-mw80aczw.testnet",
+      "share": 1.14,
+      "proposal": 27
+    }
+  ]
+}

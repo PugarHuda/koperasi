@@ -12841,6 +12841,20 @@ var init_verify = __esm({
         `${t2.worker.slice(0, 12)}\u2026 (implicit) attested by ${t2.registry} (owner ${info2[0]}): compose ${t2.compose_hash.slice(0, 12)}\u2026, PPID ${t2.ppid}, valid until ${new Date(Number(BigInt(reg?.valid_until ?? 0) / 1000000n)).toISOString().slice(0, 10)}; approved by #${t2.approve}, admitted TEE-only by #${t2.admit}; receipt ${t2.receipt.slice(0, 14)}\u2026 recorded by it`
       );
     }
+    if (d2.agentReview) {
+      const a = d2.agentReview;
+      const [ok, no, report, facts] = await Promise.all([
+        view2(d2.dao, "get_proposal", { id: a.proposal }),
+        view2(d2.dao, "get_proposal", { id: a.rejected.proposal }),
+        file(`web/${a.report}`, a.report),
+        file(`web/${a.facts}`, a.facts)
+      ]);
+      check(
+        ok.status === "Approved" && ok.description.includes(sha2562(report)) && ok.description.includes(sha2562(facts)) && no.status === "Rejected",
+        "the members reviewed the agent: its own review, written in a TEE from chain facts, accepted after a first draft with factual errors was rejected",
+        `#${a.proposal} ${ok.status} (report ${sha2562(report).slice(0, 12)}\u2026, facts ${sha2562(facts).slice(0, 12)}\u2026); #${a.rejected.proposal} ${no.status}: ${a.rejected.why}`
+      );
+    }
     if (d2.redteam?.length) {
       const res = await Promise.all(d2.redteam.map(async (r2) => {
         const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.tx, sender_account_id: r2.by, wait_until: "FINAL" });

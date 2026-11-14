@@ -608,6 +608,16 @@ if (d.tee?.receipt) {
     `${t.worker.slice(0, 12)}… (implicit) attested by ${t.registry} (owner ${info2[0]}): compose ${t.compose_hash.slice(0, 12)}…, PPID ${t.ppid}, valid until ${new Date(Number(BigInt(reg?.valid_until ?? 0) / 1_000_000n)).toISOString().slice(0, 10)}; approved by #${t.approve}, admitted TEE-only by #${t.admit}; receipt ${t.receipt.slice(0, 14)}… recorded by it`);
 }
 
+// the members' meeting reviews the agent: its own review, written in a TEE from chain facts; a first, wrong draft rejected
+if (d.agentReview) {
+  const a = d.agentReview;
+  const [ok, no, report, facts] = await Promise.all([view(d.dao, "get_proposal", { id: a.proposal }), view(d.dao, "get_proposal", { id: a.rejected.proposal }),
+    file(`web/${a.report}`, a.report), file(`web/${a.facts}`, a.facts)]);
+  check(ok.status === "Approved" && ok.description.includes(sha256(report)) && ok.description.includes(sha256(facts)) && no.status === "Rejected",
+    "the members reviewed the agent: its own review, written in a TEE from chain facts, accepted after a first draft with factual errors was rejected",
+    `#${a.proposal} ${ok.status} (report ${sha256(report).slice(0, 12)}…, facts ${sha256(facts).slice(0, 12)}…); #${a.rejected.proposal} ${no.status}: ${a.rejected.why}`);
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {

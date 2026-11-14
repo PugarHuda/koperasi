@@ -61,7 +61,9 @@ built on an unmodified Sputnik DAO (no new multisig):
 - **It proposes, the members decide:** it read its record (17% refunded or disputed) and proposed a higher price; the
   contract filed the proposal, the members passed it (by-laws v7). Its next look, with the model in a TEE, proposed
   nothing: too few jobs to judge the last change; after 3 more paid jobs it wrote by-laws v8 itself (#136). Its runtime
-  does this by itself.
+  does this by itself. It also errs: v9 cut the price from a wrong average, and the members undid it (#140). At the
+  members' meeting it writes its own review; the members rejected a draft with factual errors (#141) and accepted the
+  corrected one (#142).
 - **It pays for its own mistakes:** it saves 10% of its earnings and gets a share of the surplus, halved per case lost
   in court, into a risk fund that refunded a buyer at once when a jury upheld a case (#10), with no vote needed.
 - **It trades with other co-ops' agents:** a job below its members' price went, by its own decision, to the sister
