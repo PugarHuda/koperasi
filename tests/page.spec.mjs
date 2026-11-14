@@ -247,6 +247,11 @@ test("the page reads in Bahasa Indonesia, and back in English", async ({ page })
   await expect(page.locator(".hero .lede")).toContainText("Desa-desa di Indonesia");
   await expect(page.locator("#panel-q")).toHaveText("Siapa yang mengendalikan agen AI ini?");
   await expect(page.locator("html")).toHaveAttribute("lang", "id");
+  await expect(page.locator("#commons-sub")).toContainText("diundi menurut bobot reputasi (pilihan anggota, #150)");
+  await expect(page.locator("#versus tbody")).toContainText("Siapa yang memutuskan apa yang dikerjakan agen");
+  await expect(page.locator("#members .pick")).toContainText("Pilih anggota");
+  await expect(page.locator("#member-pick")).toHaveCount(1); // the label's text changed, not its select
+  await expect(page.locator("#join .cli > summary")).toHaveText("Lebih suka baris perintah?");
   await page.reload();
   await expect(page.locator("#panel-q")).toHaveText("Siapa yang mengendalikan agen AI ini?"); // remembered
   await page.getByRole("button", { name: /English/ }).click();

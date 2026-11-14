@@ -63,6 +63,27 @@ const ID = [
   ["#card-proposal > b", "Agen mengusulkan, anggota memutuskan"],
   ["#card-credit > b", "Biro kredit milik koperasi-koperasi"],
   ["#card-errors > b", "Agen keliru, anggota mengoreksinya"],
+  ["#brief > .sub", 'Setiap baris dibaca dari testnet NEAR saat halaman ini dimuat. Untuk pemeriksaan langkah demi langkah, lihat <a href="https://github.com/PugarHuda/koperasi/blob/main/JUDGE.md">JUDGE.md</a>.'],
+  // a span the check's verdict replaces, so once the attacks are read this matches nothing (same for #live-state)
+  ["#ck-attacks .ck-out > .wait", "Membaca transaksi serangan…"],
+  ["#versus caption", 'Bedanya dengan cara lain memiliki agen AI <span class="muted">(sumber di docs/DETAILS.md)</span>'],
+  ["#versus thead tr", '<th scope="col"></th><th scope="col">Agen yang diluncurkan lewat token<br><span class="muted">mis. Virtuals, ai16z</span></th><th scope="col">Kerangka kerja agen<br><span class="muted">mis. Olas, tutorial NEAR Shade</span></th><th scope="col">Koperasi</th>'],
+  ["#versus tbody", `<tr><th scope="row">Siapa yang memutuskan apa yang dikerjakan agen</th><td>Pengembang; pemegang token memilih menurut jumlah tokennya, itu pun kalau ada</td><td>Operatornya</td><td><strong>Anggota, masing-masing satu suara; prompt, model, dan harga dikunci dengan hash</strong></td></tr>
+            <tr><th scope="row">Bukti apa yang berjalan</th><td>Klaim di situs web</td><td>Atestasi TEE yang diperiksa operator</td><td><strong>Diverifikasi ulang oleh agen dalam satu jam sebelum setiap pekerjaan, dan oleh Anda, di halaman ini, dengan nonce Anda sendiri</strong></td></tr>
+            <tr><th scope="row">Ke mana uangnya</th><td>Ke pemegang token, hanya lewat harga token</td><td>Ke operator; imbalan staking</td><td><strong>Ke kas DAO; setiap anggota menagih bagiannya menurut aturan</strong></td></tr>
+            <tr><th scope="row">Reputasi</th><td>Tidak ada; jumlah token menggantikannya</td><td>Tidak termasuk</td><td><strong>Diraih tugas demi tugas, tidak bisa dipindahtangankan, dan dibawa ke koperasi saudara yang diakui anggota (paspor)</strong></td></tr>
+            <tr><th scope="row">Saat pembeli menyengketakan hasil kerja</th><td>Tidak ada jalan keluar</td><td>Operator yang memutuskan</td><td><strong>Juri dari anggota yang bereputasi baik, diundi menurut bobot reputasi (pilihan anggota), mendengar kedua pihak; banding ke seluruh anggota</strong></td></tr>
+            <tr><th scope="row">Manusia di tengah</th><td>Dipercaya</td><td>Dipercaya</td><td><strong>Menyetor jaminan, diaudit on-chain, jaminannya bisa dipotong lewat pemungutan suara atau oleh siapa pun begitu pendapatan terlambat 7 hari</strong></td></tr>`],
+  ["#live > .sub", "Setiap perubahan yang dibuat kontrak adalah event NEP-297 standar. Daftar ini membacanya dari NEAR saat anggota bertindak: indexer NearBlocks menemukan transaksinya, RPC memberikan event-nya, dan setiap event dicocokkan dengan skema kontrak sebelum ditampilkan."],
+  ["#live-state > .wait", "Membaca transaksi terbaru…"],
+  ["#members .split .sub", "Keanggotaan adalah peran <code>member</code> di Sputnik DAO koperasi; kontrak membacanya langsung dari DAO. Simpanan adalah NEAR yang dipertaruhkan setiap anggota untuk inferensi agen; poin kontribusi adalah apa yang mereka bangun untuknya, dibagi dua di setiap pembagian SHU agar kerja terbaru paling dihitung."],
+  ["#members .pick > span", "Pilih anggota"],
+  ["#work .cta-row .btn:not(.ghost)", 'Jalankan demo <span aria-hidden="true">→</span>'],
+  ["#contract-link", 'Baca kontraknya <span aria-hidden="true">→</span>'], // app.js sets only its href
+  ["#records thead tr", '<th scope="col">Kontributor</th><th scope="col" class="num">Selesai</th><th scope="col">Dipercaya</th><th scope="col">Asal setiap poin</th>'],
+  ["#commons-sub", "Anggota menjanjikan jasa kepada koperasi (voucher komitmen, seperti pool Sarafu di Kenya); siapa pun yang menagih janji itu menyatakan apakah janjinya ditepati. Sengketa pembeli dibawa ke pengadilan koperasi: tiga anggota yang bereputasi baik, diundi menurut bobot reputasi (pilihan anggota, #150); dua di antaranya harus membenarkan sengketa itu agar pembeli mendapat pengembalian dana. Janji yang ditepati dan yang diingkari, tugas juri, dan pemotongan jaminan membentuk kedudukan setiap anggota, dan hanya anggota yang bereputasi baik yang duduk sebagai juri."],
+  ["#join .cli > summary", "Lebih suka baris perintah?"],
+  ["#join > a.btn", 'Dirikan koperasi Anda sendiri <span aria-hidden="true">→</span>'],
   // cert.html (a member's work record)
   ["#cert-sub", "Setiap baris di bawah dibaca dari kontrak dan DAO koperasi di NEAR, saat ini, di browser Anda. Tidak ada yang diketik oleh anggota maupun oleh kami: tugas adalah usulan DAO yang sudah dibayar, janji dikonfirmasi oleh anggota yang menagihnya, putusan juri adalah catatan kontrak sendiri. Bagikan tautan ini sebagai bukti kerja (mengikuti Hypercerts: siapa mengerjakan apa, bisa dilacak)."],
   ["#cert-acct", "Akun"],

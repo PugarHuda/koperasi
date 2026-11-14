@@ -4,6 +4,7 @@
 // ponytail: polling, because no indexer streams testnet NEP-297 events; switch to a websocket when one does.
 import { dep, testnet, txStatus, txUrl, $, esc } from "./near.js";
 import { describeEvent, parseEvents, txList } from "./share.js";
+import { t } from "./lang.js";
 
 const API = `https://api${testnet ? "-testnet" : ""}.nearblocks.io/v3/accounts`;
 const list = $("live-list");
@@ -33,8 +34,9 @@ async function poll() {
     $("live-refresh").hidden = false;
   }
   first = false;
-  state.textContent = shown ? `Updated ${new Date().toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}; checks again every 30 s.`
-    : "No co-op events in the latest transactions yet; checking every 30 s.";
+  const at = new Date().toLocaleTimeString(t("en", "id-ID"), { hour: "2-digit", minute: "2-digit" });
+  state.textContent = shown ? t(`Updated ${at}; checks again every 30 s.`, `Diperbarui ${at}; diperiksa lagi setiap 30 detik.`)
+    : t("No co-op events in the latest transactions yet; checking every 30 s.", "Belum ada event koperasi di transaksi terbaru; diperiksa setiap 30 detik.");
 }
 
 function show(evs) {
@@ -52,7 +54,7 @@ let running = false;
 const run = () => {
   if (running) return;
   running = true;
-  poll().catch((e) => { state.textContent = `Could not read the indexer (${e.message}); retrying in 30 s.`; })
+  poll().catch((e) => { state.textContent = t(`Could not read the indexer (${e.message}); retrying in 30 s.`, `Belum bisa membaca indexer (${e.message}); mencoba lagi dalam 30 detik.`); })
     .finally(() => { running = false; });
 };
 // the page's own reads go first (public RPCs rate-limit bursts): start when the section comes near, or after 6 s

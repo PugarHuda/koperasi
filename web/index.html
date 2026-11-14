@@ -147,7 +147,7 @@
         <li id="ck-bylaws"><b>It runs only what members voted</b><p class="ck-out" aria-live="polite">Hashing the by-laws…</p></li>
         <li id="ck-code"><b>No one changes the rules alone</b><p class="ck-out" aria-live="polite">Reading the contract account…</p></li>
         <li id="ck-money"><b>Every payout is counted</b><p class="ck-out" aria-live="polite">Reading the audit…</p></li>
-        <li id="ck-attacks"><b>Attacks are refused on-chain</b><div class="ck-out" aria-live="polite">Reading the attack transactions…</div></li>
+        <li id="ck-attacks"><b>Attacks are refused on-chain</b><div class="ck-out" aria-live="polite"><span class="wait">Reading the attack transactions…</span></div></li>
       </ol>
       <div class="ck-scroll" tabindex="0" role="region" aria-label="Comparison table, scrolls sideways">
         <table class="grid versus" id="versus">
@@ -183,7 +183,7 @@
       <p class="sub">Every change the contract makes is a standard NEP-297 event. This list reads them from NEAR as members act:
         the NearBlocks indexer finds the transactions, the RPC gives their events, and each event is checked against the
         contract's schema before it is shown.</p>
-      <p class="hint" id="live-state" aria-live="polite">Reading the latest transactions…</p>
+      <p class="hint" id="live-state" aria-live="polite"><span class="wait">Reading the latest transactions…</span></p>
       <ol class="live-list" id="live-list" aria-live="polite"></ol>
       <button type="button" class="btn" id="live-refresh" hidden>New activity: refresh the figures</button>
     </section>
@@ -195,7 +195,7 @@
           <h2>Every member<br />holds <span class="dim">one vote.</span></h2>
           <p class="sub">Membership is the <code>member</code> role of the co-op's Sputnik DAO; the contract reads it straight from the DAO. Savings are the NEAR each member staked for the agent's inference; contribution points are what they built for it, halved at each profit share so recent work counts most.</p>
           <p class="pool-line" id="pool-line"></p>
-          <label class="pick" for="member-pick">Select member
+          <label class="pick" for="member-pick"><span>Select member</span>
             <select id="member-pick"></select>
           </label>
         </div>
