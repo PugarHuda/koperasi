@@ -48,8 +48,17 @@ impl Koperasi {
             return 0;
         }
         let Some(r) = self.get_referral_for_job(job_id.to_string()) else { return 0 };
+        // the referring co-op must still be a sister the members recognise (a dropped one keeps no claim)
+        if !self.get_sister_coops().contains(&r.from_coop) {
+            return 0;
+        }
         let Some(to) = load::<AccountId>(&treasury_key(&r.from_coop)) else { return 0 };
-        let share = amount * bps / BPS;
+        // the share is cut from what this job earned, never from the whole deposit: at most the job's receipt price and
+        // the budget the referral named; no receipt for the job here, no share
+        let Some(i) = self.receipt_index.get(&job_id.to_string()) else { return 0 };
+        let price = self.receipts.get(*i).map_or(0, |x| x.price.0);
+        let base = amount.min(price).min(r.budget_usdc.0);
+        let share = base * bps / BPS;
         if share == 0 {
             return 0;
         }

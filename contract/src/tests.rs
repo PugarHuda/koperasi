@@ -4118,6 +4118,8 @@ fn referral_setup() -> (Koperasi, AccountId, AccountId) {
     k.set_coop_treasury(sister.clone(), Some(treasury.clone()));
     at(&me(), DAY);
     k.on_referral_read(sister.clone(), 0, Ok(ref_board(0, "j-ref", &me())));
+    // the job's own receipt: the share is cut from at most its price and the referral's budget (5 USDC)
+    receipt(&mut k, "j-ref", 10_000_000, H1);
     (k, sister, treasury)
 }
 
@@ -4165,20 +4167,20 @@ fn a_referred_jobs_earnings_pay_the_referring_coop_its_share_once() {
     as_(&dao(), near(0));
     k.set_agent_saves(1000);
     assert_eq!(deposit(&mut k, &steward(), 10_000_000, "earnings:j-ref"), 0);
-    assert_eq!(ft_transfers(), vec![(treasury.to_string(), 3_000_000), (dao().to_string(), 6_300_000)], "30% out; the agent saves 10% of the rest");
+    assert_eq!(ft_transfers(), vec![(treasury.to_string(), 1_500_000), (dao().to_string(), 7_650_000)], "30% of the job's share base (its 5 USDC budget, not the 10 USDC deposit); the agent saves 10% of the rest");
     assert!(logs_have("\"referral_share_paid\"") && logs_have("\"job_id\":\"j-ref\"") && logs_have("\"to\":\"kop-two.sputnik-v2.testnet\""));
     let p = k.get_referral_share_paid("j-ref".into()).unwrap();
-    assert_eq!((p.from_coop, p.to, p.amount.0, p.failed), (sister.clone(), treasury.clone(), 3_000_000, false));
+    assert_eq!((p.from_coop, p.to, p.amount.0, p.failed), (sister.clone(), treasury.clone(), 1_500_000, false));
     assert_eq!(k.get_audit().deposited.0, 10_000_000, "the whole deposit counts as passed on");
-    assert_eq!(k.get_risk_fund().0, U128(700_000));
-    assert_eq!(k.get_ledger().unwrap().1 .0, 9_300_000, "both transfers in flight");
+    assert_eq!(k.get_risk_fund().0, U128(850_000));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 9_150_000, "both transfers in flight");
     at(&me(), DAY);
-    k.on_referral_share("j-ref".into(), U128(3_000_000), Ok(()));
-    assert_eq!(k.get_ledger().unwrap().1 .0, 6_300_000);
+    k.on_referral_share("j-ref".into(), U128(1_500_000), Ok(()));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 7_650_000);
     // once per job: a second deposit for it pays no share again
     deposit(&mut k, &steward(), 1_000_000, "earnings:j-ref");
     assert_eq!(ft_transfers(), vec![(dao().to_string(), 900_000)]);
-    assert_eq!(k.get_referral_share_paid("j-ref".into()).unwrap().amount.0, 3_000_000);
+    assert_eq!(k.get_referral_share_paid("j-ref".into()).unwrap().amount.0, 1_500_000);
 }
 
 /// Every case that pays no share: plain "earnings", its own job, no job named, not the steward, another msg, no share
