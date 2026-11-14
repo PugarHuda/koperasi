@@ -1,4 +1,4 @@
-# python tts.py [sNN ...]: narration.json -> public/audio/<id>.mp3 + public/audio/<id>.json (word timings, ms), with Microsoft's
+# python tts.py [narration60.json] [sNN ...]: narration.json (or the file named first) -> public/audio/<id>.mp3 + public/audio/<id>.json (word timings, ms), with Microsoft's
 # neural voice through edge-tts (natural, no key). The word timings drive the subtitles.
 import asyncio
 import json
@@ -14,7 +14,7 @@ OUT = ROOT / "public" / "audio"
 async def one(scene):
     words = []
     mp3 = OUT / f"{scene['id']}.mp3"
-    com = edge_tts.Communicate(scene["text"], VOICE, rate="-4%", boundary="WordBoundary")
+    com = edge_tts.Communicate(scene["text"], VOICE, rate="+2%", boundary="WordBoundary")
     with open(mp3, "wb") as f:
         async for chunk in com.stream():
             if chunk["type"] == "audio":
@@ -28,8 +28,10 @@ async def one(scene):
 
 async def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    want = sys.argv[1:]  # python tts.py [sNN ...]: only these scenes
-    for s in json.loads((ROOT / "narration.json").read_text(encoding="utf8")):
+    args = sys.argv[1:]
+    file = args.pop(0) if args and args[0].endswith(".json") else "narration.json"
+    want = args  # only these scenes
+    for s in json.loads((ROOT / file).read_text(encoding="utf8")):
         if want and s["id"] not in want:
             continue
         for attempt in range(4):

@@ -1,190 +1,380 @@
 // node video/record.mjs [sNN ...]: records each page scene of the video from the real app (live site, or the local
-// page for the member preview), 1920x1080, with a visible cursor. For each scene it writes public/clips/<id>.webm and
-// public/clips/<id>.json: { start (ms into the clip where the scene begins), marks: [{ t, kind, rect, label, dur }] }.
-// Marks drive the zoom and highlight boxes in Remotion. Scene lengths follow the narration (public/audio/<id>.json).
+// page for the member preview), 1920x1080, with a visible cursor. For each scene it writes public/clips/<id>.mp4 and
+// public/clips/<id>.json: { start (ms into the clip where the scene begins), marks: [{ t, kind, rect, label, dur, click? }] }.
+// Marks drive the zoom, the highlight boxes and the click sound in Remotion; they are timed to the narration's words
+// (public/audio/<id>.json), and their rects are the elements' bounding boxes at that moment.
+// Read-only: no wallet is connected and nothing is signed; the member preview only types into a preview field.
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { chromium } from "@playwright/test";
 
 const ROOT = import.meta.dirname;
-const LIVE = "https://koperasi-kohl.vercel.app";
+const LIVE = process.env.KOP_PAGE_URL ?? "https://koperasi-kohl.vercel.app"; // KOP_PAGE_URL=http://localhost:5173 records the local copy
 const LOCAL = "http://localhost:5173";
 const CLIPS = path.join(ROOT, "public/clips");
 fs.mkdirSync(CLIPS, { recursive: true });
 const words = (id) => JSON.parse(fs.readFileSync(path.join(ROOT, `public/audio/${id}.json`), "utf8"));
 const length = (id) => words(id).at(-1).end + 1200;
+const bare = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 // a cursor the recording can see, following the mouse
 const CURSOR = `addEventListener("DOMContentLoaded", () => {
   const c = document.createElement("div");
-  c.style.cssText = "position:fixed;z-index:99999;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.9);border:3px solid #1f4bff;box-shadow:0 2px 10px rgba(0,0,0,.35);pointer-events:none;transform:translate(-50%,-50%);left:-50px;top:-50px;transition:width .15s,height .15s";
+  c.style.cssText = "position:fixed;z-index:99999;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.9);border:3px solid #1f4bff;box-shadow:0 2px 10px rgba(0,0,0,.35);pointer-events:none;transform:translate(-50%,-50%);left:960px;top:540px;transition:width .12s,height .12s";
   document.body.append(c);
   addEventListener("mousemove", (e) => { c.style.left = e.clientX + "px"; c.style.top = e.clientY + "px"; });
-  addEventListener("mousedown", () => { c.style.width = c.style.height = "16px"; });
+  addEventListener("mousedown", () => { c.style.width = c.style.height = "14px"; });
   addEventListener("mouseup", () => { c.style.width = c.style.height = "22px"; });
 });`;
 
 const browser = await chromium.launch();
 
+/** In the page: the rect of a target. A target is a selector, or { sel, text } (the deepest element under sel whose
+ * text has `text`), { sel, line } (the <br>-separated line of sel holding `line`), { sel, all: true } (the union of
+ * every match), with { up: n } to take an ancestor. Clamped to the viewport. */
+function locate(t) {
+  const q = typeof t === "string" ? { sel: t } : t;
+  let els = [...document.querySelectorAll(q.sel)];
+  if (!els.length) return null;
+  if (!q.all) els = [els[0]];
+  if (q.text) {
+    const under = [...els[0].querySelectorAll("*")].filter((e) => e.textContent.includes(q.text) && e.getClientRects().length);
+    els = [under.at(-1) ?? els[0]];
+  }
+  for (let i = 0; i < (q.up ?? 0); i++) els = els.map((e) => e.parentElement);
+  if (q.section) {
+    // a heading of the wallet panel and its siblings up to the next heading
+    const h3 = [...els[0].querySelectorAll("h3.jh")].find((e) => e.textContent.startsWith(q.section));
+    if (!h3) return null;
+    els = [h3];
+    for (let n = h3.nextElementSibling; n && !n.matches("h3.jh"); n = n.nextElementSibling) els.push(n);
+  }
+  let rects;
+  if (q.line) {
+    const lines = [[]];
+    for (const k of els[0].childNodes) k.nodeName === "BR" ? lines.push([]) : lines.at(-1).push(k);
+    const L = lines.find((l) => l.map((n) => n.textContent).join("").includes(q.line));
+    if (!L) return null;
+    const r = document.createRange(); r.setStartBefore(L[0]); r.setEndAfter(L.at(-1));
+    rects = [r.getBoundingClientRect()];
+  } else if (q.tight) {
+    // the text's own extent, not the block's full width
+    rects = els.map((e) => { const r = document.createRange(); r.selectNodeContents(e); return r.getBoundingClientRect(); });
+  } else rects = els.map((e) => e.getBoundingClientRect());
+  rects = rects.filter((r) => r.width > 0 && r.height > 0);
+  if (!rects.length) return null;
+  const x0 = Math.max(0, Math.min(...rects.map((r) => r.left))), y0 = Math.max(0, Math.min(...rects.map((r) => r.top)));
+  const x1 = Math.min(innerWidth, Math.max(...rects.map((r) => r.right))), y1 = Math.min(innerHeight, Math.max(...rects.map((r) => r.bottom)));
+  return x1 > x0 && y1 > y0 ? { x: Math.round(x0), y: Math.round(y0), width: Math.round(x1 - x0), height: Math.round(y1 - y0) } : null;
+}
+
 async function scene(id, url, act) {
   const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, recordVideo: { dir: CLIPS, size: { width: 1920, height: 1080 } } });
   const t0 = Date.now();
   await ctx.addInitScript(CURSOR);
+  await ctx.addInitScript(() => { try { localStorage.setItem("kop-lang", "en"); } catch { /* private window: English is the default anyway */ } });
   const page = await ctx.newPage();
   const marks = [];
+  const W = words(id);
   let start = 0;
   const now = () => Date.now() - t0 - start;
-  const rect = async (sel) => (await page.locator(sel).first().boundingBox()) ?? null;
-  const h = {
-    page,
-    /** the scene begins here: everything before is cut */
-    ready: async () => { await page.mouse.move(960, 540); start = Date.now() - t0; },
-    /** wait until `ms` into the scene */
-    at: async (ms) => { const d = ms - now(); if (d > 0) await page.waitForTimeout(d); },
-    glide: async (sel, offset = 90) => {
-      await page.locator(sel).first().evaluate((el, o) => { window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - o, behavior: "smooth" }); }, offset);
-      await page.waitForTimeout(1300);
-    },
-    // the cursor rests on the element's top-right corner, so it never hides what the narration talks about
-    point: async (sel) => { const r = await rect(sel); if (r) await page.mouse.move(Math.min(r.x + r.width - 18, 1900), Math.max(r.y + 14, 10), { steps: 30 }); },
-    box: async (sel, label, dur = 4000) => { marks.push({ t: now(), kind: "box", rect: await rect(sel), label, dur }); await h.point(sel); },
-    zoom: async (sel, label, dur = 5000) => { marks.push({ t: now(), kind: "zoom", rect: await rect(sel), label, dur }); await h.point(sel); },
-    log: (line) => marks.push({ t: now(), kind: "term", label: line }),
+  /** ms into the scene where the narration says `w` (its nth time), a little ahead so the eye is there first */
+  const word = (w, nth = 0, lead = 350) => {
+    const hits = W.filter((x) => bare(x.w).startsWith(bare(w)));
+    if (!hits[nth]) throw new Error(`${id}: no word "${w}"`);
+    return Math.max(0, hits[nth].start - lead);
   };
-  await page.goto(url, { waitUntil: "domcontentloaded" });
-  await act(h);
+  const rect = (t) => page.evaluate(locate, t);
+  // while a mark is on screen, follow its target: if the page moves it (content loading above it), the mark ends there
+  // and a new one starts at the new place, so the zoom never frames a stale spot
+  let watching = null;
+  const follow = (m, t) => { watching = { m, t }; };
+  const poll = setInterval(async () => {
+    const w = watching;
+    if (!w || now() > w.m.t + w.m.dur) return;
+    const r = await rect(w.t).catch(() => null);
+    if (watching !== w || !r || !w.m.rect) return;
+    if (Math.abs(r.x - w.m.rect.x) + Math.abs(r.y - w.m.rect.y) + Math.abs(r.height - w.m.rect.height) < 6) return;
+    const t1 = now(), end = w.m.t + w.m.dur;
+    if (end - t1 < 400) { watching = null; return; }
+    w.m.dur = Math.max(300, t1 - w.m.t);
+    const m2 = { ...w.m, t: t1, rect: r, dur: end - t1, cont: true };
+    marks.push(m2);
+    watching = { m: m2, t: w.t };
+  }, 150);
+  const sel = (t) => (typeof t === "string" ? t : t.sel);
+  const h = {
+    page, word,
+    /** the scene begins here: everything before is cut */
+    ready: async () => { start = Date.now() - t0; },
+    /** wait until `ms` into the scene (a number, or a narration word) */
+    at: async (ms) => { if (typeof ms === "string") ms = word(ms); const d = ms - now(); if (d > 0) await page.waitForTimeout(d); },
+    glide: async (t, offset = 90) => {
+      watching = null; // the page moves on purpose: the mark before has ended
+      await page.locator(sel(t)).first().evaluate((el, o) => { window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - o, behavior: "smooth" }); }, offset);
+      await h.settle();
+    },
+    /** wait until the page stops scrolling */
+    settle: async () => {
+      let last = -1;
+      for (let i = 0; i < 40; i++) { await page.waitForTimeout(120); const y = await page.evaluate(() => scrollY); if (y === last) break; last = y; }
+    },
+    /** a real click on a link of the page's header (the page scrolls there); the camera stays wide while it moves */
+    nav: async (link, label) => {
+      watching = null;
+      await h.click(link, label, 1300, undefined, false);
+      await h.settle();
+    },
+    // the cursor rests on the target's top-right corner, so it never hides what the narration talks about
+    point: async (t) => { const r = await rect(t); if (r) await page.mouse.move(Math.min(r.x + r.width - 18, 1900), Math.max(r.y + 14, 10), { steps: 25 }); },
+    /** look at a target until `until` (ms or word; default 3500 ms on) */
+    show: async (t, label, until) => {
+      const r = await rect(t);
+      if (!r) console.warn(`${id}: nothing at`, t);
+      const end = typeof until === "string" ? word(until) : until ?? now() + 3500;
+      const m = { t: now(), kind: "zoom", rect: r, label, dur: Math.max(1500, end - now()) };
+      marks.push(m);
+      follow(m, t);
+      await h.point(t);
+    },
+    /** move to a target and really click it; the zoom frames `focus` (default the target) */
+    click: async (t, label, dur = 2200, focus, zoom = true) => {
+      const r = await rect(t);
+      await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2, { steps: 22 });
+      const m = { t: now(), kind: "click", rect: focus ? await rect(focus) : r, label, dur, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), ...(zoom ? {} : { zoom: false }) };
+      marks.push(m);
+      await page.waitForTimeout(500);
+      m.click = now();
+      await page.mouse.down(); await page.waitForTimeout(70); await page.mouse.up();
+    },
+  };
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.mouse.move(960, 540);
+    await act(h);
+  } catch (e) { clearInterval(poll); await ctx.close().catch(() => {}); throw e; }
   await h.at(length(id));
+  clearInterval(poll);
+  marks.sort((a, b) => a.t - b.t);
   const video = page.video();
   await ctx.close();
-  fs.renameSync(await video.path(), path.join(CLIPS, `${id}.webm`));
+  const webm = path.join(CLIPS, `${id}.webm`);
+  fs.renameSync(await video.path(), webm);
+  execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-i", webm, "-c:v", "libx264", "-crf", "16", "-preset", "fast", "-g", "15", "-pix_fmt", "yuv420p", "-r", "30", path.join(CLIPS, `${id}.mp4`)]);
+  fs.rmSync(webm);
   fs.writeFileSync(path.join(CLIPS, `${id}.json`), JSON.stringify({ start, marks }, null, 1));
-  console.log(id, `${(length(id) / 1000).toFixed(1)}s`, marks.length, "marks");
+  console.log(id, `${(length(id) / 1000).toFixed(1)}s`, marks.length, "marks", marks.filter((m) => !m.rect).length ? "(SOME WITHOUT RECT)" : "");
 }
 
-const loaded = (page) => page.waitForFunction(() => !/Reading the DAO/.test(document.querySelector("#p-voters")?.textContent ?? "Reading the DAO"), null, { timeout: 60000 });
+/** wait until the page shows `re` in `sel` (live data from testnet) */
+const until = (page, sel, re, timeout = 90000) =>
+  page.waitForFunction(([s, r]) => new RegExp(r).test(document.querySelector(s)?.textContent ?? ""), [sel, re.source], { timeout });
+const loaded = async (page) => {
+  await page.waitForFunction(() => !/Reading the DAO/.test(document.querySelector("#p-voters")?.textContent ?? "Reading the DAO"), null, { timeout: 90000 });
+  await until(page, "#p-agent", /Taskbond/);
+};
+const commons = async (page) => {
+  await loaded(page);
+  await page.waitForFunction(() => !document.querySelector("#card-proposal").hidden && !document.querySelector("#card-tee").hidden && !document.querySelector("#card-credit").hidden && !document.querySelector("#duties").hidden, null, { timeout: 90000 });
+  await page.waitForSelector("#cases tbody tr td", { timeout: 90000 });
+};
+
 const scenes = {
   s02: () => scene("s02", `${LIVE}/`, async (h) => {
     await loaded(h.page);
+    await h.page.waitForTimeout(1500);
     await h.ready();
-    await h.at(1500); await h.box(".panel", "Read live from the Sputnik DAO", 6000);
-    await h.at(8500); await h.zoom("#p-voters", "Each member: one vote", 5500);
+    await h.at("first"); await h.show(".panel", "Who controls this agent?", "members");
+    await h.at("members"); await h.show("#p-voters", "The members vote, one each", "instructions");
+    await h.at("instructions"); await h.show({ sel: "#p-terms", up: 1 }, "By-laws v10, locked by hash", "obeys");
+    await h.at("obeys"); await h.show("#p-agent", "The agent obeys only v10", length("s02") - 600);
   }),
   s03: () => scene("s03", `${LIVE}/`, async (h) => {
     await loaded(h.page);
-    await h.page.waitForFunction(() => document.querySelector("#ck-bylaws")?.classList.contains("pass"), null, { timeout: 60000 });
-    await h.glide("#checks", 40);
+    await until(h.page, "#br-rep", /veto|trusted/);
     await h.ready();
-    await h.at(2500); await h.box("#ck-bylaws", "By-laws hash = the vote", 4500);
-    await h.at(7500); await h.box("#ck-code", "0 full-access keys", 4500);
-    await h.at(12500);
-    await h.page.waitForSelector("#ck-tee-run:not([disabled])", { timeout: 30000 });
-    await h.point("#ck-tee-run");
-    await h.page.click("#ck-tee-run");
-    await h.at(13500); await h.zoom("#ck-tee", "TEE attestation, your nonce", 8500);
+    await h.at(300); await h.nav(".hero-cta a[href='#brief']", "Check it yourself");
+    await h.at("Collective"); await h.show("#br-own", "Collective ownership", "budget");
+    await h.at("budget"); await h.show("#br-budget", "A shared budget", "programmable");
+    await h.at("programmable"); await h.show("#br-rewards", "Programmable rewards", "reputation");
+    await h.at("reputation"); await h.show("#br-rep", "Access by reputation", "Each");
+    await h.at("Each"); await h.show("#counts", "Read from the chain as the page loads", length("s03") - 600);
   }),
   s04: () => scene("s04", `${LIVE}/`, async (h) => {
     await loaded(h.page);
-    await h.glide("#live", 40);
-    await h.page.waitForSelector("#live-list li", { timeout: 40000 }).catch(() => {});
+    await h.page.waitForFunction(() => document.querySelector("#ck-bylaws")?.classList.contains("pass"), null, { timeout: 90000 });
+    await until(h.page, "#ck-attacks", /of \d+ attacks/);
+    await h.page.waitForSelector("#ck-tee-run:not([disabled])", { timeout: 60000 });
     await h.ready();
-    await h.at(800); await h.box("#live-list", "NEP-297 events, live", 5500);
+    await h.at(200); await h.glide("#checks", 20);
+    // the TEE check takes ~15 s: click first, read the other checks while it runs
+    await h.at("button");
+    await h.click("#ck-tee-run", "Verify with my own nonce", h.word("Meanwhile") - h.word("button"), { sel: "#ck-tee-run, #ck-tee-out", all: true, tight: true });
+    await h.at("hashes"); await h.show("#ck-bylaws", "By-laws hash = the members' vote", "full");
+    await h.at("full"); await h.show("#ck-code", "0 full-access keys: code by vote", "Nineteen");
+    await h.at("Nineteen"); await h.show("#ck-attacks", "19 of 19 attacks refused on-chain", "answer");
+    await until(h.page, "#ck-tee-run", /again/, 60000).catch(() => console.warn("s04: TEE check slow"));
+    await h.at("answer");
+    await h.show({ sel: "#ck-tee-out > p:first-child, #ck-tee-out table", all: true, tight: true }, "Intel TDX UpToDate, bound to my nonce", length("s04") - 300);
   }),
   s05: () => scene("s05", `${LIVE}/`, async (h) => {
     await loaded(h.page);
-    await h.glide("#members", 40);
+    await h.page.waitForSelector("#receipts tbody tr td", { timeout: 90000 });
+    await h.page.evaluate(() => scrollTo(0, 320));
+    await h.page.waitForTimeout(1200);
     await h.ready();
-    await h.at(1500); await h.box("#meters", "Savings and contribution", 4500);
-    await h.at(6500); await h.page.selectOption("#member-pick", { index: 1 }).catch(() => {});
-    await h.at(9500); await h.glide("#bylaws", 40);
-    await h.at(11000); await h.box("#versions", "Every by-laws version, by vote", 4000);
-    await h.at(15500); await h.zoom("#verify", "Hash checked in your browser", 4500);
+    await h.at(200); await h.show("#status > div:nth-child(3)", "Jobs on-chain, with TEE proof", "Taskbond");
+    await h.at("Taskbond"); await h.show("#p-agent", "4 Taskbond wins, scored 95/100", "Every");
+    await h.at("Every"); await h.glide("#receipts", 60);
+    await h.show({ sel: "#receipts tbody tr:nth-child(-n+5)", all: true }, "Price, inference, by-laws, TEE proof", length("s05") - 500);
   }),
   s06: () => scene("s06", `${LIVE}/`, async (h) => {
-    await loaded(h.page);
-    await h.glide("#work", 40);
+    await commons(h.page);
+    await h.page.waitForTimeout(800);
     await h.ready();
-    await h.at(1500); await h.box(".phone", "One receipt per job", 4500);
-    await h.at(6500); await h.glide("#receipts", 60);
-    await h.zoom("#receipts", "Price, inference cost, by-laws", 4500);
-    await h.at(12000); await h.glide("#audit", 40);
-    await h.box("#verdict", "The steward's audit", 4000);
-    await h.at(17500); await h.box("#audit-term", "90-day term, by vote", 3500);
-    await h.at(21000); await h.box("#rekon", "Paid vs passed on", 3200);
+    await h.at(200); await h.glide("#card-proposal", 60);
+    await h.at("read"); await h.show("#card-proposal", "The agent's own proposal: v9", "approved");
+    await h.at("approved"); await h.show({ sel: "#card-proposal", text: "Approved" }, "DAO proposal #139: approved", "wrong");
+    await h.at("wrong"); await h.show({ sel: "#card-proposal", text: "Since then" }, "v9 counted a Taskbond job as 0 USDC", "proposes");
+    await h.at("proposes"); await h.show({ sel: "#card-proposal", text: "Since then" }, "The members' v10 (#140) restored v8", length("s06") - 400);
   }),
   s07: () => scene("s07", `${LIVE}/`, async (h) => {
-    await loaded(h.page);
-    await h.glide("#shares", 40);
+    await commons(h.page);
+    await h.page.waitForTimeout(500);
     await h.ready();
-    await h.at(1000); await h.box("#plans", "Split by the voted rule", 4000);
-    await h.at(5500); await h.box("#periods", "Every share, on-chain", 3800);
+    await h.at(200); await h.nav(".top nav a[href='#commons']", "Commons");
+    await h.at("dispute"); await h.glide("#cases", 100);
+    await h.show({ sel: "#cases tbody tr:first-child" }, "A jury of three: upheld, refunded", "refunded");
+    await h.at("refunded"); await h.glide("#duties", 160);
+    await h.show({ sel: "#duties", line: "The agent is a member too" }, "The risk fund, and its halved share", h.word("At", 2));
+    await h.at(h.word("At", 2)); await h.show({ sel: "#duties", line: "The agent answers to the court" }, "3 upheld cases: suspended", length("s07") - 500);
   }),
   s08: () => scene("s08", `${LIVE}/`, async (h) => {
-    await loaded(h.page);
-    await h.page.waitForSelector("#tiers li", { timeout: 40000 });
-    await h.page.waitForLoadState("networkidle").catch(() => {});
-    await h.glide("#tiers", 200);
+    await commons(h.page);
+    await h.page.waitForTimeout(500);
     await h.ready();
-    await h.at(1000); await h.box("#tiers", "Three tiers, voted", 10000);
-    await h.at(11500); await h.zoom("#tiers li:nth-child(2)", "Veto window: 10 minutes, by vote", 9300);
-    await h.at(21000); await h.glide("#tasks", 60);
-    await h.zoom("#tasks", "Paid by DAO proposals", 4300);
-    await h.at(25500); await h.glide("#records", 60);
-    await h.box("#records", "Every point names its source", 3500);
+    await h.at(200); await h.glide("#card-tee", 60);
+    await h.at("key"); await h.show("#card-tee", "Shade Agent: key made in a TDX VM", "registry");
+    await h.at("registry"); await h.show({ sel: "#card-tee .card-out", text: "#137", up: 1 }, "Approved by the members: #137, #138", "Then");
+    await h.at("Then"); await h.show({ sel: "#card-tee .card-out", text: "recorded receipt" }, "A receipt from inside the TEE", length("s08") - 500);
   }),
   s09: () => scene("s09", `${LIVE}/`, async (h) => {
+    await commons(h.page);
+    await h.page.waitForTimeout(500);
+    await h.ready();
+    await h.at(200); await h.glide("#card-credit", 60);
+    await h.at("loan"); await h.show({ sel: "#card-credit", text: "4% loans" }, "The 4% vote: refused by the contract", "member's");
+    await h.at("member's"); await h.show({ sel: "#card-credit", text: "credit score" }, "Credit from a sister co-op's stamp", length("s09") - 1700);
+    await h.at(length("s09") - 2600);
+    await h.glide("#links a[href='/coops.html']", 500);
+    await h.click("#links a[href='/coops.html']", "Every co-op on this code", 1400);
+    await h.page.waitForTimeout(800);
+  }),
+  s09b: () => scene("s09b", `${LIVE}/coops.html`, async (h) => {
+    await h.page.waitForSelector("#resolutions tbody tr td", { timeout: 90000 });
+    await until(h.page, "#resolutions", /Resolution 3/);
+    await h.glide("#network", 20);
+    await h.page.waitForTimeout(800);
+    await h.ready();
+    await h.at("resolution"); await h.show({ sel: "#resolutions tbody tr", all: true }, "Each vote cast by a co-op's own DAO", "including");
+    await h.at("including"); await h.show({ sel: "#resolutions tbody tr:nth-child(3)" }, "Resolution 3: agents pass work between co-ops", length("s09b") - 400);
+  }),
+  s10: () => scene("s10", `${LIVE}/`, async (h) => {
     await loaded(h.page);
-    await h.glide("#commons", 40);
-    await h.page.waitForSelector("#cases tbody tr td strong", { timeout: 40000 });
+    await h.page.waitForSelector("#tiers li", { timeout: 90000 });
+    await h.page.waitForSelector("#plans *", { timeout: 90000 });
+    await h.page.waitForSelector("#standing li", { timeout: 90000 });
     await h.ready();
-    await h.at(1500); await h.glide("#pledges", 120);
-    await h.box("#pledges", "Pledges: work, not money", 5000);
-    await h.at(8000); await h.zoom("#cases", "A jury of 3, drawn at random", 10000);
-    await h.at(19000); await h.glide("#commons", 40);
-    await h.box("#standing", "Standing", 3000);
-    await h.at(22500); await h.zoom("#multichain", "Ethereum address, no private key", 8000);
+    await h.at(200); await h.nav(".top nav a[href='#members']", "Members");
+    await h.click("#member-pick", "Pick a member", 1500);
+    await h.page.keyboard.press("Escape");
+    await h.page.selectOption("#member-pick", { index: 2 }).catch(() => {});
+    await h.page.waitForTimeout(400);
+    await h.show("#meters", "One vote each", "Small");
+    await h.at("Small"); await h.glide("#tiers", 140);
+    await h.show("#tiers li:nth-child(2)", "Earned trust, 10-minute veto window", "Profit");
+    await h.at("Profit"); await h.glide("#shares", 40);
+    await h.show("#plans", "Shared by the voted rule", "standing");
+    await h.at("standing"); await h.glide("#standing", 120);
+    await h.show("#standing", "Pledges kept, jury duty served", length("s10") - 400);
   }),
-  s10: () => scene("s10", `${LIVE}/cert.html?who=kop-alice-mw4i3w8f.testnet`, async (h) => {
-    await h.page.waitForSelector("#cert-sum tr", { timeout: 40000 });
+  s11: () => scene("s11", `${LIVE}/cert.html?who=kop-bob-mw4i3w8f.testnet`, async (h) => {
+    await h.page.waitForSelector("#cert-sum tr", { timeout: 90000 });
+    await h.page.waitForTimeout(800);
     await h.ready();
-    await h.at(1200); await h.box("#cert-sum-t", "Read live from the chain", 4000);
-    await h.at(5500); await h.glide("#cert-pledges", 80);
-    await h.box("#cert-pledges", "Kept pledges", 2200);
-    await h.at(7800); await h.box("#cert-juries", "Jury duty", 2000);
+    await h.at(300); await h.show("#cert-sum", "A work record, read live", "Type");
+    await h.at("Type");
+    await h.click("#cert-input", "Type an account", 1200);
+    await h.page.keyboard.press("Control+A");
+    await h.page.keyboard.type("kop-alice-mw4i3w8f.testnet", { delay: 45 });
+    await h.click("#cert-form button, #cert-form [type=submit]", "Show", 1000);
+    await h.page.waitForURL(/alice/);
+    await h.page.waitForSelector("#cert-juries tr td", { timeout: 60000 });
+    await h.page.waitForTimeout(400);
+    await h.show("#cert-sum", "Alice: pledges kept, jury rulings", "Nobody");
+    await h.at("Nobody"); await h.glide("#cert-pledges", 100);
+    await h.show({ sel: "#cert-pledges, #cert-juries", all: true }, "Nothing typed by hand", length("s11") - 300);
   }),
-  s11: () => scene("s11", `${LOCAL}/?as=kop-alice-mw4i3w8f.testnet`, async (h) => {
-    await h.page.waitForSelector("#joinapp .jh", { timeout: 60000 });
-    await h.glide("#joinapp", 30);
-    await h.ready();
-    const head = (t) => `#joinapp h3.jh:has-text("${t}")`;
-    await h.at(1000); await h.box(head("Open proposals"), "Vote on open proposals", 3500);
-    await h.at(5000); await h.glide(head("Tasks with earned trust"), 120);
-    await h.box(head("Tasks with earned trust"), "Take and post tasks", 3500);
-    await h.at(9500); await h.glide(head("Pledges and the co-op court"), 120);
-    await h.zoom(head("Pledges and the co-op court"), "Pledge, call in, rule", 5000);
-    await h.at(15000); await h.glide(head("Invite someone"), 120);
-    await h.box(head("Invite someone"), "Signed vouch (NEP-413)", 5000);
-  }),
-  s12: () => scene("s12", `${LIVE}/`, async (h) => {
+  s12: () => scene("s12", `${LOCAL}/`, async (h) => {
     await loaded(h.page);
-    await h.glide("#pledges", 160);
+    await h.page.waitForTimeout(800);
     await h.ready();
-    await h.at(500); await h.box("#pledges", "Before: 1 of 2", 2500);
-    // the real transaction, run while the screen records
-    const out = spawn(process.execPath, [path.join(ROOT, "live-pledge.mjs")], { cwd: path.join(ROOT, "..") });
-    let buf = "";
-    out.stdout.on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\n")) >= 0) { h.log(buf.slice(0, i)); buf = buf.slice(i + 1); } });
-    out.stderr.on("data", (d) => process.stderr.write(d));
-    await new Promise((ok, no) => out.on("exit", (c) => (c ? no(new Error(`live-pledge exited ${c}`)) : ok())));
+    await h.at("Open");
+    await h.click("#open-app", "Open the member app", 1500);
+    await h.page.waitForURL(/dashboard/);
     await h.page.waitForTimeout(1500);
-    await h.page.reload({ waitUntil: "domcontentloaded" });
-    await loaded(h.page);
-    await h.page.waitForSelector("#pledges tbody tr td strong", { timeout: 40000 });
-    await h.glide("#pledges", 160);
-    await h.zoom("#pledges", "After: 2 of 2, both kept", 4500);
+  }),
+  // the app as it stands once loaded (its first read takes a while on a busy RPC)
+  s12c: () => scene("s12c", `${LOCAL}/dashboard.html#/agent`, async (h) => {
+    // a view reads the chain when first opened: open the agent's first, then go back to the overview
+    await until(h.page, "#a-tee .out", /Worker/, 120000);
+    await until(h.page, "#a-bylaws .out", /v\d+/, 120000);
+    await h.page.click("#side-nav a[href='#/overview']");
+    await h.page.waitForSelector("#kpis div", { timeout: 120000 });
+    await h.page.waitForTimeout(1500);
+    await h.ready();
+    await h.at(300); await h.show("#kpis", "The co-op at a glance", "agent's");
+    await h.at("agent's");
+    await h.click("#side-nav a[href='#/agent']", "The agent", 1300, undefined, false);
+    await h.page.waitForTimeout(600);
+    await h.show({ sel: "#a-bylaws, #a-tee", all: true }, "By-laws and the Shade Agent", length("s12c") - 300);
+  }),
+  s12b: () => scene("s12b", `${LOCAL}/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/membership`, async (h) => {
+    await h.page.waitForSelector("#w-share-amt", { timeout: 150000 });
+    const sec = (title) => ({ sel: "#joinapp", section: title });
+    await h.page.waitForTimeout(800);
+    await h.glide("#joinapp", 20);
+    await h.ready();
+    await h.at(300); await h.show({ sel: "#joinapp", text: "Signed in as" }, "Previewed as bob (no wallet, nothing signed)", "First");
+    await h.at("First"); await h.show("#w-inbox", "Needs you: votes waiting", "Type");
+    await h.at("Type"); await h.glide("#w-share-amt", 300);
+    await h.click("#w-share-amt", "Propose a profit share", 1200);
+    await h.page.keyboard.type("10", { delay: 160 });
+    await h.page.waitForTimeout(300);
+    await h.show(sec("Members' meeting"), "Each member's part, before the vote", "Below");
+    await h.at("Below"); await h.glide("#joinapp h3:has-text('Tasks with earned trust')", 80);
+    await h.show(sec("Tasks with earned trust"), "Tasks to take", "pledges");
+    await h.at("pledges"); await h.glide("#joinapp h3:has-text('Pledges and the co-op court')", 80);
+    await h.show(sec("Pledges and the co-op court"), "Pledges to call in", "surety");
+    await h.at("surety"); await h.glide("#joinapp h3:has-text('Surety and loans')", 80);
+    await h.show(sec("Surety and loans"), "Surety and loans", "app");
+    await h.at("app"); await h.glide("body", 0);
+    await h.click(".lang-btn", "Bahasa Indonesia", 2000);
+    await h.page.waitForTimeout(2200);
+    await h.click(".lang-btn", "Back to English", 1300);
+    await h.page.waitForTimeout(1200);
   }),
 };
 
 const want = process.argv.slice(2);
-for (const [id, run] of Object.entries(scenes)) if (!want.length || want.includes(id)) await run();
+for (const [id, run] of Object.entries(scenes)) {
+  if (want.length && !want.includes(id)) continue;
+  for (let attempt = 1; ; attempt++) {
+    try { await run(); break; } catch (e) {
+      console.warn(`${id}: attempt ${attempt} failed: ${e.message.split("\n")[0]}`);
+      if (attempt >= 3) throw e;
+    }
+  }
+}
 await browser.close();
