@@ -1084,6 +1084,12 @@
           "weight": "0",
           "tx": "9aUzrs5vLkC6qDb4hEqyGYH1Uh75RypfcCppPSPg1w3V"
         }
+      ],
+      "closed_tx": "4qqpPK5UugyCwQx2LmC2JkcgwJMviHW9WJZqzFNfV5WK",
+      "result": 1,
+      "tallies": [
+        "220",
+        "280"
       ]
     },
     "loan": {
