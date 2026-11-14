@@ -366,17 +366,26 @@ export async function nep413Hash(message, nonce, recipient) {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", all));
 }
 
-/** Whether `sig` is an ed25519 signature by `pk` of the vouch `by` → `member` for `dao` (recipient: the DAO). */
-export async function checkVouch({ by, member, dao, pk, sig, nonce }) {
+/** Whether `sig` (base64) is an ed25519 NEP-413 signature by `pk` of `message` for `recipient` with `nonce` (base64, 32 bytes). */
+export async function nep413Verify({ message, recipient, pk, sig, nonce }) {
   try {
     const n = b64(nonce);
-    if (n.length !== 32 || !pk.startsWith("ed25519:")) return false;
+    if (n.length !== 32 || !String(pk).startsWith("ed25519:")) return false;
     const key = await crypto.subtle.importKey("raw", b58decode(pk.slice(8)), { name: "Ed25519" }, false, ["verify"]);
-    return await crypto.subtle.verify({ name: "Ed25519" }, key, b64(sig), await nep413Hash(vouchText(by, member, dao), n, dao));
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, b64(sig), await nep413Hash(message, n, recipient));
   } catch {
     return false;
   }
 }
+
+/** Whether `sig` is an ed25519 signature by `pk` of the vouch `by` → `member` for `dao` (recipient: the DAO). */
+export const checkVouch = ({ by, member, dao, pk, sig, nonce }) => nep413Verify({ message: vouchText(by, member, dao), recipient: dao, pk, sig, nonce });
+
+/**
+ * What a member signs (NEP-413, recipient: the contract) to get their private push topic from /api/notify-topic.
+ * The topic itself is an HMAC under a secret only the server and the notify workflow hold (api/notify-topic.mjs).
+ */
+export const notifyText = (contract, account, ts) => `koperasi-notify/1 ${contract} ${account} ${ts}`;
 
 /** The by-laws path a DAO vote set, if it is a relative path on this site (never another host or a parent dir). */
 export const byLawsPath = (uri) => /^(?!\/)(?!.*(\/\/|\.\.))[\w./-]+$/.test(String(uri));
@@ -391,13 +400,4 @@ export function configVote(props, contract, hash) {
       if (x?.method_name !== "set_config") return false;
       try { return JSON.parse(atob(x.args)).hash === hash; } catch { return false; }
     }));
-}
-
-/**
- * The member's push topic on ntfy.sh (scripts/notify.mjs posts to it every 15 minutes): no account, no secret.
- * A hash of co-op and account, so the topic is not just the account id anyone could guess.
- */
-export async function ntfyTopic(contract, account) {
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${contract}:${account}`)));
-  return `koperasi-${[...hash.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
 }

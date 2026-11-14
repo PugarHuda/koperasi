@@ -1,7 +1,7 @@
 // api/inbox.mjs: the member's feed lists only what waits on them, and nothing in it can break the XML.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { inboxItems, rss } from "../../api/inbox.mjs";
 
 const NOW = Date.UTC(2026, 10, 13);
@@ -48,10 +48,44 @@ test("push (scripts/notify.mjs): only items not told before, and a new due date 
   assert.deepEqual(fresh(items).map((i) => i.id), ["p5", "c1", "dues200"], "a member with nothing told yet gets all");
 });
 
-test("the ntfy topic: per co-op and member, not the bare account id, same in the browser and the script", async () => {
-  const { ntfyTopic } = await import("../../web/share.js");
-  const topic = await ntfyTopic("c.testnet", "a.testnet");
-  assert.equal(topic, `koperasi-${createHash("sha256").update("c.testnet:a.testnet").digest("hex").slice(0, 16)}`);
-  assert.notEqual(topic, await ntfyTopic("d.testnet", "a.testnet"));
-  assert.ok(!topic.includes("a.testnet"));
+test("the ntfy topic: an HMAC under the secret, per co-op and member; no secret, no topic", async () => {
+  const { ntfyTopic } = await import("../../api/notify-topic.mjs");
+  const topic = ntfyTopic("s3cret", "c.testnet", "a.testnet");
+  assert.equal(topic, `koperasi-${createHmac("sha256", "s3cret").update("c.testnet:a.testnet").digest("hex").slice(0, 20)}`);
+  assert.match(topic, /^koperasi-[0-9a-f]{20}$/);
+  assert.notEqual(topic, ntfyTopic("other", "c.testnet", "a.testnet"), "another secret, another topic");
+  assert.notEqual(topic, ntfyTopic("s3cret", "d.testnet", "a.testnet"));
+  assert.notEqual(topic, `koperasi-${createHash("sha256").update("c.testnet:a.testnet").digest("hex").slice(0, 20)}`, "not the public hash");
+  assert.throws(() => ntfyTopic("", "c.testnet", "a.testnet"), /NOTIFY_SECRET/);
+  assert.throws(() => ntfyTopic(undefined, "c.testnet", "a.testnet"), /NOTIFY_SECRET/);
+});
+
+test("/api/notify-topic: a NEP-413 signature by a key of the account, within 10 minutes; anything else is refused", async () => {
+  const { Account, KeyPair, KeyPairSigner } = await import("near-api-js");
+  const { signMessage } = await import("near-api-js/nep413");
+  const { notifyText } = await import("../../web/share.js");
+  const { refuse } = await import("../../api/notify-topic.mjs");
+  const contract = "c.testnet", NOW = 1_800_000_000_000;
+  const key = KeyPair.fromRandom("ed25519");
+  const alice = new Account("alice.testnet", /** @type {any} */ (null), new KeyPairSigner(key));
+  const nonce = randomBytes(32);
+  const ts = NOW - 60_000;
+  const signed = await signMessage({ signerAccount: alice, payload: { message: notifyText(contract, "alice.testnet", ts), recipient: contract, nonce } });
+  const body = { account: "alice.testnet", ts, pk: signed.publicKey.toString(), sig: Buffer.from(signed.signature).toString("base64"), nonce: nonce.toString("base64") };
+  const keyOf = async (a, pk) => a === "alice.testnet" && pk === body.pk;
+  const why = (o, opts = {}) => refuse({ ...body, ...o }, { now: NOW, keyOf, contract, ...opts });
+  assert.equal(await why({}), null, "the official NEP-413 signature by a key of the account passes");
+  assert.equal(await why({ account: "eve.testnet" }), "bad signature", "signed for alice, asked for eve");
+  assert.equal(await why({ ts: ts + 1 }), "bad signature", "another time than the one signed");
+  assert.equal(await why({}, { contract: "d.testnet" }), "bad signature", "signed for another co-op");
+  const sig = Buffer.from(body.sig, "base64"); sig[0] ^= 1;
+  assert.equal(await why({ sig: sig.toString("base64") }), "bad signature", "a tampered signature");
+  assert.equal(await why({ nonce: randomBytes(32).toString("base64") }), "bad signature", "another nonce");
+  assert.equal(await why({ pk: KeyPair.fromRandom("ed25519").getPublicKey().toString() }), "bad signature", "another key");
+  assert.match(await why({}, { keyOf: async () => false }), /not a key of alice\.testnet/, "a valid signature by a key the account does not have");
+  assert.equal(await why({}, { now: ts + 10 * 60_000 }), null, "10 minutes later still passes");
+  assert.match(await why({}, { now: ts + 10 * 60_000 + 1 }), /10 minutes/, "later than 10 minutes is refused");
+  assert.match(await why({}, { now: ts - 10 * 60_000 - 1 }), /10 minutes/, "a time far in the future is refused");
+  assert.match(await why({ ts: "soon" }), /10 minutes/);
+  assert.equal(await why({ account: "Not An Account" }), "bad account");
 });

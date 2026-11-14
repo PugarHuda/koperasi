@@ -36,6 +36,16 @@ const told = () => window.dispatchEvent(new CustomEvent("koperasi:wallet", { det
 /** The account signed in (or previewed with ?as=), "" when none. */
 export const account = () => me;
 
+/** NEP-413: the wallet signs `message` for `recipient` (no transaction, no gas). sig and nonce come back base64. */
+export async function signText(message, recipient) {
+  const nonce = crypto.getRandomValues(new Uint8Array(32));
+  const w = await connector.wallet();
+  if (!w.signMessage) throw new Error("this wallet cannot sign messages (NEP-413)");
+  const r = await w.signMessage({ message, recipient, nonce });
+  const sig = typeof r.signature === "string" ? r.signature : btoa(String.fromCharCode(...new Uint8Array(r.signature)));
+  return { account: r.accountId, pk: String(r.publicKey), sig, nonce: btoa(String.fromCharCode(...nonce)) };
+}
+
 /** Thrown before the wallet opens: nothing was signed or sent. */
 const notSent = (msg) => Object.assign(new Error(msg), { notSent: true });
 
@@ -784,12 +794,8 @@ async function paint() {
     const who = $("w-vouch-for").value.trim();
     if (!/^(?=.{2,64}$)[a-z0-9]+([-_][a-z0-9]+)*(\.[a-z0-9]+([-_][a-z0-9]+)*)*$/.test(who) || who === me) { $("w-vouch-for").focus(); return; }
     try {
-      const nonce = crypto.getRandomValues(new Uint8Array(32));
-      const w = await connector.wallet();
-      if (!w.signMessage) throw new Error("this wallet cannot sign messages (NEP-413); share the plain link");
-      const r = await w.signMessage({ message: vouchText(me, who, dep.dao), recipient: dep.dao, nonce });
-      const sig = typeof r.signature === "string" ? r.signature : btoa(String.fromCharCode(...new Uint8Array(r.signature)));
-      const v = { pk: String(r.publicKey), sig, nonce: btoa(String.fromCharCode(...nonce)) };
+      const { pk, sig, nonce } = await signText(vouchText(me, who, dep.dao), dep.dao);
+      const v = { pk, sig, nonce };
       if (!(await checkVouch({ by: me, member: who, dao: dep.dao, ...v }))) throw new Error("the wallet's signature does not verify");
       $("w-invite").value = `${location.origin}/?${new URLSearchParams({ invite: me, for: who, pk: v.pk, sig: v.sig, n: v.nonce })}#joinapp`;
       vouch.textContent = t("Signed: copy the link", "Ditandatangani: salin tautannya");
