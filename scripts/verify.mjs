@@ -33,8 +33,21 @@ let failed = 0;
  * in bursts, and a claim must not read FAIL because one answer was a 429.
  * @param {string[]} urls @param {string} method @param {any} params
  */
+// ponytail: at most 3 calls in flight; a burst of 20+ tx lookups at once draws 429s from the public RPCs
+let inFlight = 0;
+const waiting = [];
 async function rpcCall(urls, method, params) {
-  for (let k = 0; k < 2; k++) {
+  if (inFlight >= 3) await new Promise((go) => waiting.push(go));
+  inFlight++;
+  try {
+    return await rpcCallOnce(urls, method, params);
+  } finally {
+    inFlight--;
+    waiting.shift()?.();
+  }
+}
+async function rpcCallOnce(urls, method, params) {
+  for (let k = 0; k < 4; k++) {
     for (const url of urls) {
       try {
         const j = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(15_000),
@@ -42,7 +55,7 @@ async function rpcCall(urls, method, params) {
         if (j.result !== undefined) return j.result;
       } catch { /* the next URL, or the next round */ }
     }
-    await new Promise((ok) => setTimeout(ok, 2000));
+    await new Promise((ok) => setTimeout(ok, 2000 * (k + 1)));
   }
   return null;
 }
@@ -173,6 +186,7 @@ const cases = await view(d.contract, "get_cases", { from: 0, limit: 200 });
 const allReceipts = await view(d.contract, "get_receipts", { from: 0, limit: 500 });
 for (const c of cases.filter((x) => x.status === "Upheld")) {
   if (c.refund_proposal === null && d.v033?.risk?.case === c.id) continue; // 0.3.2: refunded from the risk fund, checked below
+  if (c.refund_proposal === null && d.v036?.recovery?.cases?.some((x) => x.id === c.id)) continue; // 0.3.6 recovery demo: same, below
   const p = c.refund_proposal === null ? null : await proposal(c.refund_proposal);
   const tr = p?.kind.Transfer;
   const price = allReceipts.find((r) => r.job_id === c.job_id)?.price ?? "0";
@@ -657,6 +671,53 @@ if (d.v036?.loan) {
   check(l && ["Open", "Repaid"].includes(l.status) && l.paid_to !== l.coop && (await view(d.contract, "get_sister_coops")).includes(l.coop),
     "co-ops lend to each other: the members lent a sister co-op from the risk fund, paid to its DAO treasury",
     `loan #${l?.id}: ${Number(l?.amount) / 1e6} USDC to ${l?.coop} (paid to ${l?.paid_to}), ${l?.status}, due ${new Date(Number(BigInt(l?.due ?? 0) / 1_000_000n)).toISOString().slice(0, 10)}; DAO #${d.v036.loan.proposal}`);
+}
+if (d.v036?.repay) {
+  const r = d.v036.repay;
+  const l = (await view(d.contract, "get_sister_loans")).find((x) => x.id === r.loan);
+  const p = await view(r.dao, "get_proposal", { id: r.proposal });
+  const a = argsOf(p)[0];
+  check(l?.status === "Repaid" && l.repaid === l.amount && p.status === "Approved" && a?.method === "ft_transfer_call"
+    && a.args.receiver_id === d.contract && a.args.msg === `sister_repay:${r.loan}`,
+    "the sister co-op repaid its loan: its members voted their DAO send the USDC back into the risk fund",
+    `loan #${l?.id}: ${Number(l?.repaid) / 1e6} of ${Number(l?.amount) / 1e6} USDC repaid, ${l?.status}; ${r.dao} #${r.proposal} ${p.status}`);
+}
+if (d.v036?.recovery?.plan_sha256) {
+  const r = d.v036.recovery;
+  const [rec, bps] = await view(d.contract, "get_recovery");
+  const p = await view(d.dao, "get_proposal", { id: r.proposal });
+  const planHash = sha256(await file(`web/${r.plan}`, r.plan));
+  const days = rec ? (Date.now() * 1e6 - Number(rec.approved_at)) / 864e11 : 0;
+  // the strikes are real court cases: upheld by their juries, the demo ones refunded from the risk fund (at most the price)
+  const struck = r.strikes.map((id) => cases.find((c) => c.id === id));
+  const casesOk = struck.every((c) => c?.status === "Upheld") && r.cases.every((x) => {
+    const c = cases.find((y) => y.id === x.id);
+    return c?.refund_proposal === null && c.job_id === x.job && BigInt(c.amount) <= BigInt(allReceipts.find((y) => y.job_id === c.job_id)?.price ?? "0");
+  });
+  check(casesOk && rec?.plan_sha256 === r.plan_sha256 && planHash === r.plan_sha256 && rec.approved_at === r.approved_at && !rec.cancelled_at
+    && p.status === "Approved" && argsOf(p).some((x) => x.method === "approve_recovery" && x.args.plan_sha256 === r.plan_sha256)
+    && Math.abs(bps - Math.min(10_000, 2_500 + 7_500 * days / rec.ramp_days)) < 50,
+    "the court suspended the agent and the members approved its recovery plan: its standing ramps back from 25%",
+    `upheld cases ${struck.map((c) => `#${c?.id} ${c?.status}`).join(", ")} suspended it (the last two refunded ${r.cases.map((x) => usd(cases.find((y) => y.id === x.id)?.amount ?? "0")).join(" and ")} USDC from the risk fund); plan ${rec?.plan_uri} (sha256 ${r.plan_sha256.slice(0, 8)}…, matches the file: ${planHash === r.plan_sha256}) approved by DAO #${r.proposal}; ramp now ${bps / 100}% of ${rec?.ramp_days} days`);
+}
+
+// an outside buyer: a fresh wallet the testnet faucet created, not a member, posted (and paid) the agent's jobs
+if (d.outside_buyer) {
+  const b = d.outside_buyer, tb = b.taskbond, dj = b.direct;
+  const txOf = (hash, by) => rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: hash, sender_account_id: by, wait_until: "FINAL" });
+  const [made, posted, job, member, paid, proof] = await Promise.all([txOf(b.faucet_tx, "testnet"), txOf(tb.post_tx, b.account),
+    view(tb.escrow, "get_job", { job_id: tb.job }), view(d.contract, "get_member", { account_id: b.account }),
+    dj ? txOf(dj.payment_tx, b.account) : null, dj ? view(d.contract, "get_proof", { job_id: dj.receipt }) : null]);
+  const fnOf = (t) => t?.transaction.actions[0]?.FunctionCall;
+  const pay = paid && JSON.parse(Buffer.from(fnOf(paid).args, "base64").toString());
+  const directOk = !dj || (paid.transaction.receiver_id === dj.token && fnOf(paid).method_name === "ft_transfer" && pay.memo === dj.receipt
+    && pay.receiver_id === d.steward && !paid.receipts_outcome.some((o) => o.outcome.status.Failure) && JSON.parse(proof ?? "{}").buyer === b.account);
+  const ok = member === null && made?.transaction.receiver_id === b.account && made.transaction.actions[0] === "CreateAccount" && made.status?.SuccessValue !== undefined
+    && fnOf(posted)?.method_name === "create_job" && posted.transaction.receiver_id === tb.escrow && job.poster === b.account
+    && job.status === "Paid" && job.winner_agent_id === tb.agent_id && directOk;
+  check(ok, "a fresh wallet outside the co-op (made by the testnet faucet, not a member) posted a job the agent won and was paid for",
+    `${b.account} created by ${made?.transaction.signer_id} (${b.faucet_tx.slice(0, 8)}…), member: ${member !== null}; Taskbond job #${tb.job} posted in ${tb.post_tx.slice(0, 8)}…: `
+    + `${job.status}, winner agent #${job.winner_agent_id}, score ${job.score}; direct job: ${dj ? `${dj.receipt} paid ${usd(dj.price)} USDC in ${dj.payment_tx.slice(0, 8)}…` : "none yet (no testnet USDC)"}`);
 }
 
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with

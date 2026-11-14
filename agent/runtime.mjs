@@ -379,7 +379,10 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
         // only by the members' vote anyway
         const sisters = job.referredBy ? await view(dep.contract, "get_sister_coops").catch(() => []) : [];
         const referred = sisters.includes(job.referredBy) ? { referred_by: job.referredBy } : {};
-        done = { ...done, proof: { ...done.proof, gate, ...referred } };
+        // the local stand-in may name a buyer's NEAR account (Agent Market names buyers by its own ids); the payment is
+        // checked on-chain by `npm run verify`, not trusted from here
+        const buyer = local && job.buyer ? { buyer: job.buyer } : {};
+        done = { ...done, proof: { ...done.proof, gate, ...referred, ...buyer } };
       } catch (e) {
         if (e.spentMicroUsd) {
           state.spentMicroUsd += e.spentMicroUsd;

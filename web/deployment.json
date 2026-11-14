@@ -688,6 +688,20 @@
       "status": "Paid",
       "receipt": "taskbond-17",
       "at": "2026-11-14T08:47:58.838Z"
+    },
+    {
+      "escrow": "escrow.tbnd246748.testnet",
+      "job": 18,
+      "poster": "buyer-lda4zjo8.testnet",
+      "agent_id": 42,
+      "owner": "kop-steward-mw4i2iwk.testnet",
+      "review": "Accepted",
+      "reason": "[NEAR AI] 85/100 · Accurately covers account types, keys, and faucet usage with one valid citation, though coverage of key details could be deeper.",
+      "score": 85,
+      "winner": 42,
+      "status": "Paid",
+      "receipt": "taskbond-18",
+      "at": "2026-11-14T10:10:34.971Z"
     }
   ],
   "suspension": {
@@ -1095,6 +1109,68 @@
       "due": "1797241413287997058",
       "status": "Failed",
       "was_late": false
+    },
+    "repay": {
+      "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "proposal": 30,
+      "loan": 1,
+      "amount": "1000000",
+      "status": "Repaid",
+      "repaid": "1000000"
+    },
+    "recovery": {
+      "cases": [
+        {
+          "id": 11,
+          "job": "demo-strike-mwg8tdud",
+          "open_tx": "H2D6PbGVkAhLATwbAYZRhwAE3SHbXD7w1Zvd3TiZCX6Y",
+          "rulings": [
+            "e4eznwjqzCCDUf8YEPUGFg2b7G3hPvJA6Edq7DFmCGd",
+            "7dMeBYLGtFWmS5hrr2x5eDXmh91d18M7GunXPPN1W4dV"
+          ]
+        },
+        {
+          "id": 12,
+          "job": "demo-strike-mwg8tqu5",
+          "open_tx": "F6AQEaUxXDQ2QH9wkem6nF3xDVhVhAb1KiyQbCVGM4pR",
+          "rulings": [
+            "HruGhezLCLj4uMxVB7UVyXjRFKHnF4Pw34Jk4bGGVtQU",
+            "EjJkxFc4goA1doqtpJ23E4LF9R5yUsNR4hKkw8a3vo1p"
+          ]
+        }
+      ],
+      "strikes": [
+        10,
+        11,
+        12
+      ],
+      "plan": "rat/recovery-plan.md",
+      "plan_sha256": "ac10ccae0f17d90626de7aa88468d94b7c957f42fd74f4319cc9ce7837e81041",
+      "propose_tx": "3qKDSwUwbcjfWRJoiu3GLLoXCUFN1kNZy63r2ppJxi7z",
+      "proposal": 148,
+      "approved_at": "1794650984517868543",
+      "ramp_days": 30,
+      "ramp_bps": 2500,
+      "standing_bps": 2500
     }
+  },
+  "outside_buyer": {
+    "account": "buyer-lda4zjo8.testnet",
+    "funded_by": "testnet",
+    "faucet_tx": "HYr84cxRXMDHNyRxvp3GpNc5jwdbCbaCC1Dd8cE8PXtx",
+    "faucet_near": "10",
+    "note": "made by the builder for this test, funded only by the NEAR testnet faucet (helper.nearprotocol.com); not a member",
+    "taskbond": {
+      "escrow": "escrow.tbnd246748.testnet",
+      "job": 18,
+      "post_tx": "GUuEsZcyjgRVLxcNy7rcAwpTrAd2ePHFVjU1RiFFF53f",
+      "agent_id": 42,
+      "score": 85,
+      "status": "Paid",
+      "receipt": "taskbond-18",
+      "receipt_tx": "8epkJtEk6HqDBnHLnUHkJxRMNfMsuRP3y74iTvSe7tbb"
+    },
+    "direct": null,
+    "direct_skipped": "the co-op is paid in Circle testnet USDC; its mint is minter-only and its faucet is a web form (faucet.circle.com), so this wallet holds none. Fund it there and run KOP_BUYER=buyer-lda4zjo8.testnet node --env-file=.env scripts/job.mjs"
   }
 }

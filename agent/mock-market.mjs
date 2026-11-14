@@ -19,6 +19,7 @@ export function startMockMarket({ port = 8787, acceptMs = 1500, jobs: seed = [] 
       description: j.description,
       tags: j.tags ?? [],
       ...(j.referredBy ? { referredBy: j.referredBy } : {}),
+      ...(j.buyer ? { buyer: j.buyer } : {}), // the buyer's NEAR account, when one pays on-chain (scripts/job.mjs KOP_BUYER)
       budgetAmount: String(j.budgetAmount ?? "5"),
       budgetToken: "USDC",
       jobKind: "standard",
