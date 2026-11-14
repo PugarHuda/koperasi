@@ -28,7 +28,7 @@ file is the script.
    - NEAR AI Cloud (TEE, billing);
    - Agent Market;
    - global contracts.
-7. **Validation:** 204 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 51 unit tests, 19 attacks sent to the live co-op and refused on-chain, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), the bonded steward #54, by-laws v4 #55, a member who joined with an NEP-413 signed vouch #56, the DAO's Ethereum address signing by vote through Chain Signatures #57, upgrades by vote up to #76 (0.2.7), the steward's 90-day term #59, a co-op court case upheld by a random jury and refunded from the treasury #60, a member's pledge kept, a 10-minute veto window on no-vote payouts #62 (task #7 released after it, #64; task #8 vetoed by a member and approved by another, #63); tasks #9–#15 in every state, court cases #1–#2 not upheld, profit share #67 claimed, #68 rejected by the members. The DAO pays on Ethereum by vote (Chain Signatures, #74, landed on Sepolia), owns the agent's NEAR Intents wallet with a members-only policy (Tidepool testnet Agent API, #72–#73), and the agent checks its by-laws in an Intel TDX enclave through OutLayer before every job. Contract 0.2.7: a dismissed court case appealed to every member (#77 overturned, #78 kept), payouts routed to each member's chain of choice with the Intents wallet's policy changed by vote (#80), work records as non-transferable NEP-171 tokens, and an Ethereum payment filed from a Trezu template (#81, sent to Sepolia). Checklist for judges: JUDGE.md.
+7. **Validation:** 217 contract tests (unit, fuzz, invariant, a real Sputnik DAO in a local sandbox), 51 unit tests, 19 attacks sent to the live co-op and refused on-chain, Playwright on 6 browser/device profiles, `npm run verify` reads every README claim from testnet (CI, daily); tasks #0–#6, bounty #24, profit shares #36 and #51 (filed from a Trezu template), the bonded steward #54, by-laws v4 #55, a member who joined with an NEP-413 signed vouch #56, the DAO's Ethereum address signing by vote through Chain Signatures #57, upgrades by vote up to #76 (0.2.7), the steward's 90-day term #59, a co-op court case upheld by a random jury and refunded from the treasury #60, a member's pledge kept, a 10-minute veto window on no-vote payouts #62 (task #7 released after it, #64; task #8 vetoed by a member and approved by another, #63); tasks #9–#15 in every state, court cases #1–#2 not upheld, profit share #67 claimed, #68 rejected by the members. The DAO pays on Ethereum by vote (Chain Signatures, #74, landed on Sepolia), owns the agent's NEAR Intents wallet with a members-only policy (Tidepool testnet Agent API, #72–#73), and the agent checks its by-laws in an Intel TDX enclave through OutLayer before every job. Contract 0.2.7: a dismissed court case appealed to every member (#77 overturned, #78 kept), payouts routed to each member's chain of choice with the Intents wallet's policy changed by vote (#80), work records as non-transferable NEP-171 tokens, and an Ethereum payment filed from a Trezu template (#81, sent to Sepolia). Checklist for judges: JUDGE.md.
 8. **Next:** mainnet with Circle USDC, NEAR AI credits for the organization, independent members, a tighter CSP, a USDC task budget.
 
 ## Submission form text (14 Nov; paste as is)
@@ -63,7 +63,7 @@ built on an unmodified Sputnik DAO (no new multisig):
   stay one member one vote; a technical poll's winning by-laws become a DAO proposal; juries can be drawn by
   reputation, square-root flattened so no one member captures the draw (#150).
 - **Proof:** contract 0.3.9 upgraded only by vote (#156, the sister co-op by its #37), 0 full-access keys on both co-ops,
-  rebuilt byte for byte from source (sha256 `066449d4…`); 204 contract tests; 19 attacks sent to the live co-op, all
+  rebuilt byte for byte from source (sha256 `4cd907c1…`); 217 contract tests; 19 attacks sent to the live co-op, all
   refused on-chain; `verify` checks 101 claims. A docs page (`/docs.html`) explains it in English and Bahasa Indonesia.
 
 **Autonomous Business / Agent Economy.** The DAO owns the agent, and the agent is a member that answers for itself:
@@ -127,7 +127,7 @@ late loans told to sister co-ops are proven by contract tests. Private push topi
 
 - [x] Repo with README: one-liner and positioning at the top, live demo link, per-track evidence, contract addresses, setup and tests
 - [x] Live page: https://koperasi-kohl.vercel.app
-- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `066449d4…`, 0.3.9, proposal #156; CI rebuilds it weekly)
+- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `4cd907c1…`, 0.3.10, proposal #156; CI rebuilds it weekly)
 - [x] CI: lint, typecheck, unit, contract, Playwright, npm audit, `npm run verify` (daily)
 - [x] Security rounds 1–14 ([05-security](reports/05-security.md)); 19 attacks refused on-chain, re-sent weekly in CI
 - [x] **Demo video**: `video/out/koperasi.mp4` (4:33), the 60-second cut `video/out/koperasi-60.mp4` and the 30-second opening `video/out/intro30.mp4`; attach the 60-second cut to the X post
