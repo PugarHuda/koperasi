@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "aa12afd70e2a1c1e7a326f6245031e1061bfd39a42917343edec2f47d6fa3eee",
   "configUri": "config/config.v11.yaml",
-  "codeSha256": "066449d4608b5727685dd1ec5c3cbeab4694246ec058cc04bcb3f406234addf7",
+  "codeSha256": "4cd907c1dafc9845cbbc5f7fc0877fb8b5180d87720702f63c3cc7a9dac18408",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -1473,6 +1473,75 @@
           }
         }
       ]
+    }
+  },
+  "v0310": {
+    "cap": {
+      "dao": "koperasi-mw4i2iwk.sputnik-v2.testnet",
+      "proposal": 164,
+      "destination": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "max_per_payment": "1000000",
+      "read": "1000000",
+      "stranded": {
+        "proposal": 163,
+        "note": "the first run filed #163, then an RPC read failed before voting; #164 was filed and approved on the rerun. #163 has no votes and expires unexecuted."
+      }
+    },
+    "market": {
+      "job": {
+        "contract": "koperasi-mw4i2iwk.testnet",
+        "agent": "agent.koperasi-mw4i2iwk.testnet",
+        "relayer": "kop-relayer-mw4i2iwk.testnet",
+        "nonce": 0,
+        "id": 0,
+        "job_id": "fedjob-1794693752013",
+        "budget_usdc": "3000000",
+        "deadline_hours": 1,
+        "description": "Translate a 2-page member notice (Bahasa Indonesia to English) for the federation newsletter",
+        "posted_at": "1794693757591550674",
+        "deadline": "1794697357591550674",
+        "tx": "5gENhLSzwUzrzK3seimoPT5JQ3fYhjm1VmrxipKzNwYi",
+        "events": [
+          {
+            "standard": "koperasi",
+            "version": "1.0.0",
+            "event": "coop_job_posted",
+            "data": {
+              "job_id": "fedjob-1794693752013",
+              "budget_usdc": "3000000",
+              "deadline": "1794697357591550674"
+            }
+          }
+        ]
+      },
+      "bid": {
+        "contract": "koperasi-mw80aczw.testnet",
+        "agent": "agent.koperasi-mw80aczw.testnet",
+        "relayer": "kop-relayer-mw4i2iwk.testnet",
+        "nonce": 0,
+        "from_coop": "koperasi-mw4i2iwk.testnet",
+        "job_id": "fedjob-1794693752013",
+        "price_usdc": "2500000",
+        "tx": "FLvDTtzE4EUispdn8JupdSVK1prDtdGfnwHJtCPYu6Rv",
+        "read": {
+          "job_id": "fedjob-1794693752013",
+          "from_coop": "koperasi-mw4i2iwk.testnet",
+          "price_usdc": "2500000",
+          "at": "1794693760019024256"
+        },
+        "events": [
+          {
+            "standard": "koperasi",
+            "version": "1.0.0",
+            "event": "coop_bid_placed",
+            "data": {
+              "from_coop": "koperasi-mw4i2iwk.testnet",
+              "job_id": "fedjob-1794693752013",
+              "price_usdc": "2500000"
+            }
+          }
+        ]
+      }
     }
   }
 }

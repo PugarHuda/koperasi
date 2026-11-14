@@ -13075,6 +13075,24 @@ var init_verify = __esm({
         `loan #${r2.loan} repaid by ${r2.dao} #${r2.proposal}: interest ${si ? usd(si.data.amount) : "?"} USDC; dividend ${paid.map((p2) => `${usd(p2.amount)} to ${p2.to}`).join(", ") || "none"}; the rest to ${d2.dao}`
       );
     }
+    if (d2.v0310?.cap) {
+      const c = d2.v0310.cap;
+      const cap = await view2(d2.contract, "get_payout_cap", { destination: c.destination });
+      check(
+        cap === c.max_per_payment,
+        "the members capped what any single payment to a sister co-op's treasury may be",
+        `${d2.dao} #${c.proposal}: get_payout_cap(${c.destination}) = ${cap ? usd(cap) : "none"} USDC`
+      );
+    }
+    if (d2.v0310?.market?.bid) {
+      const { job: j2, bid: b2 } = d2.v0310.market;
+      const [job, bid] = await Promise.all([view2(d2.contract, "get_coop_job", { job_id: j2.job_id }), view2(b2.contract, "get_bids_for", { from_coop: d2.contract, job_id: j2.job_id })]);
+      check(
+        job?.budget_usdc === j2.budget_usdc && bid?.from_coop === d2.contract && bid.job_id === j2.job_id && BigInt(bid.price_usdc) <= BigInt(job.budget_usdc) && BigInt(bid.at) >= BigInt(job.posted_at) && BigInt(bid.at) <= BigInt(job.deadline),
+        "this co-op's agent offered its sister co-ops a job, and a sister's agent bid for it on the sister's own contract",
+        `${j2.job_id}: budget ${usd(job?.budget_usdc ?? 0)} USDC on ${d2.contract}; ${b2.contract} bid ${bid ? usd(bid.price_usdc) : "none"} USDC${job?.winner ? `; awarded to ${job.winner} at ${usd(job.price)} USDC` : "; not awarded yet"}`
+      );
+    }
     if (d2.outside_buyer) {
       const b2 = d2.outside_buyer, tb = b2.taskbond, dj = b2.direct;
       const txOf = (hash, by) => rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: hash, sender_account_id: by, wait_until: "FINAL" });

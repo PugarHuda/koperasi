@@ -823,6 +823,23 @@ if (d.v039?.repay) {
     `loan #${r.loan} repaid by ${r.dao} #${r.proposal}: interest ${si ? usd(si.data.amount) : "?"} USDC; dividend ${paid.map((p) => `${usd(p.amount)} to ${p.to}`).join(", ") || "none"}; the rest to ${d.dao}`);
 }
 
+// contract 0.3.10 (scripts/v0310.mjs): a per-destination payout cap voted by the DAO; a job market between co-op agents
+if (d.v0310?.cap) {
+  const c = d.v0310.cap;
+  const cap = await view(d.contract, "get_payout_cap", { destination: c.destination });
+  check(cap === c.max_per_payment, "the members capped what any single payment to a sister co-op's treasury may be",
+    `${d.dao} #${c.proposal}: get_payout_cap(${c.destination}) = ${cap ? usd(cap) : "none"} USDC`);
+}
+if (d.v0310?.market?.bid) {
+  const { job: j, bid: b } = d.v0310.market;
+  const [job, bid] = await Promise.all([view(d.contract, "get_coop_job", { job_id: j.job_id }), view(b.contract, "get_bids_for", { from_coop: d.contract, job_id: j.job_id })]);
+  check(job?.budget_usdc === j.budget_usdc && bid?.from_coop === d.contract && bid.job_id === j.job_id && BigInt(bid.price_usdc) <= BigInt(job.budget_usdc)
+    && BigInt(bid.at) >= BigInt(job.posted_at) && BigInt(bid.at) <= BigInt(job.deadline),
+    "this co-op's agent offered its sister co-ops a job, and a sister's agent bid for it on the sister's own contract",
+    `${j.job_id}: budget ${usd(job?.budget_usdc ?? 0)} USDC on ${d.contract}; ${b.contract} bid ${bid ? usd(bid.price_usdc) : "none"} USDC`
+    + `${job?.winner ? `; awarded to ${job.winner} at ${usd(job.price)} USDC` : "; not awarded yet"}`);
+}
+
 // an outside buyer: a fresh wallet the testnet faucet created, not a member, posted (and paid) the agent's jobs
 if (d.outside_buyer) {
   const b = d.outside_buyer, tb = b.taskbond, dj = b.direct;
