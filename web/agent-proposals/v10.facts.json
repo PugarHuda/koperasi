@@ -1,0 +1,101 @@
+{
+  "contract": "koperasi-mw4i2iwk.testnet",
+  "read_at": "2026-11-14T05:45:27.148Z",
+  "by_laws": {
+    "version": 9,
+    "active_since": "2026-11-14T05:44:31.976Z",
+    "price_usdc": 3,
+    "limits": {
+      "max_inference_per_job_usd": 0.5,
+      "max_inference_per_day_usd": 5
+    },
+    "job_filter": {
+      "tags_any": [
+        "research",
+        "translation",
+        "writing",
+        "web3"
+      ],
+      "min_price_usdc": 2
+    }
+  },
+  "jobs_before_these_by_laws": {
+    "jobs": 37,
+    "paid": 25,
+    "refunded": 2,
+    "disputed": 2,
+    "submitted": 8,
+    "usdc_sales": 22,
+    "avg_price_usdc_of_sales": 3.25,
+    "taskbond_jobs_paid_in_near": 4,
+    "avg_inference_usd": 0.0006051351351351351
+  },
+  "jobs_under_these_by_laws": {
+    "jobs": 0,
+    "paid": 0,
+    "refunded": 0,
+    "disputed": 0,
+    "submitted": 0,
+    "usdc_sales": 0,
+    "avg_price_usdc_of_sales": 0,
+    "taskbond_jobs_paid_in_near": 0,
+    "avg_inference_usd": 0
+  },
+  "jobs_by_kind": {
+    "demo-court": 11,
+    "demo-": 29,
+    "taskbond-": 4
+  },
+  "court": {
+    "cases": 11,
+    "upheld": 7,
+    "strikes_live": 1,
+    "suspended": false
+  },
+  "risk_fund_usdc": 2.455003,
+  "agent_share_bps": 500,
+  "standing_bps": 5000,
+  "my_last_proposal": {
+    "version": 9,
+    "reason": "Current by-laws: 4 jobs, avg price $3.75 (below our $5 ask), inference $0.001 (well below $0.5 limit). Lowering bid to $3 and min price to $2 could attract more work like pre-version-8 jobs (33 jobs, avg $1.94). Narrowing tags to top categories (research, translation, writing, web3) focuses scope. R | facts sha256 259f34d2f0d456db…, inference 41e98c51-0252… (TEE)",
+    "dao_proposal": 139
+  },
+  "by_laws_history": [
+    {
+      "version": 1,
+      "at": "2026-11-06"
+    },
+    {
+      "version": 2,
+      "at": "2026-11-06"
+    },
+    {
+      "version": 3,
+      "at": "2026-11-06"
+    },
+    {
+      "version": 4,
+      "at": "2026-11-10"
+    },
+    {
+      "version": 5,
+      "at": "2026-11-13"
+    },
+    {
+      "version": 6,
+      "at": "2026-11-13"
+    },
+    {
+      "version": 7,
+      "at": "2026-11-13"
+    },
+    {
+      "version": 8,
+      "at": "2026-11-13"
+    },
+    {
+      "version": 9,
+      "at": "2026-11-14"
+    }
+  ]
+}

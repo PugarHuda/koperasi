@@ -6,8 +6,8 @@
   "steward": "kop-steward-mw4i2iwk.testnet",
   "contract": "koperasi-mw4i2iwk.testnet",
   "agent": "agent.koperasi-mw4i2iwk.testnet",
-  "configHash": "5b38ed7c9a4a75ebf1e53fed7b3233b2355195c4962b0f444fae4529663fae14",
-  "configUri": "config/config.v9.yaml",
+  "configHash": "bc829c101675b0893de63ae063819d3e00a0be5713b329d47dc26ccfda3b991f",
+  "configUri": "config/config.v10.yaml",
   "codeSha256": "1141653dfb4d6dd843a58c4e217296a9a5814ccf8c1017ac881b02ef170705b6",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
@@ -919,32 +919,17 @@
       }
     },
     "propose": {
-      "version": 9,
-      "changes": {
-        "bid.price_usdc": 3,
-        "job_filter.min_price_usdc": 2,
-        "job_filter.tags_any": [
-          "research",
-          "translation",
-          "writing",
-          "web3"
-        ]
-      },
+      "version": 10,
+      "changes": {},
       "dropped": [],
-      "evaluation": "The current by-laws have attracted only 4 jobs in their short active period, which is too few to conclusively evaluate.",
-      "factsSha": "259f34d2f0d456db3d3c2ae7ae6be81bd265744555d6ba7a682e2006864d1444",
-      "costMicroUsd": 1415,
-      "inference": "41e98c51-0252-5847-a1cf-0e8747498761",
+      "evaluation": "No jobs have been executed under the last proposal, so its effectiveness cannot be evaluated.",
+      "factsSha": "cb711498e9dfcad6bd93c15124b1ac3bdaa54acc08e3e35e39b82008ab10e5ac",
+      "costMicroUsd": 1362,
+      "inference": "8b7d323e-60dc-564d-82ec-8d784adf0b2a",
       "model": "deepseek/deepseek-v3.2",
       "tee_signer": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
-      "at": "2026-11-14T05:42:34.267Z",
-      "proposed": true,
-      "uri": "config/config.v9.yaml",
-      "hash": "5b38ed7c9a4a75ebf1e53fed7b3233b2355195c4962b0f444fae4529663fae14",
-      "reason": "Current by-laws: 4 jobs, avg price $3.75 (below our $5 ask), inference $0.001 (well below $0.5 limit). Lowering bid to $3 and min price to $2 could attract more work like pre-version-8 jobs (33 jobs, avg $1.94). Narrowing tags to top categories (research, translation, writing, web3) focuses scope. R | facts sha256 259f34d2f0d456db…, inference 41e98c51-0252… (TEE)",
-      "proposal": 139,
-      "submitted": "8Lk5dt6UDWEyBSdmo6f97LwxJM2fYE3VjYE7vEzmx4qB",
-      "relayer": "kop-relayer-mw4i2iwk.testnet"
+      "at": "2026-11-14T05:45:56.847Z",
+      "proposed": false
     }
   },
   "tee": {

@@ -1,0 +1,13 @@
+{
+  "version": 10,
+  "changes": {},
+  "dropped": [],
+  "evaluation": "No jobs have been executed under the last proposal, so its effectiveness cannot be evaluated.",
+  "factsSha": "cb711498e9dfcad6bd93c15124b1ac3bdaa54acc08e3e35e39b82008ab10e5ac",
+  "costMicroUsd": 1362,
+  "inference": "8b7d323e-60dc-564d-82ec-8d784adf0b2a",
+  "model": "deepseek/deepseek-v3.2",
+  "tee_signer": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
+  "at": "2026-11-14T05:45:56.847Z",
+  "proposed": false
+}
