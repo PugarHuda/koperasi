@@ -16,7 +16,7 @@
   <script type="module" src="dashboard.js"></script>
 </head>
 <body class="dash">
-  <a class="skip" href="#main">Skip to the content</a>
+  <a class="skip" href="#main" data-id="Langsung ke isi">Skip to the content</a>
   <aside class="side" aria-label="Dashboard">
     <div class="side-head">
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Koperasi</a>
@@ -43,6 +43,16 @@
 
     <section id="v-overview" class="view" aria-labelledby="h-overview">
       <h1 id="h-overview" tabindex="-1" data-id="Ringkasan">Overview</h1>
+      <div class="pane try" id="try60" aria-labelledby="h-try">
+        <h2 id="h-try" data-id="Coba dalam 60 detik">Try it in 60 seconds</h2>
+        <ol class="steps">
+          <li data-idh="&lt;a href=&quot;dashboard.html?as=kop-bob-mw4i3w8f.testnet#/membership&quot;&gt;Buka sebagai Bob&lt;/a&gt;, anggota demo: suaranya, janjinya, perkaranya, kualitas tugasnya (hanya baca, tanpa dompet)."><a href="dashboard.html?as=kop-bob-mw4i3w8f.testnet#/membership">Open as Bob</a>, a demo member: his votes, pledges, court cases and task quality (read-only, no wallet).</li>
+          <li data-idh="&lt;a href=&quot;#/report&quot;&gt;Buka rapor agen&lt;/a&gt;: agen dinilai sebagai anggota, dari NEAR."><a href="#/report">Open the agent report</a>: the agent judged as a member, from NEAR.</li>
+          <li><span data-id="Jalankan pemeriksaan sendiri (Node 22+), tanpa server kami:">Run the checks yourself (Node 22+), no server of ours:</span>
+            <span class="cmd"><code id="try-cmd">curl -sO https://koperasi-kohl.vercel.app/verify.mjs &amp;&amp; node verify.mjs</code>
+            <button type="button" class="btn ghost small" id="try-copy" data-id="Salin">Copy</button></span></li>
+        </ol>
+      </div>
       <p class="lead" id="net">Reading NEAR…</p>
       <dl class="kpis" id="kpis"></dl>
       <div class="pane" id="recent"><h2 data-id="Terbaru on-chain">Recent on-chain</h2><div class="out"></div></div>
@@ -55,6 +65,7 @@
         <li data-idh="&lt;b&gt;Bayar simpanan pokok&lt;/b&gt;, dikembalikan jika Anda keluar atau anggota menolak."><b>Pay the join deposit</b>, refunded if you leave or the members say no.</li>
         <li data-idh="&lt;b&gt;Minta persetujuan anggota&lt;/b&gt;: usulan DAO dari dompet Anda sendiri."><b>Ask the members</b>: a DAO proposal from your own wallet.</li>
         <li data-idh="&lt;b&gt;Anggota memilih&lt;/b&gt;, satu anggota satu suara; lalu &lt;b&gt;sinkronkan&lt;/b&gt; keanggotaan Anda."><b>The members vote</b>, one member one vote; then <b>sync</b> your membership.</li>
+        <li data-idh="&lt;b&gt;Bayar simpanan wajib&lt;/b&gt;, jika anggota memutuskannya."><b>Pay the mandatory dues</b>, if the members voted them.</li>
       </ol>
       <p class="notify" id="notify" aria-live="polite" hidden></p>
       <div class="joinapp" id="joinapp" aria-live="polite"><p class="muted">Loading the wallet panel…</p></div>
@@ -101,12 +112,14 @@
       <h1 id="h-commons" tabindex="-1" data-id="Bersama">Commons</h1>
       <div class="pane" id="c-cases"><h2 data-id="Perkara pengadilan koperasi">Court cases</h2><div class="out"></div></div>
       <div class="pane" id="c-pledges"><h2 data-id="Janji">Pledges</h2><div class="out"></div></div>
+      <div class="pane" id="c-quality"><h2 data-id="Kualitas tugas dan bobot">Task quality and weight</h2><div class="out"></div></div>
       <div class="pane" id="c-standing"><h2 data-id="Status anggota">Standing</h2><div class="out"></div></div>
     </section>
 
     <section id="v-federation" class="view" aria-labelledby="h-federation" hidden>
       <h1 id="h-federation" tabindex="-1" data-id="Federasi">Federation</h1>
       <div class="pane" id="f-fed"><h2 data-id="Federasi">The federation</h2><div class="out"></div></div>
+      <div class="pane" id="f-referrals"><h2 data-id="Papan rujukan">The referral board</h2><div class="out"></div></div>
       <div class="pane" id="f-trades"><h2 data-id="Kerja antarkoperasi">Work passed between co-ops</h2><div class="out"></div></div>
     </section>
 

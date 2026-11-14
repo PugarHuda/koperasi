@@ -31,12 +31,22 @@ async function retried(read) {
     return read();
   }
 }
-/** Fill a block (a .pane with an .out) from its reads; on failure the block is hidden. */
+/** Fill a block (a .pane with an .out) from its reads; on failure the block is hidden, and when every block of the view
+ * failed, the view says so (as the overview does) instead of showing only its heading. */
 function pane(id, read) {
   const el = $(id);
+  const view = el.closest(".view");
+  view.querySelector(".view-err")?.remove();
   el.hidden = false;
   el.querySelector(".out").innerHTML = `<p class="muted">${t("Reading NEAR…", "Membaca NEAR…")}</p>`;
-  return retried(read).then((html) => { el.querySelector(".out").innerHTML = html; }, (e) => { console.warn(id, e); el.hidden = true; });
+  return retried(read).then((html) => { el.querySelector(".out").innerHTML = html; }, (e) => {
+    console.warn(id, e);
+    el.hidden = true;
+    if (!["v-membership", "v-overview"].includes(view.id) && !view.querySelector(".view-err") && [...view.querySelectorAll(".pane")].every((p) => p.hidden)) {
+      view.insertAdjacentHTML("beforeend", `<p class="lead view-err">${t(`Could not read NEAR right now (${esc(String(e?.message ?? e).slice(0, 80))}). Reload in a moment.`,
+        `NEAR tidak bisa dibaca sekarang (${esc(String(e?.message ?? e).slice(0, 80))}). Muat ulang sebentar lagi.`)}</p>`);
+    }
+  });
 }
 
 // the by-laws in force, hashed here: read by the agent view and the verify view
@@ -52,6 +62,8 @@ const byLaws = () => (bylaws ??= (async () => {
 })().catch((e) => { bylaws = null; throw e; }));
 
 async function overview() {
+  $("try-copy").onclick = () => navigator.clipboard.writeText($("try-cmd").textContent)
+    .then(() => { $("try-copy").textContent = t("Copied", "Tersalin"); }, () => getSelection()?.selectAllChildren($("try-cmd")));
   pane("recent", async () => {
     const [info, last] = await Promise.all([view(C, "get_info"), view(D, "get_last_proposal_id")]);
     const [recs, props] = await Promise.all([view(C, "get_receipts", { from: Math.max(0, info.receipts - 5), limit: 5 }),
@@ -201,6 +213,7 @@ async function agent() {
 const evals = new Map();
 /** web/agent-proposals/v<N>.json: the agent's own run that wrote by-laws vN (its evaluation of the last ones), or null. */
 const evaluation = (v) => {
+  if (v < 8) return Promise.resolve(null); // ponytail: the agent's runs were saved from v8 on; older ones would 404
   if (!evals.has(v)) evals.set(v, fetch(`agent-proposals/v${v}.json`).then((r) => (r.ok ? r.json() : null), () => null));
   return evals.get(v);
 };
@@ -229,6 +242,16 @@ const agentProposals = () => (agentRecord ??= (async () => {
   return { rows, declined: nextFile && nextFile.proposed === false ? nextFile : null };
 })().catch((e) => { agentRecord = null; throw e; }));
 
+// deployment.json's fixed notes are English: their Indonesian here; a note not listed shows quoted, as the original
+const NOTES_ID = {
+  "accepted with one slip: its section 6 speaks of lower prices and narrowed tags, which v10 reverted":
+    "diterima dengan satu kekeliruan: bagian 6-nya menyebut harga lebih rendah dan tag yang dipersempit, yang dibatalkan oleh v10",
+  "it read the stand-in market as an outside market, took the TEE worker for itself, and called its scaled share a fee":
+    "ia menganggap pasar pengganti sebagai pasar luar, mengira pekerja TEE adalah dirinya sendiri, dan menyebut bagiannya yang diskalakan sebagai biaya",
+  "stopped after its receipt, to save the Phala balance; the attestation and the receipt stay on-chain":
+    "dihentikan setelah tanda terimanya, untuk menghemat saldo Phala; atestasi dan tanda terimanya tetap on-chain",
+};
+const note = (en) => esc(t(en, NOTES_ID[en] ?? `“${en}” (catatan asli)`));
 const verdict = (html) => `<p class="rc-verdict">${html}</p>`;
 async function report() {
   const tb = dep.taskbond ?? [];
@@ -321,8 +344,8 @@ async function report() {
     if (review) {
       items.push(`<li><b>${t(`Its ${esc(review.year)} review: #${esc(bad.id)} ${esc(word(bad.status).toLowerCase())}, #${esc(good.id)} ${esc(word(good.status).toLowerCase())}`,
         `Laporan tahunan ${esc(review.year)}: #${esc(bad.id)} ${esc(word(bad.status).toLowerCase())}, #${esc(good.id)} ${esc(word(good.status).toLowerCase())}`)}</b>
-        <span>${t("The first draft was turned down because", "Draf pertama ditolak karena")} ${esc(review.rejected.why)} (<a href="${esc(review.rejected.report)}">${t("the rejected draft", "draf yang ditolak")}</a>).
-        ${t("The corrected one was accepted", "Versi perbaikannya diterima")} (<a href="${esc(review.report)}">${t("the accepted review", "laporan yang diterima")}</a>)${review.note ? `: ${esc(review.note)}` : ""}.</span></li>`);
+        <span>${t("The first draft was turned down because", "Draf pertama ditolak karena")} ${note(review.rejected.why)} (<a href="${esc(review.rejected.report)}">${t("the rejected draft", "draf yang ditolak")}</a>).
+        ${t("The corrected one was accepted", "Versi perbaikannya diterima")} (<a href="${esc(review.report)}">${t("the accepted review", "laporan yang diterima")}</a>)${review.note ? `: ${note(review.note)}` : ""}.</span></li>`);
     }
     if (!items.length) return verdict(t("Mistakes: none the members had to correct.", "Kesalahan: tidak ada yang perlu dikoreksi anggota."));
     const ok = review && bad.status === "Rejected" && good.status === "Approved";
@@ -339,7 +362,7 @@ async function report() {
       return verdict(ok ? t(`Shade Agent: a second worker, its key made in Intel TDX, admitted by the members (#${esc(tee.approve)}, #${esc(tee.admit)})${recAgent === tee.worker ? ", recorded a receipt from inside the TEE" : ""}.`,
         `Shade Agent: pekerja kedua, kuncinya dibuat di Intel TDX, diterima anggota (#${esc(tee.approve)}, #${esc(tee.admit)})${recAgent === tee.worker ? ", mencatat tanda terima dari dalam TEE" : ""}.`)
         : t("Shade Agent: not admitted on this contract now.", "Shade Agent: tidak diterima di kontrak ini sekarang."))
-        + `<p class="small">${teeOnly ? t("Admitted TEE-only. ", "Diterima hanya-TEE. ") : ""}${t("It is a separate worker, not the agent's own key", "Ia pekerja terpisah, bukan kunci agen sendiri")}${tee.note ? ` (${esc(tee.note)})` : ""}.
+        + `<p class="small">${teeOnly ? t("Admitted TEE-only. ", "Diterima hanya-TEE. ") : ""}${t("It is a separate worker, not the agent's own key", "Ia pekerja terpisah, bukan kunci agen sendiri")}${tee.note ? ` (${note(tee.note)})` : ""}.
           <a href="#/agent">${t("Its attestation", "Atestasinya")}</a>.</p>`;
     });
   } else $("r-tee").hidden = true;
@@ -387,6 +410,29 @@ async function money() {
   });
 }
 
+/** The 0.3.5 reputation factor, as the contract computes it (solidarity.rs reputation_weights): (good+2)/(bad+2), where
+ * good = court good + min(tasks paid, 10) and bad = court bad + tasks handed back + payouts vetoed (then cancelled). The
+ * court part, over the last 200 cases: a juror's ruling that matched the outcome, or a claim upheld, is good; else bad. */
+function taskFactor(a, q, cases) {
+  let cg = 0, cb = 0;
+  for (const c of cases.slice(-200)) {
+    if (c.status !== "Upheld" && c.status !== "Dismissed") continue;
+    const upheld = c.status === "Upheld";
+    const v = c.votes.find(([j]) => j === a);
+    if (v) { if (v[1] === upheld) cg++; else cb++; }
+    if (c.claimant === a) { if (upheld) cg++; else cb++; }
+  }
+  const good = cg + Math.min(q.paid, 10);
+  const bad = cb + q.handed_back + q.vetoed;
+  return { cg, cb, good, bad, factor: (good + 2) / (bad + 2) };
+}
+/** deployment.json's 0.3.5 example: a member whose hand-back of a task lowered their weight, with the transaction. */
+const qualityExample = (a) => {
+  const x = dep.v035?.quality;
+  return x?.account === a ? t(` Handing back task #${esc(x.task)} took the weight ${esc(x.before.w)} → ${esc(x.after.w)} (<a href="${txUrl(x.tx)}">tx</a>).`,
+    ` Mengembalikan tugas #${esc(x.task)} menurunkan bobotnya ${esc(x.before.w)} → ${esc(x.after.w)} (<a href="${txUrl(x.tx)}">tx</a>).`) : "";
+};
+
 async function commons() {
   pane("c-cases", async () => {
     const cases = await all(C, "get_cases");
@@ -402,6 +448,28 @@ async function commons() {
     return table([t("Pledge", "Janji"), t("By", "Oleh"), t("Called in", "Ditagih"), t("Kept / broken", "Ditepati / diingkari")], [...pledges].reverse().map((p) => `<tr><td><strong>#${esc(p.id)}</strong> ${esc(p.what)}</td>
       <td data-label="${t("By", "Oleh")}"><a href="cert.html?who=${encodeURIComponent(p.issuer)}">${esc(p.issuer)}</a></td>
       <td class="num" data-label="${t("Called in", "Ditagih")}">${esc(p.called)} ${t("of", "dari")} ${esc(p.units)}</td><td data-label="${t("Kept / broken", "Ditepati / diingkari")}">${n(p.id, "Honored")} / ${n(p.id, "Broken")}</td></tr>`));
+  });
+  pane("c-quality", async () => {
+    const [members, weights, cases] = await Promise.all([view(C, "get_members", { from: 0, limit: 200 }), view(C, "get_reputation_weights"), all(C, "get_cases")]);
+    const qs = await Promise.all(members.map(([a]) => view(C, "get_task_quality", { account_id: a })));
+    const w = new Map(weights);
+    const ex = dep.v035?.quality;
+    return `<p class="small">${t(`Each member's reputation weight (their part of the profit share kept for work) is their work since the last share times
+      (good + 2) / (bad + 2): good is court rulings that held up plus tasks paid (at most 10), bad is court rulings that did not,
+      tasks handed back and payouts on trust another member vetoed and cancelled.`, `Bobot reputasi setiap anggota (bagiannya dari SHU untuk kerja) adalah kerjanya sejak pembagian terakhir dikali
+      (baik + 2) / (buruk + 2): baik adalah putusan pengadilan yang bertahan ditambah tugas dibayar (paling banyak 10), buruk adalah putusan yang tidak bertahan,
+      tugas yang dikembalikan, dan bayaran atas kepercayaan yang diveto anggota lain lalu dibatalkan.`)}${ex ? ` <strong>${esc(ex.account)}</strong>:${qualityExample(ex.account)}` : ""}</p>
+      ${table([t("Member", "Anggota"), t("Paid", "Dibayar"), t("Handed back", "Dikembalikan"), t("Vetoed", "Diveto"), t("Court good / bad", "Pengadilan baik / buruk"), t("Factor", "Faktor"), t("Weight", "Bobot")],
+        members.map(([a], i) => {
+          const q = qs[i];
+          const f = taskFactor(a, q, cases);
+          return `<tr><td><a href="cert.html?who=${encodeURIComponent(a)}">${esc(a)}</a></td>
+            <td class="num" data-label="${t("Paid", "Dibayar")}">${esc(q.paid)}</td><td class="num" data-label="${t("Handed back", "Dikembalikan")}">${esc(q.handed_back)}</td>
+            <td class="num" data-label="${t("Vetoed", "Diveto")}">${esc(q.vetoed)}</td><td class="num" data-label="${t("Court good / bad", "Pengadilan baik / buruk")}">${f.cg} / ${f.cb}</td>
+            <td class="num" data-label="${t("Factor", "Faktor")}">(${f.good}+2)/(${f.bad}+2) = ×${f.factor.toFixed(2)}</td>
+            <td class="num" data-label="${t("Weight", "Bobot")}">${w.has(a) ? esc(w.get(a)) : `<span class="muted" title="${t("not in good standing, or no work since the last share", "tidak berstatus baik, atau belum ada kerja sejak pembagian terakhir")}">–</span>`}</td></tr>`;
+        }))}
+      <p class="small">${t("The weights' part of each share", "Bagian bobot dari setiap SHU")}: <a href="#/money">${t("Money", "Uang")}</a>.</p>`;
   });
   pane("c-standing", async () => {
     const members = await view(C, "get_members", { from: 0, limit: 200 });
@@ -429,6 +497,18 @@ async function federation() {
       <p>${t("Sister co-ops (their work records count here)", "Koperasi saudara (catatan kerja mereka dihitung di sini)")}: ${sisters.length ? sisters.map((s) => `<a href="${explorer(s)}">${esc(s)}</a>`).join(", ") : t("none", "tidak ada")}.</p>
       ${res.length ? `<ul class="tiers">${res.map((r) => `<li><b>#${esc(r.id)}</b><span>${esc(r.text)}</span></li>`).join("")}</ul>` : ""}
       <p class="small"><a href="/coops.html">${t("Every co-op on this code, and the federation's resolutions with each co-op's vote", "Setiap koperasi dengan kode ini, dan resolusi federasi beserta suara tiap koperasi")}</a>.</p>`;
+  });
+  pane("f-referrals", async () => {
+    const refs = await view(C, "get_referrals", {});
+    const sent = dep.v035?.referral;
+    return `<p class="small">${t("Jobs the co-op's agent passed to a sister co-op, signed by the agent's key and posted on-chain (<code>get_referrals</code>).",
+      "Pekerjaan yang diteruskan agen koperasi ke koperasi saudara, ditandatangani kunci agen dan dicatat on-chain (<code>get_referrals</code>).")}</p>
+      ${table(["#", t("Job", "Pekerjaan"), t("To co-op", "Ke koperasi"), t("Budget", "Anggaran"), t("Why", "Alasan")], [...refs].reverse().map((r) => `<tr>
+        <td><strong>#${esc(r.id)}</strong> <span class="muted">${date(r.at)}</span>${sent && Number(sent.id) === Number(r.id) ? ` <a href="${txUrl(sent.tx)}">tx</a>` : ""}</td>
+        <td data-label="${t("Job", "Pekerjaan")}"><code>${esc(short(r.job_id))}</code></td>
+        <td data-label="${t("To co-op", "Ke koperasi")}"><a href="${explorer(r.to_coop)}">${esc(r.to_coop)}</a></td>
+        <td class="num" data-label="${t("Budget", "Anggaran")}">${usdc(r.budget_usdc)} USDC</td>
+        <td data-label="${t("Why", "Alasan")}">${esc(oneLine(r.reason, 220))}</td></tr>`))}`;
   });
   pane("f-trades", async () => {
     const trades = dep.federation?.trades ?? [];
@@ -483,7 +563,10 @@ async function verify() {
 }
 
 // ---------- My history: what this member did, read from the chain (the signed-in account, or ?as= on localhost) ----------
-let me = "";
+// ?as=<account>: My history read for any account, read-only on any host (the wallet panel previews it on localhost only)
+const viewAs = new URLSearchParams(location.search).get("as")?.match(/^[a-z0-9._-]{2,64}$/)?.[0] ?? "";
+let me = viewAs;
+let signedIn = "";
 function history() {
   if (!me) { $("m-history").hidden = true; return; }
   const who = me;
@@ -491,10 +574,11 @@ function history() {
   pane("m-history", async () => {
     const last = Number(await view(D, "get_last_proposal_id"));
     const from = Math.max(0, last - 100);
-    const [props, member, claimable, pledges, pclaims, cases, dues, loan, credit] = await Promise.all([
+    const [props, member, claimable, pledges, pclaims, cases, dues, loan, credit, quality, weights] = await Promise.all([
       view(D, "get_proposals", { from_index: from, limit: 100 }), view(C, "get_member", { account_id: who }),
       view(C, "get_claimable", { account_id: who }).catch(() => "0"), all(C, "get_pledges"), all(C, "get_pledge_claims"), all(C, "get_cases"),
-      ...["get_dues_status", "get_loan", "get_credit"].map((m) => view(C, m, { account_id: who }).catch(() => null))]);
+      ...["get_dues_status", "get_loan", "get_credit", "get_task_quality"].map((m) => view(C, m, { account_id: who }).catch(() => null)),
+      view(C, "get_reputation_weights").catch(() => null)]);
     const votes = props.filter((p) => p.votes?.[who]);
     const count = (v) => votes.filter((p) => p.votes[who] === v).length;
     const mine = pledges.filter((p) => p.issuer === who);
@@ -518,6 +602,13 @@ function history() {
       [t("Court, as juror", "Pengadilan, sebagai juri"), juror.length ? juror.map((c) => `#${esc(c.id)} (${ruling(c)})`).join(", ") : t("none", "tidak ada")],
       [t("Dues (simpanan wajib)", "Simpanan wajib"), dues ? (dues[1] ? t(`paid until ${date(dues[0])}`, `lunas sampai ${date(dues[0])}`) : t(`late: paid until ${date(dues[0])}`, `terlambat: lunas sampai ${date(dues[0])}`)) : t("no dues voted", "belum ada simpanan wajib")],
       [t("Loan", "Pinjaman"), loan ? `${near3(loan.principal)} NEAR + ${near3(loan.interest)} ${t("interest", "bunga")}, ${esc(word(loan.status).toLowerCase())}${loan.status === "Repaid" ? "" : `, ${t("due", "jatuh tempo")} ${date(loan.due)}`} (${t("DAO proposal", "usulan DAO")} #${esc(loan.proposal)})` : t("none", "tidak ada")],
+      [t("Task quality", "Kualitas tugas"), quality ? (() => {
+        const f = taskFactor(who, quality, cases);
+        const w = weights?.find(([a]) => a === who)?.[1];
+        return t(`${esc(quality.paid)} paid, ${esc(quality.handed_back)} handed back, ${esc(quality.vetoed)} vetoed; with your court record (${f.cg} good, ${f.cb} bad) your weight is multiplied by (${f.good}+2)/(${f.bad}+2) = ×${f.factor.toFixed(2)}; ${w ? `weight now ${esc(w)}` : "no weight now (not in good standing, or no work since the last share)"}.`,
+          `${esc(quality.paid)} dibayar, ${esc(quality.handed_back)} dikembalikan, ${esc(quality.vetoed)} diveto; dengan catatan pengadilan Anda (${f.cg} baik, ${f.cb} buruk) bobot Anda dikali (${f.good}+2)/(${f.bad}+2) = ×${f.factor.toFixed(2)}; ${w ? `bobot sekarang ${esc(w)}` : "belum ada bobot (tidak berstatus baik, atau belum ada kerja sejak pembagian terakhir)"}.`)
+          + qualityExample(who);
+      })() : "–"],
       [t("Credit", "Kredit"), credit ? t(`score ${esc(credit[0])} of 10: you can borrow up to ${nearAmt(credit[1])} NEAR`, `skor ${esc(credit[0])} dari 10: Anda bisa meminjam hingga ${nearAmt(credit[1])} NEAR`) : "–"],
     ];
     // the timeline: votes, pledges, claims and cases, newest first
@@ -533,6 +624,35 @@ function history() {
       ${events.length ? `<details class="timeline"><summary>${t(`Every step (${events.length})`, `Setiap langkah (${events.length})`)}</summary>
         <ul class="feed">${events.map((e) => `<li><time>${date(e.ts)}</time><span>${e.html}</span></li>`).join("")}</ul></details>` : ""}`;
   });
+}
+
+// ---------- Join from zero: the steps with the amounts the chain asks for (shown to a visitor not signed in) ----------
+async function joinSteps() {
+  try {
+    const [info, policy, dues] = await retried(() => Promise.all([view(C, "get_info"), view(D, "get_policy"), view(C, "get_dues").catch(() => null)]));
+    const group = policy.roles.find((r) => r.name === "member")?.kind?.Group ?? [];
+    const [num, den] = policy.default_vote_policy?.threshold ?? [1, 2];
+    const needed = Math.floor((group.length * num) / den) + 1;
+    const days = Math.round(Number(BigInt(policy.proposal_period) / 1_000_000_000n) / 86_400);
+    const d = dues && BigInt(dues.amount) > 0n ? dues : null;
+    const deposit = nearAmt(info.join_deposit);
+    const bond = nearAmt(policy.proposal_bond);
+    $("join-steps").innerHTML = [
+      t("<b>Connect a NEAR testnet wallet</b> with the button below (Meteor, Intear, Nightly…). Meteor makes a free testnet account.",
+        "<b>Hubungkan dompet NEAR testnet</b> dengan tombol di bawah (Meteor, Intear, Nightly…). Meteor membuatkan akun testnet gratis."),
+      t(`<b>Pay the join deposit (simpanan pokok): ${deposit} NEAR</b>, a call to <code>join</code>. You get it back if you cancel before the vote or the members remove you.`,
+        `<b>Bayar simpanan pokok: ${deposit} NEAR</b>, panggilan <code>join</code>. Uang ini kembali jika Anda membatalkan sebelum pemungutan suara atau anggota mengeluarkan Anda.`),
+      t(`<b>Ask the members</b>: a DAO proposal from your own wallet to add you to the member role (bond ${bond} NEAR, returned when they decide).`,
+        `<b>Minta persetujuan anggota</b>: usulan DAO dari dompet Anda sendiri untuk menambahkan Anda ke peran anggota (jaminan ${bond} NEAR, dikembalikan setelah mereka memutuskan).`),
+      t(`<b>The members vote you in</b>: ${needed} of ${group.length} approvals, one member one vote, within ${days} days. Then <b>sync</b> your membership (<code>sync_member</code>): the contract reads the DAO's decision.`,
+        `<b>Anggota menerima Anda lewat pemungutan suara</b>: ${needed} dari ${group.length} persetujuan, satu anggota satu suara, dalam ${days} hari. Lalu <b>sinkronkan</b> keanggotaan Anda (<code>sync_member</code>): kontrak membaca keputusan DAO.`),
+      d ? t(`<b>Pay the mandatory dues (simpanan wajib): ${nearAmt(d.amount)} NEAR every ${esc(d.every_days)} days</b> (<code>pay_dues</code>), into the DAO treasury. More than 7 days late puts a member out of good standing.`,
+        `<b>Bayar simpanan wajib: ${nearAmt(d.amount)} NEAR setiap ${esc(d.every_days)} hari</b> (<code>pay_dues</code>), masuk ke kas DAO. Terlambat lebih dari 7 hari membuat anggota kehilangan status baik.`)
+        : t("<b>Mandatory dues</b>: the members voted none.", "<b>Simpanan wajib</b>: anggota memutuskan tidak ada."),
+    ].map((x) => `<li>${x}</li>`).join("");
+  } catch (e) {
+    console.warn("join-steps", e); // the fixed steps written in the HTML stay
+  }
 }
 
 // ---------- Notify me: while the dashboard is open, a browser notification when something new needs the member ----------
@@ -609,7 +729,8 @@ function notifyLine() {
   };
 }
 
-const VIEWS = { overview, membership: history, proposals, agent, report, money, commons, federation, verify };
+const membership = () => { joinSteps(); history(); };
+const VIEWS = { overview, membership, proposals, agent, report, money, commons, federation, verify };
 const loaded = new Set();
 let current = "";
 function route(focus) {
@@ -642,13 +763,16 @@ function chrome() {
 }
 
 const whoLine = () => {
-  $("who").innerHTML = me ? `${t("Signed in as", "Masuk sebagai")} <strong>${esc(me)}</strong>` : `${t("Not signed in", "Belum masuk")}: <a href="#/membership">${t("connect a wallet", "hubungkan dompet")}</a>`;
+  $("who").innerHTML = signedIn ? `${t("Signed in as", "Masuk sebagai")} <strong>${esc(me)}</strong>`
+    : me ? `${t("Viewing as", "Melihat sebagai")} <strong>${esc(me)}</strong> (${t("read-only", "hanya baca")}); <a href="#/membership">${t("connect a wallet", "hubungkan dompet")}</a> ${t("to act as yourself", "untuk bertindak sebagai diri Anda")}`
+      : `${t("Not signed in", "Belum masuk")}: <a href="#/membership">${t("connect a wallet", "hubungkan dompet")}</a>`;
 };
 // who is signed in, from the wallet panel; while a vote from the proposals view runs, its progress shows there too
 window.addEventListener("koperasi:wallet", (e) => {
   const { note } = e.detail;
-  const changed = e.detail.me !== me;
-  me = e.detail.me;
+  signedIn = e.detail.me;
+  const changed = (signedIn || viewAs) !== me;
+  me = signedIn || viewAs;
   whoLine();
   $("join-steps").hidden = !!me;
   const out = $("vote-note");
@@ -670,4 +794,6 @@ window.addEventListener("koperasi:lang", () => {
 });
 window.addEventListener("hashchange", () => route(true));
 chrome();
+// ?as=: the account is known before the wallet panel reports (it may report the same one, then nothing changes)
+if (viewAs) { whoLine(); notifyLine(); $("join-steps").hidden = true; }
 route(false);

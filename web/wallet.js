@@ -220,10 +220,12 @@ async function load() {
     .map((x) => x.catch(() => undefined)));
   // contract 0.2.9: the dues the members voted and where this member stands on them (null on older code or no dues)
   const duesStatus = member ? await view(dep.contract, "get_dues_status", { account_id: me }).catch(() => null) : null;
+  // the dues rule itself ({amount, every_days, since}; amount "0" = none), shown to newcomers before they join too
+  const duesRule = await view(dep.contract, "get_dues").then((d) => (d && BigInt(d.amount) > 0n ? d : null), () => null);
   // contract 0.3.0: the loan rule and fund, this member's loan and guarantors (null on older code)
   const [loanRule, loan, guarantors] = await Promise.all([view(dep.contract, "get_loan_rule"), view(dep.contract, "get_loan", { account_id: me }),
     view(dep.contract, "get_guarantors", { account_id: me })].map((x) => x.catch(() => null)));
-  return { loanRule, loan, guarantors, duesStatus, appeals, routes, token, onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
+  return { loanRule, loan, guarantors, duesStatus, duesRule, appeals, routes, token, onNetwork, info, member, pending, policy, inRole: group.includes(me), needed, members: group.length, group, request, leave, proposals, claimable, usdcReady, usdcStorage, pool, staked, waiting, bounties, myClaims, roster, treasury,
     board, tasks, dues, records: Object.fromEntries(recs), pledges, pclaims, cases, standing, receipts };
 }
 
@@ -660,6 +662,11 @@ async function paint() {
           : `${t("Proposal ended", "Usulan berakhir")}: ${esc(req.status)}.`}` : "")}
       ${step(s.inRole ? "now" : "todo", t("Sync your membership", "Sinkronkan keanggotaan Anda"), s.inRole
         ? `${t("The contract reads the DAO's decision on-chain.", "Kontrak membaca keputusan DAO di on-chain.")} <button type="button" class="btn" id="w-sync">${t("Sync my membership", "Sinkronkan keanggotaan saya")}</button>` : "")}
+      ${step("todo", s.duesRule ? t(`Pay the mandatory dues: ${nearAmt(s.duesRule.amount)} NEAR every ${s.duesRule.every_days} days`,
+        `Bayar simpanan wajib: ${nearAmt(s.duesRule.amount)} NEAR setiap ${s.duesRule.every_days} hari`) : t("Mandatory dues", "Simpanan wajib"), s.duesRule
+        ? t("Counted from the day you are a member; the button appears here then. More than 7 days late puts you out of good standing until you pay.",
+          "Dihitung sejak Anda menjadi anggota; tombolnya muncul di sini saat itu. Terlambat lebih dari 7 hari membuat Anda kehilangan status baik sampai membayar.")
+        : t("The members voted no dues.", "Anggota memutuskan tidak ada simpanan wajib."))}
     </ol>`;
     if (s.pending && !s.inRole) html += `<p class="small"><button type="button" class="linkish" id="w-cancel">${t(`Cancel and take my ${nearAmt(deposit)} NEAR back`, `Batalkan dan ambil kembali ${nearAmt(deposit)} NEAR saya`)}</button></p>`;
   } else {
@@ -674,6 +681,11 @@ async function paint() {
         ? `<button type="button" class="btn" id="w-claim">${t("Claim", "Ambil")} ${usdc(s.claimable)} USDC</button>`
         : `<p class="small">${t("To receive USDC, register your account with the token first (a one-time", "Untuk menerima USDC, daftarkan akun Anda ke token dulu (sekali saja, simpanan penyimpanan")} ${(Number(s.usdcStorage) / 1e24).toLocaleString("en", { maximumFractionDigits: 6 })} ${t("NEAR storage deposit).", "NEAR).")}</p>
            <button type="button" class="btn" id="w-usdc">${t("Register for USDC", "Daftar untuk USDC")}</button>`) : ""}
+      ${s.duesRule && s.duesStatus ? `<h3 class="jh">${t("Mandatory dues (simpanan wajib)", "Simpanan wajib")}</h3>
+      <p class="small" id="w-dues-line">${t(`${nearAmt(s.duesRule.amount)} NEAR every ${s.duesRule.every_days} days, into the DAO treasury.`, `${nearAmt(s.duesRule.amount)} NEAR setiap ${s.duesRule.every_days} hari, masuk ke kas DAO.`)}
+        ${(() => { const day = new Date(Number(BigInt(s.duesStatus[0]) / 1_000_000n)).toLocaleDateString(t("en-GB", "id-ID"), { day: "numeric", month: "short", year: "numeric" });
+          return s.duesStatus[1] ? t(`Paid until ${day}.`, `Lunas sampai ${day}.`) : t(`<strong>Late</strong>: paid until ${day}; you are out of good standing until you pay.`, `<strong>Terlambat</strong>: lunas sampai ${day}; Anda kehilangan status baik sampai membayar.`); })()}</p>
+      <button type="button" class="btn${s.duesStatus[1] ? " ghost" : ""}" id="w-dues">${t(`Pay one period: ${nearAmt(s.duesRule.amount)} NEAR`, `Bayar satu periode: ${nearAmt(s.duesRule.amount)} NEAR`)}</button>` : ""}
       ${s.pool ? `<h3 class="jh">${t("Savings: your stake for the agent's inference", "Simpanan sukarela: stake Anda untuk inferensi agen")}</h3>
       <p class="small">${t("The members chose", "Anggota memilih")} <a href="${explorer(s.pool)}">${esc(s.pool)}</a>. ${t(`Your stake there is your savings: it weighs your
         profit share, and its rewards are what pay for inference. The NEAR stays yours; unstake from the pool any time.`, `Stake Anda di sana adalah simpanan Anda: ia menentukan bobot
@@ -806,6 +818,7 @@ async function paint() {
   }, { deposit: bond, tgas: 50 }));
   on("w-sync", t("Sync membership", "Sinkron keanggotaan"), () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
   on("w-cancel", t("Cancel", "Batal"), () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));
+  on("w-dues", t("Dues", "Simpanan wajib"), () => send(dep.contract, "pay_dues", {}, { deposit: BigInt(s.duesRule.amount), tgas: 30 }));
   on("w-leave", t("Request to leave", "Permohonan keluar"), () => send(dep.dao, "add_proposal", {
     proposal: { description: `Remove ${me} from the members: they asked to leave (from the Koperasi page)`, kind: { RemoveMemberFromRole: { member_id: me, role: "member" } } },
   }, { deposit: bond, tgas: 50 }));
