@@ -79,6 +79,13 @@
 .notify { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: baseline; margin: 0 0 1rem; max-width: 52rem; }
 .notify .small { color: rgba(255,255,255,.7); }
 
+/* Try it in 60 seconds (the overview); the join steps read from the chain */
+.try { border-color: rgba(255,213,74,.55); }
+.try .steps { margin: 0; }
+.cmd { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .4rem; }
+.cmd code { padding: .35rem .55rem; overflow-wrap: anywhere; font-size: .82rem; }
+.steps code { overflow-wrap: anywhere; }
+
 @media (max-width: 800px) {
   .dash { grid-template-columns: minmax(0, 1fr); }
   .side { height: auto; z-index: 5; gap: 0; padding: .8rem 1rem; border-right: 0; border-bottom: 1px solid #1b2142; }

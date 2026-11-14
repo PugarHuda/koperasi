@@ -1,7 +1,7 @@
 // The member dashboard (web/dashboard.html): the sidebar's views, read live from the showcase co-op, and the wallet
 // panel inside it (?as= previews on localhost).
 import { expect } from "@playwright/test";
-import { onlyLocal, test } from "./helpers.mjs";
+import { RPC, onlyLocal, test } from "./helpers.mjs";
 
 const BOB = "kop-bob-mw4i3w8f.testnet";
 // on a narrow screen the sidebar is a menu: open it first
@@ -75,6 +75,9 @@ test("?as= on localhost shows that member's own panel in My membership", async (
   const box = page.locator("#v-membership #joinapp");
   await expect(box).toContainText(`Signed in as ${BOB}`);
   await expect(box).toContainText("Your vote");
+  // the dues the members voted, with the button to pay one period (not clicked: the specs never sign)
+  await expect(box).toContainText(/Mandatory dues \(simpanan wajib\)\s*[\d.]+ NEAR every \d+ days/);
+  await expect(box.locator("#w-dues")).toContainText(/Pay one period: [\d.]+ NEAR/);
   await expect(page.locator("#join-steps")).toBeHidden();
   await expect(page.locator("#who")).toContainText(BOB);
   await go(page, "Proposals");
@@ -107,6 +110,58 @@ test("My history shows a previewed member's votes, pledges and court record", as
   await expect(box.locator(".timeline li").first()).toContainText(/You voted|You pledged|Juror on case|You called in|You brought/);
   await expect(page.locator("#notify")).toContainText("Notify me");
   await expect(page.locator('#notify a[href^="/api/inbox?who="]')).toHaveAttribute("href", `/api/inbox?who=${encodeURIComponent(BOB)}`);
+});
+
+test("try it in 60 seconds: the overview's three steps and the landing page's link", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#try-link")).toHaveAttribute("href", "dashboard.html#/overview");
+  await page.goto("/dashboard.html");
+  const box = page.locator("#try60");
+  await expect(box.locator(`a[href="dashboard.html?as=${BOB}#/membership"]`)).toBeVisible();
+  await expect(box.locator('a[href="#/report"]')).toBeVisible();
+  await expect(page.locator("#try-cmd")).toHaveText("curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs");
+  await expect(page.locator("#try-copy")).toBeVisible();
+});
+
+test("task quality: Bob's hand-back in his history and every member's factor in Commons", async ({ page }) => {
+  test.setTimeout(120_000);
+  // ?as= reads My history for any account, read-only, on any host
+  await page.goto(`/dashboard.html?as=${BOB}#/membership`);
+  const hist = page.locator("#m-history");
+  await expect(hist).toContainText(/Task quality\s*\d+ paid, \d+ handed back, \d+ vetoed/);
+  await expect(hist).toContainText(/multiplied by \(\d+\+2\)\/\(\d+\+2\) = ×\d\.\d\d/);
+  await expect(hist).toContainText("task #17 took the weight 275 → 220");
+  await go(page, "Commons");
+  const q = page.locator("#c-quality");
+  await expect(q).toContainText("(good + 2) / (bad + 2)");
+  const bob = q.locator("tbody tr", { hasText: BOB });
+  await expect(bob).toContainText(/×\d\.\d\d/);
+  await expect(bob.locator("td").last()).toHaveText(/^(\d+|–)$/);
+});
+
+test("the federation lists the referral board, with the transaction that sent one", async ({ page }) => {
+  await page.goto("/dashboard.html#/federation");
+  const r = page.locator("#f-referrals");
+  await expect(r).toContainText("koperasi-mw80aczw.testnet");
+  await expect(r).toContainText("4.50 USDC");
+  await expect(r.locator('a[href$="/txns/7oBAVZgnEoGP81A6XYTV6G1emicSYKXuFNsVhmdKkhSb"]')).toBeVisible();
+});
+
+test("join from zero: a visitor sees each step with what the chain asks for, and a wallet button", async ({ page }) => {
+  await page.goto("/dashboard.html#/membership");
+  const steps = page.locator("#join-steps");
+  await expect(steps).toContainText(/join deposit \(simpanan pokok\): [\d.]+ NEAR/);
+  await expect(steps).toContainText(/\d+ of \d+ approvals/);
+  await expect(steps).toContainText("sync_member");
+  await expect(steps).toContainText(/mandatory dues \(simpanan wajib\): [\d.]+ NEAR every \d+ days|the members voted none/);
+  await expect(page.locator("#w-connect")).toBeVisible();
+});
+
+test("a view whose every block failed to read says so, not just its heading", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.route(RPC, (route) => route.abort("connectionrefused"));
+  await page.goto("/dashboard.html#/money");
+  await expect(page.locator("#v-money .view-err")).toContainText("Could not read NEAR right now", { timeout: 90_000 });
 });
 
 test("the dashboard's content turns Indonesian with the language button", async ({ page }) => {

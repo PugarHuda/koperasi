@@ -14,6 +14,7 @@ const ID = [
   ['nav[aria-label="Sections"] a[href="#live"]', "Langsung"],
   [".top-actions a.quiet:not(#run-demo)", "Kode sumber"],
   ["#run-demo", "Jalankan demo"],
+  ["#try-link", "Coba dalam 60 detik →"],
   ["#open-app", '<span class="long">Buka</span><span>aplikasi anggota</span>'],
   ["#hero-title .line", "<b>Agen AI</b> satu anggota, satu suara"],
   [".hero .lede", "Desa-desa di Indonesia sudah seabad menjalankan <em>koperasi</em>: anggota memiliki usahanya, masing-masing satu suara, dan membagi hasilnya. Koperasi memberi agen AI aturan yang sama di NEAR."],
