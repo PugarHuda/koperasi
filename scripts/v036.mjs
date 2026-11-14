@@ -5,11 +5,16 @@
 //           members vote: each vote counts its reputation weight
 //   close:  anyone closes the poll after its hour
 //   lend:   the members lend the sister co-op 1 USDC from the risk fund, paid to the sister's DAO treasury (DAO vote)
+//   repay:  the sister co-op's members vote their DAO repays loan #1: ft_transfer_call "sister_repay:1" into the risk fund
+//   recover: the co-op court upholds cases against the agent's jobs until it is suspended (3 live strikes; each a
+//           demo job priced 0.000001 USDC, refunded from the risk fund); the steward files the recovery plan
+//           (web/rat/recovery-plan.md, by sha256); the members approve it by DAO vote; the agent's standing ramps back up.
+//           Stops after the suspension when the plan file is not written yet.
 // Results are saved in the deployment files (`v036`); `npm run verify` reads them back.
 import fs from "node:fs";
 import path from "node:path";
 import { KeyPair } from "near-api-js";
-import { DEPLOYMENT, LOCAL_DEPLOYMENT, ROOT, account, callRaw, decide, fnCall, txUrl, view } from "./lib.mjs";
+import { DEPLOYMENT, LOCAL_DEPLOYMENT, NEAR, ROOT, account, callRaw, decide, fnCall, sha256, txUrl, view } from "./lib.mjs";
 
 const dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8"));
 const sis = JSON.parse(fs.readFileSync(LOCAL_DEPLOYMENT, "utf8"));
@@ -61,7 +66,8 @@ if (run("poll")) {
     options: ["keep the current model", "switch to a larger one"], kind: "Technical", hours: 1 }, { deposit: 10n ** 22n, tgas: 50 });
   const pid = ret(r);
   const votes = [];
-  for (const [v, o] of [[voters[0], 1], [voters[1], 0], [voters[2], 1]]) {
+  for (const [i, o] of [[0, 1], [1, 0], [2, 1]]) {
+    const v = voters[i];
     const x = await callRaw(v, K, "vote_poll", { id: pid, option: o }, { tgas: 150 });
     votes.push({ by: v.accountId, option: o, weight: ret(x), tx: x.transaction.hash });
   }
@@ -83,4 +89,60 @@ if (run("lend")) {
   const loans = await view(K, "get_sister_loans");
   console.log(`DAO #${id}: ${JSON.stringify(loans.at(-1))}; risk fund now ${JSON.stringify(await view(K, "get_risk_fund"))}`);
   saved({ loan: { proposal: id, ...loans.at(-1) } });
+}
+
+if (run("repay")) {
+  const id = dep.v036.loan.id;
+  const usdc = (await view(K, "get_info")).usdc_id;
+  const owed = await view(K, "get_sister_loans").then((ls) => ls.find((l) => l.id === id));
+  const amount = String(BigInt(owed.amount) - BigInt(owed.repaid));
+  const sv = [`kop-bob-${sis.tag}.testnet`, sis.steward].map(account);
+  const { id: pid } = await decide(sv[0], sv, sis.dao, `Repay loan #${id} from ${K}: ${Number(amount) / 1e6} USDC back into its risk fund`,
+    fnCall(usdc, "ft_transfer_call", { receiver_id: K, amount, msg: `sister_repay:${id}` }, { deposit: "1", tgas: 100 }));
+  const l = (await view(K, "get_sister_loans")).find((x) => x.id === id);
+  console.log(`${sis.dao} #${pid}: ${JSON.stringify(l)}; risk fund now ${JSON.stringify(await view(K, "get_risk_fund"))}`);
+  saved({ repay: { dao: sis.dao, proposal: pid, loan: id, amount, status: l.status, repaid: l.repaid } });
+}
+
+if (run("recover")) {
+  const BUYER = "kop-publisher-mw5tkpfo.testnet", B = voters[1];
+  const agent = account(dep.agent), hash = (await view(K, "get_info")).config.hash;
+  const cases = [];
+  while (!(await view(K, "get_agent_standing")).suspended) {
+    // ponytail: demo jobs priced 0.000001 USDC: the strike is real, the refund (and the steward's owed balance) a micro-USDC
+    const job = `demo-strike-${Date.now().toString(36)}`;
+    await callRaw(agent, K, "record_receipt", { job_id: job, price: "1", inference_cost: "0", config_hash: hash, deliverable_hash: "0".repeat(64), proof: null }, { tgas: 30 });
+    await callRaw(agent, K, "update_receipt", { job_id: job, status: "Disputed" }, { tgas: 30 });
+    await callRaw(agent, K, "update_receipt", { job_id: job, status: "Paid" }, { tgas: 30 });
+    const o = await callRaw(B, K, "open_case", { job_id: job, refund_to: BUYER, amount: "1",
+      reason: "Demo of the recovery path: the buyer disputed the job, the market paid the agent; the court refunds a micro-USDC" }, { deposit: NEAR / 2n, tgas: 30 });
+    const id = ret(o);
+    const c = (await view(K, "get_cases", { from: id, limit: 1 }))[0];
+    const rulings = [];
+    for (const j of c.jurors) {
+      if ((await view(K, "get_cases", { from: id, limit: 1 }))[0].status !== "Open") break;
+      rulings.push((await callRaw(account(j), K, "rule_case", { id, uphold: true }, { tgas: 300 })).transaction.hash);
+    }
+    const s = await view(K, "get_agent_standing");
+    console.log(`case #${id} (${job}) upheld: ${txUrl(o.transaction.hash)}; live strikes ${s.strikes.length}, suspended ${s.suspended}`);
+    cases.push({ id, job, open_tx: o.transaction.hash, rulings });
+  }
+  const standing = await view(K, "get_agent_standing");
+  if (cases.length) saved({ recovery: { ...dep.v036.recovery, cases, strikes: standing.strikes.map(([c]) => c) } });
+  const plan = path.join(ROOT, "web/rat/recovery-plan.md");
+  if (!fs.existsSync(plan)) {
+    console.log(`suspended (strikes ${standing.strikes.map(([c]) => `#${c}`).join(", ")}); write ${plan} and run again`);
+    process.exit(0);
+  }
+  const plan_sha256 = sha256(fs.readFileSync(plan));
+  const p = await callRaw(account(dep.steward), K, "propose_recovery", { plan_uri: "rat/recovery-plan.md", plan_sha256 }, { tgas: 30 });
+  console.log(`the steward filed the plan (sha256 ${plan_sha256}): ${txUrl(p.transaction.hash)}`);
+  const { id } = await decide(voters[0], voters, D, `Approve the agent's recovery plan rat/recovery-plan.md (sha256 ${plan_sha256}): reinstate it, standing ramps from 25% back to 100%`,
+    fnCall(K, "approve_recovery", { plan_sha256 }, { tgas: 30 }));
+  const [rec, ramp_bps] = await view(K, "get_recovery");
+  const m = await view(K, "get_agent_member");
+  console.log(`DAO #${id} approved: ramp ${ramp_bps} bps over ${rec.ramp_days} days; agent standing ${m.standing_bps} bps, strikes ${m.strikes}, suspended ${m.suspended}`);
+  const now = JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8")).v036.recovery;
+  saved({ recovery: { ...now, plan: rec.plan_uri, plan_sha256, propose_tx: p.transaction.hash, proposal: id,
+    approved_at: rec.approved_at, ramp_days: rec.ramp_days, ramp_bps, standing_bps: m.standing_bps } });
 }

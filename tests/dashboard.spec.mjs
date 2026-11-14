@@ -110,7 +110,8 @@ test("My history shows a previewed member's votes, pledges and court record", as
   await expect(box.locator(".timeline li").first()).toContainText(/You voted|You pledged|Juror on case|You called in|You brought/);
   await expect(page.locator("#notify")).toContainText("Notify me");
   await expect(page.locator('#notify a[href^="/api/inbox?who="]')).toHaveAttribute("href", `/api/inbox?who=${encodeURIComponent(BOB)}`);
-  await expect(page.locator('#notify a[href^="https://ntfy.sh/"]')).toHaveAttribute("href", /^https:\/\/ntfy\.sh\/koperasi-[0-9a-f]{16}$/);
+  // the push topic is private now: no ntfy link until the member signs for it (api/notify-topic.mjs)
+  await expect(page.locator('#notify a[href^="https://ntfy.sh/koperasi-"]')).toHaveCount(0);
 });
 
 test("try it in 60 seconds: the overview's three steps and the landing page's link", async ({ page }) => {
