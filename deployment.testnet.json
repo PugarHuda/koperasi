@@ -991,5 +991,35 @@
       "why": "it read the stand-in market as an outside market, took the TEE worker for itself, and called its scaled share a fee"
     },
     "note": "accepted with one slip: its section 6 speaks of lower prices and narrowed tags, which v10 reverted"
+  },
+  "v035": {
+    "referral": {
+      "id": 0,
+      "job": "demo-c7a66c9f-f86c-42a0-a523-bad931297a23",
+      "to_coop": "koperasi-mw80aczw.testnet",
+      "tx": "DFat36nmPeo23uqDJFU3mso3hPtZtZhAvLyJpd7wA4kg",
+      "relayer": "kop-relayer-mw4i2iwk.testnet"
+    },
+    "quality": {
+      "account": "kop-bob-mw4i3w8f.testnet",
+      "task": 17,
+      "tx": "9Ep3tNjv6Lf5hABdRXFsYHtuw7UrSSBFNXNzEEaxm3RU",
+      "before": {
+        "q": {
+          "paid": 0,
+          "handed_back": 0,
+          "vetoed": 0
+        },
+        "w": "275"
+      },
+      "after": {
+        "q": {
+          "paid": 0,
+          "handed_back": 1,
+          "vetoed": 0
+        },
+        "w": "220"
+      }
+    }
   }
 }

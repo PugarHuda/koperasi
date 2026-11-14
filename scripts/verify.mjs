@@ -618,6 +618,23 @@ if (d.agentReview) {
     `#${a.proposal} ${ok.status} (report ${sha256(report).slice(0, 12)}…, facts ${sha256(facts).slice(0, 12)}…); #${a.rejected.proposal} ${no.status}: ${a.rejected.why}`);
 }
 
+// contract 0.3.5 (scripts/v035.mjs): the agent's referral on the co-op's board, and a hand-back counted against the member
+if (d.v035?.referral) {
+  const r = d.v035.referral;
+  const [list, sisters] = await Promise.all([view(d.contract, "get_referrals", {}), view(d.contract, "get_sister_coops")]);
+  const on = list.find((x) => x.id === r.id);
+  check(on?.job_id === r.job && on.to_coop === r.to_coop && sisters.includes(r.to_coop),
+    "the agent's referral of a job to a sister co-op is on the co-op's board, signed by the agent and checked by the contract",
+    `referral #${r.id}: ${r.job.slice(0, 14)}… to ${r.to_coop}, submitted by ${r.relayer} (tx ${r.tx.slice(0, 10)}…)`);
+}
+if (d.v035?.quality) {
+  const q = d.v035.quality;
+  const now = await view(d.contract, "get_task_quality", { account_id: q.account });
+  check(now.handed_back >= 1 && Number(q.after.w) < Number(q.before.w),
+    "task quality counts in the reputation weight: a member who handed back a task he took weighs less",
+    `${q.account} handed back task #${q.task}: quality ${JSON.stringify(now)}; weight ${q.before.w} → ${q.after.w}`);
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {
