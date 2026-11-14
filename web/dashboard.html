@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard · Koperasi</title>
+  <meta name="description" content="The Koperasi member dashboard: the co-op, your membership, open votes, the agent, the money, the commons and the federation, read live from NEAR testnet." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="dashboard.css" />
+  <link rel="modulepreload" href="near.js" />
+  <link rel="modulepreload" href="share.js" />
+  <script type="module" src="dashboard.js"></script>
+</head>
+<body class="dash">
+  <a class="skip" href="#main">Skip to the content</a>
+  <aside class="side" aria-label="Dashboard">
+    <div class="side-head">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Koperasi</a>
+      <button type="button" class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="side-nav">Menu</button>
+    </div>
+    <nav id="side-nav" aria-label="Views">
+      <a href="#/overview" data-id="Ringkasan">Overview</a>
+      <a href="#/membership" data-id="Keanggotaan saya">My membership</a>
+      <a href="#/proposals" data-id="Usulan">Proposals</a>
+      <a href="#/agent" data-id="Agen">The agent</a>
+      <a href="#/money" data-id="Uang">Money</a>
+      <a href="#/commons" data-id="Bersama">Commons</a>
+      <a href="#/federation" data-id="Federasi">Federation</a>
+      <a href="#/verify" data-id="Periksa">Verify</a>
+    </nav>
+    <div class="top-actions side-foot">
+      <a href="/" data-id="Halaman utama">Landing page</a>
+    </div>
+  </aside>
+
+  <main id="main">
+    <p class="who" id="who" aria-live="polite"></p>
+
+    <section id="v-overview" class="view" aria-labelledby="h-overview">
+      <h1 id="h-overview" tabindex="-1" data-id="Ringkasan">Overview</h1>
+      <p class="lead" id="net">Reading NEAR…</p>
+      <dl class="kpis" id="kpis"></dl>
+      <div class="pane" id="recent"><h2 data-id="Terbaru">Recent on-chain</h2><div class="out"></div></div>
+    </section>
+
+    <section id="v-membership" class="view" aria-labelledby="h-membership" hidden>
+      <h1 id="h-membership" tabindex="-1" data-id="Keanggotaan saya">My membership</h1>
+      <ol class="steps" id="join-steps">
+        <li><b>Connect a NEAR testnet wallet</b> (Meteor, Intear, Nightly…). Meteor makes a free testnet account.</li>
+        <li><b>Pay the join deposit</b>, refunded if you leave or the members say no.</li>
+        <li><b>Ask the members</b>: a DAO proposal from your own wallet.</li>
+        <li><b>The members vote</b>, one member one vote; then <b>sync</b> your membership.</li>
+      </ol>
+      <div class="joinapp" id="joinapp" aria-live="polite"><p class="muted">Loading the wallet panel…</p></div>
+    </section>
+
+    <section id="v-proposals" class="view" aria-labelledby="h-proposals" hidden>
+      <h1 id="h-proposals" tabindex="-1" data-id="Usulan">Proposals</h1>
+      <p class="lead">Open DAO proposals: what each one does, read from its kind; the proposer's words apart. Members vote here with their wallet.</p>
+      <p class="note-line" id="vote-note" hidden aria-live="polite"></p>
+      <ul class="props" id="props"></ul>
+    </section>
+
+    <section id="v-agent" class="view" aria-labelledby="h-agent" hidden>
+      <h1 id="h-agent" tabindex="-1" data-id="Agen">The agent</h1>
+      <div class="pane" id="a-bylaws"><h2>By-laws</h2><div class="out"></div></div>
+      <div class="pane" id="a-tee"><h2>The Shade Agent</h2><div class="out"></div></div>
+      <div class="pane" id="a-props"><h2>Its proposals</h2><div class="out"></div></div>
+      <div class="pane" id="a-risk"><h2>Its share and the risk fund</h2><div class="out"></div></div>
+      <div class="pane" id="a-receipts"><h2>Receipts</h2><div class="out"></div></div>
+    </section>
+
+    <section id="v-money" class="view" aria-labelledby="h-money" hidden>
+      <h1 id="h-money" tabindex="-1" data-id="Uang">Money</h1>
+      <div class="pane" id="m-treasury"><h2>Treasury and audit</h2><div class="out"></div></div>
+      <div class="pane" id="m-periods"><h2>Profit shares</h2><div class="out"></div></div>
+      <div class="pane" id="m-rep"><h2>Reputation weights</h2><div class="out"></div></div>
+      <div class="pane" id="m-loans"><h2>Loans</h2><div class="out"></div></div>
+    </section>
+
+    <section id="v-commons" class="view" aria-labelledby="h-commons" hidden>
+      <h1 id="h-commons" tabindex="-1" data-id="Bersama">Commons</h1>
+      <div class="pane" id="c-cases"><h2>Court cases</h2><div class="out"></div></div>
+      <div class="pane" id="c-pledges"><h2>Pledges</h2><div class="out"></div></div>
+      <div class="pane" id="c-standing"><h2>Standing</h2><div class="out"></div></div>
+    </section>
+
+    <section id="v-federation" class="view" aria-labelledby="h-federation" hidden>
+      <h1 id="h-federation" tabindex="-1" data-id="Federasi">Federation</h1>
+      <div class="pane" id="f-fed"><h2>The federation</h2><div class="out"></div></div>
+      <div class="pane" id="f-trades"><h2>Work passed between co-ops</h2><div class="out"></div></div>
+    </section>
+
+    <section id="v-verify" class="view" aria-labelledby="h-verify" hidden>
+      <h1 id="h-verify" tabindex="-1" data-id="Periksa">Verify</h1>
+      <p class="lead">Don't trust this page: your browser checks against NEAR. The full checks (the TEE with your own nonce, every payment) are on
+        <a href="/#checks">the landing page</a>; the method is in <a href="https://github.com/PugarHuda/koperasi/blob/main/JUDGE.md">JUDGE.md</a>.</p>
+      <ul class="checklist">
+        <li id="k-bylaws"><b>It runs only what the members voted</b><div class="out">Checking…</div></li>
+        <li id="k-code"><b>Nobody changes the rules alone</b><div class="out">Checking…</div></li>
+        <li id="k-attacks"><b>Attacks on the co-op failed on-chain</b><div class="out"></div></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
