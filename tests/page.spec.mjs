@@ -309,3 +309,31 @@ test("the wallet panel follows the language switch", async ({ page }, testInfo) 
   await expect(panel.locator("#w-join")).toHaveText(/Pay 0\.5 NEAR/);
   expect(errors).toEqual([]);
 });
+
+test("the docs page loads, its contents link to its sections, and it reads in Bahasa Indonesia", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => { if (!network(e.message)) errors.push(e.message); });
+  page.on("console", (m) => { if (m.type() === "error" && !network(m.text())) errors.push(m.text()); });
+  const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/docs.html");
+  // innerText: what shows (each heading holds both languages; CSS shows one, in capitals)
+  await expect(page.locator("#how")).toHaveText(/^How it works$/i, { useInnerText: true });
+  const hrefs = await page.locator(".toc a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
+  expect(hrefs).toHaveLength(8);
+  for (const href of hrefs) expect(await page.locator(href).count(), href).toBe(1);
+  // folded on a phone; one tap opens it
+  await expect(page.locator(".toc a").first()).toBeHidden();
+  await page.locator(".toc summary").click();
+  await expect(page.locator(".toc a").first()).toBeVisible();
+  expect(await overflow()).toBeLessThanOrEqual(0);
+  await page.getByRole("button", { name: /Bahasa Indonesia/ }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "id");
+  await expect(page.locator("#how")).toHaveText(/^Cara kerjanya$/i, { useInnerText: true });
+  await expect(page.locator("#glossary")).toHaveText(/^Istilah$/i, { useInnerText: true });
+  await expect(page.locator(".flow text", { hasText: "Pekerjaan masuk" })).toBeVisible();
+  expect(await overflow()).toBeLessThanOrEqual(0);
+  await page.getByRole("button", { name: /English/ }).click();
+  await expect(page.locator("#how")).toHaveText(/^How it works$/i, { useInnerText: true });
+  expect(errors).toEqual([]);
+});

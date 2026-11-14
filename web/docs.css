@@ -1,0 +1,69 @@
+/* docs.html: the documentation page. Builds on style.css; light and dark by the visitor's setting.
+   Language: each sentence is written twice, <… lang="en"> and <… lang="id">; lang.js sets <html lang>, CSS shows one. */
+:root { --card: #fff; --soft: #f1f4ff; --link: var(--blue); }
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #0b0d17; --ink: #e8e9f0; --muted: #a9adbf; --grey: #9a9eb0; --rule: #262a3d; --card: #12152a; --soft: #161b38; --link: #9fb6ff; }
+  code { background: #1d2140; }
+}
+html[lang="id"] body [lang="en"], html:not([lang="id"]) body [lang="id"] { display: none; }
+
+.docs-hero { padding: 8rem clamp(1.2rem, 4vw, 3rem) 3.5rem; }
+.docs-hero h1 { margin: 0 0 1rem; font: 700 clamp(2.6rem, 7vw, 5rem)/.92 var(--display); text-transform: uppercase; }
+.docs-hero .sub { max-width: 40rem; margin: 0; }
+
+.docs-wrap { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: clamp(2rem, 4vw, 4rem); max-width: 78rem; margin: 0 auto;
+  padding: 3rem clamp(1rem, 4vw, 3rem) 5rem; }
+.toc { position: sticky; top: 1.5rem; align-self: start; max-height: calc(100vh - 3rem); overflow-y: auto; font-size: .92rem; }
+.toc summary { display: none; }
+.toc ol { margin: 0; padding: 0; list-style: none; counter-reset: toc; border-left: 2px solid var(--rule); }
+.toc li { counter-increment: toc; }
+.docs .toc a { display: block; padding: .35rem 0 .35rem .9rem; text-decoration: none; color: var(--muted); }
+.toc a::before { content: counter(toc) ". "; }
+.toc a:hover { color: var(--blue-hi); }
+
+.docs article { min-width: 0; max-width: 48rem; }
+.docs article > section { padding-bottom: 2.5rem; margin-bottom: 2.5rem; border-bottom: 1px solid var(--rule); }
+.docs article > section:last-child { border-bottom: 0; }
+.docs h2 { font-size: clamp(2rem, 4.5vw, 3.2rem); margin-bottom: 1.2rem; scroll-margin-top: 1rem; }
+.docs h3 { margin: 1.8rem 0 .5rem; font: 700 1.35rem/1.1 var(--display); text-transform: uppercase; }
+.docs p, .docs li, .docs dd { overflow-wrap: anywhere; }
+.docs a { color: var(--link); }
+.docs pre { margin: .6rem 0 1rem; padding: .8rem 1rem; background: var(--soft); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; }
+.docs pre code { background: none; padding: 0; }
+
+/* the flow: a picture beside the same steps as a list */
+.flow-wrap { display: grid; grid-template-columns: minmax(0, 19rem) minmax(0, 1fr); gap: 2rem; align-items: start; }
+.flow { width: 100%; height: auto; color: var(--ink); }
+.flow rect { fill: var(--card); stroke: var(--blue-hi); stroke-width: 1.5; }
+.flow .court rect { stroke: var(--red); stroke-dasharray: 5 4; }
+.flow .t { font: 600 15px var(--body); fill: currentColor; }
+.flow .s { font: 400 11.5px var(--body); fill: var(--muted); }
+.flow .n { font: 700 13px var(--body); fill: #fff; }
+.flow circle { fill: var(--blue); }
+.flow path { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.flow .head { fill: var(--muted); stroke: none; }
+.steps-ol li { margin-bottom: .8rem; }
+
+.roles { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); margin: 0; }
+.roles > div { padding: 1.1rem 1.2rem; background: var(--card); border: 1px solid var(--rule); box-shadow: inset 4px 0 0 var(--blue); }
+.roles dt { font: 700 1.25rem/1.1 var(--display); text-transform: uppercase; margin-bottom: .5rem; }
+.roles dd { margin: 0; font-size: .93rem; color: var(--muted); }
+
+.gloss { margin: 0; }
+.gloss > div { padding: .7rem 0; border-top: 1px solid var(--rule); }
+.gloss dt { font-weight: 600; }
+.gloss dt i { font-weight: 400; color: var(--muted); }
+.gloss dd { margin: .2rem 0 0; color: var(--muted); font-size: .93rem; }
+
+.links { padding-left: 1.2rem; }
+
+@media (max-width: 900px) {
+  .docs-wrap { grid-template-columns: minmax(0, 1fr); padding-top: 1.5rem; }
+  .toc { position: static; max-height: none; padding: .8rem 1rem; background: var(--card); border: 1px solid var(--rule); }
+  .toc summary { display: list-item; cursor: pointer; font-weight: 600; }
+  .toc[open] summary { margin-bottom: .6rem; }
+}
+@media (max-width: 700px) {
+  .flow-wrap { grid-template-columns: minmax(0, 1fr); }
+  .flow { max-width: 22rem; margin: 0 auto; }
+}
