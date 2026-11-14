@@ -48,6 +48,11 @@ pub const APPEAL_BOND: NearToken = NearToken::from_near(1);
 /// After the jury's 3 days, the claimant has this long to appeal a dismissed case.
 const APPEAL_DAYS_NS: u64 = 7 * DAY_NS;
 const GAS_FILED: Gas = Gas::from_tgas(80);
+/// 0.3.7: whether jurors are drawn in proportion to their reputation weight (DAO-set; off by default).
+const KEY_JURY_BY_REPUTATION: &[u8] = b"jury_by_reputation";
+/// Weight given in a reputation draw to an eligible member whose reputation weight is 0, so nobody is excluded: a
+/// tenth of a member with one counted contribution and a neutral court record (weight 100).
+pub const JURY_WEIGHT_FLOOR: u128 = 10;
 
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -318,9 +323,21 @@ impl Koperasi {
         // ponytail: the block's random seed; a validator could bias it, a commit-reveal draw would not let them
         let seed = env::random_seed();
         let mut jurors = Vec::with_capacity(JURORS);
-        for k in 0..JURORS {
-            let x = u32::from_le_bytes(seed[4 * k..4 * k + 4].try_into().unwrap()) as usize % pool.len();
-            jurors.push(pool.swap_remove(x));
+        if load::<bool>(KEY_JURY_BY_REPUTATION).unwrap_or(false) {
+            // 0.3.7: drawn in proportion to reputation weight (at least the floor), without replacement
+            let rep: std::collections::HashMap<AccountId, u128> = self.reputation_weights(false).into_iter().collect();
+            let mut w: Vec<u128> = pool.iter().map(|m| rep.get(m).copied().unwrap_or(0).max(JURY_WEIGHT_FLOOR)).collect();
+            for k in 0..JURORS {
+                let mut x = u64::from_le_bytes(seed[8 * k..8 * k + 8].try_into().unwrap()) as u128 % w.iter().sum::<u128>();
+                let i = w.iter().position(|v| if x < *v { true } else { x -= *v; false }).unwrap();
+                jurors.push(pool.swap_remove(i));
+                w.swap_remove(i);
+            }
+        } else {
+            for k in 0..JURORS {
+                let x = u32::from_le_bytes(seed[4 * k..4 * k + 4].try_into().unwrap()) as usize % pool.len();
+                jurors.push(pool.swap_remove(x));
+            }
         }
         let id = next(KEY_CASES);
         env::storage_write(&job_case_key(&job_id), &[0]);
@@ -539,6 +556,17 @@ impl Koperasi {
     }
 
     /// The appeal of a case, if there was one.
+    /// DAO only: draw jurors in proportion to their reputation weight (`true`) or uniformly (`false`, the default).
+    pub fn set_jury_by_reputation(&mut self, on: bool) {
+        self.assert_dao();
+        save(KEY_JURY_BY_REPUTATION, &on);
+        Event::JuryModeSet { by_reputation: on }.emit();
+    }
+
+    pub fn get_jury_by_reputation(&self) -> bool {
+        load(KEY_JURY_BY_REPUTATION).unwrap_or(false)
+    }
+
     pub fn get_appeal(&self, id: u32) -> Option<Appeal> {
         load(&appeal_key(id))
     }
