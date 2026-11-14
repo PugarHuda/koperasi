@@ -456,9 +456,12 @@ const qualityExample = (a) => {
 
 async function commons() {
   pane("c-cases", async () => {
-    const cases = await all(C, "get_cases");
+    const [cases, byRep] = await Promise.all([all(C, "get_cases"), view(C, "get_jury_by_reputation").catch(() => null)]);
+    const jury = byRep === null ? "" : `<p class="small" id="c-jury">${byRep
+      ? t("Juries are drawn by reputation (square-root weighted, so no one member can capture a jury), by the members' choice.", "Juri diundi menurut reputasi (dibobot akar kuadrat, agar tak satu anggota pun bisa menguasai juri), atas pilihan anggota.")
+      : t("Juries are drawn uniformly from the members in good standing.", "Juri diundi merata dari anggota berstatus baik.")}</p>`;
     const OUT = { Open: t("jury out", "juri bersidang"), Upheld: t("upheld: refunded", "dikabulkan: dikembalikan"), Dismissed: t("not upheld", "tidak dikabulkan") };
-    return table([t("Case", "Perkara"), t("Refund", "Ganti rugi"), t("Jurors", "Juri"), t("Outcome", "Putusan")], [...cases].reverse().map((c) => `<tr><td><strong>#${esc(c.id)}</strong> ${t("job", "pekerjaan")} ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, ${t("brought by", "diajukan oleh")} ${esc(c.claimant)}</span></td>
+    return jury + table([t("Case", "Perkara"), t("Refund", "Ganti rugi"), t("Jurors", "Juri"), t("Outcome", "Putusan")], [...cases].reverse().map((c) => `<tr><td><strong>#${esc(c.id)}</strong> ${t("job", "pekerjaan")} ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, ${t("brought by", "diajukan oleh")} ${esc(c.claimant)}</span></td>
       <td class="num" data-label="${t("Refund", "Ganti rugi")}">${usdc(c.amount)} USDC</td>
       <td data-label="${t("Jurors", "Juri")}">${c.jurors.map((j) => { const v = c.votes.find(([x]) => x === j); return `${esc(j)}: ${v ? (v[1] ? t("uphold", "kabulkan") : t("reject", "tolak")) : "–"}`; }).join("<br>")}</td>
       <td data-label="${t("Outcome", "Putusan")}">${OUT[c.status] ?? esc(c.status)}${c.refund_proposal !== null ? `; ${t("DAO proposal", "usulan DAO")} #${esc(c.refund_proposal)}` : ""}</td></tr>`));
@@ -494,7 +497,18 @@ async function commons() {
   });
   // 0.3.6 polls: a non-binding vote of the members; technical questions weigh reputation if the members chose so (DAO #145)
   pane("c-polls", async () => {
-    const [polls, mode] = await Promise.all([view(C, "get_polls", {}), view(C, "get_technical_vote_mode")]);
+    const [list, mode] = await Promise.all([view(C, "get_polls", {}), view(C, "get_technical_vote_mode")]);
+    // 0.3.7: get_poll adds each option's by-laws and the DAO proposal a winning one became (get_polls carries neither)
+    const polls = await Promise.all(list.map((p) => view(C, "get_poll", { id: p.id }).then((x) => x ?? { ...p, proposal: null })));
+    const props = new Map(await Promise.all(polls.filter((p) => p.proposal !== null)
+      .map((p) => view(D, "get_proposal", { id: Number(p.proposal) }).then((d) => [p.id, d], () => [p.id, null]))));
+    const ref = (b) => (b ? ` <span class="muted">(${t("by-laws", "anggaran dasar")} v${esc(b.version)}, <code>${esc(short(b.hash))}</code>${
+      byLawsPath(b.uri) ? `, <a href="${esc(RAW + b.uri)}">${esc(b.uri)}</a>` : ""})</span>` : "");
+    const filed = (p) => {
+      if (p.proposal === null) return "";
+      const d = props.get(p.id);
+      return `<span class="claim">${t(`Its winning by-laws became DAO proposal #${esc(p.proposal)}`, `Anggaran dasar pemenangnya menjadi usulan DAO #${esc(p.proposal)}`)}${d ? ` (${esc(word(d.status))})` : ""}.</span>`;
+    };
     const rep = mode === "reputation";
     const modeProp = dep.v036?.mode?.proposal;
     const weighs = (m) => (m === "reputation" ? t("by reputation weight", "menurut bobot reputasi") : t("one member, one vote", "satu anggota satu suara"));
@@ -511,9 +525,9 @@ async function commons() {
       ${t("The weights are the ones in the task-quality table above. A poll binds nothing; the DAO may pass its result as a proposal.", "Bobotnya adalah yang ada di tabel kualitas tugas di atas. Jajak pendapat tidak mengikat; DAO boleh meloloskan hasilnya sebagai usulan.")}</p>
       ${table([t("Poll", "Jajak pendapat"), t("Options and tallies", "Pilihan dan hitungan"), t("Counted", "Dihitung"), "Status"], [...polls].reverse().map((p) => `<tr>
         <td><strong>#${esc(p.id)}</strong> ${esc(p.question)}<span class="claim">${esc(word(p.kind))}, ${t("opened by", "dibuka oleh")} ${esc(p.by)}</span></td>
-        <td data-label="${t("Options and tallies", "Pilihan dan hitungan")}">${p.options.map((o, i) => `${esc(o)}: <strong>${esc(p.tallies[i])}</strong>`).join("<br>")}</td>
+        <td data-label="${t("Options and tallies", "Pilihan dan hitungan")}">${p.options.map((o, i) => `${esc(o)}: <strong>${esc(p.tallies[i])}</strong>${ref(p.bylaws?.[i])}`).join("<br>")}</td>
         <td data-label="${t("Counted", "Dihitung")}">${weighs(p.mode)}; ${plural(p.voters.length, "voter", "pemilih")}</td>
-        <td data-label="Status">${state(p)}</td></tr>`))}`;
+        <td data-label="Status">${state(p)}${filed(p)}</td></tr>`))}`;
   });
   pane("c-standing", async () => {
     const members = await view(C, "get_members", { from: 0, limit: 200 });
@@ -570,7 +584,15 @@ async function federation() {
   } else $("f-accepted").hidden = true;
   // 0.3.6: loans to a sister co-op, paid to the treasury its members name (its DAO), never to its contract
   pane("f-loans", async () => {
-    const loans = await view(C, "get_sister_loans");
+    const [loans, interest, sisters] = await Promise.all([view(C, "get_sister_loans"), view(C, "get_sister_interest"), view(C, "get_sister_coops")]);
+    // 0.3.7: interest on each loan, paid into the surplus; the loans the agent asked the members for, one per sister
+    const owe = new Map(interest.map(([id, due, paid]) => [Number(id), [due, paid]]));
+    const asks = (await Promise.all(sisters.map((s) => view(C, "get_loan_suggestion", { coop: s })))).filter(Boolean);
+    const asked = asks.length ? `<ul class="tiers" id="f-asks">${asks.map((a) => `<li><b>${a.proposal !== null
+      ? t(`The agent asked for this loan: DAO proposal #${esc(a.proposal)}`, `Agen meminta pinjaman ini: usulan DAO #${esc(a.proposal)}`)
+      : t("The agent asked for this loan: not filed with the DAO yet", "Agen meminta pinjaman ini: belum diajukan ke DAO")}</b>
+      <span>${usdc(a.amount)} USDC ${t("to", "ke")} <a href="${explorer(a.coop)}">${esc(a.coop)}</a> ${t(`for ${esc(a.days)} days at ${a.interest_bps / 100}%`, `selama ${esc(a.days)} hari dengan bunga ${a.interest_bps / 100}%`)}, ${date(a.at)}; ${t("reason", "alasan")}: “${esc(oneLine(a.reason, 280))}”</span></li>`).join("")}</ul>`
+      : `<p class="small" id="f-asks">${t("Loans the agent asked the members for: none yet.", "Pinjaman yang diminta agen kepada anggota: belum ada.")}</p>`;
     const ok = dep.v036?.loan;
     const failed = dep.v036?.loan_failed;
     const why = (l) => {
@@ -580,11 +602,13 @@ async function federation() {
     };
     return `<p class="small">${t("The members lend USDC from the risk fund to a sister co-op by a DAO vote; the money goes to the treasury the sister's members name (its DAO), which can spend it and pay it back.",
       "Anggota meminjamkan USDC dari dana risiko ke koperasi saudara lewat pemungutan suara DAO; uangnya masuk ke kas yang ditunjuk anggota koperasi saudara (DAO-nya), yang bisa membelanjakan dan mengembalikannya.")}</p>
-      ${table(["#", t("Sister co-op", "Koperasi saudara"), t("Paid to", "Dibayar ke"), t("Amount / repaid", "Jumlah / dibayar kembali"), t("Due", "Jatuh tempo"), "Status"], [...loans].reverse().map((l) => `<tr>
+      ${asked}
+      ${table(["#", t("Sister co-op", "Koperasi saudara"), t("Paid to", "Dibayar ke"), t("Amount / repaid", "Jumlah / dibayar kembali"), t("Interest due / paid", "Bunga terutang / dibayar"), t("Due", "Jatuh tempo"), "Status"], [...loans].reverse().map((l) => `<tr>
         <td><strong>#${esc(l.id)}</strong> <span class="muted">${date(l.lent_at)}</span></td>
         <td data-label="${t("Sister co-op", "Koperasi saudara")}"><a href="${explorer(l.coop)}">${esc(l.coop)}</a></td>
         <td data-label="${t("Paid to", "Dibayar ke")}"><a href="${explorer(l.paid_to)}">${esc(l.paid_to)}</a> <span class="muted">(${t("its DAO treasury", "kas DAO-nya")})</span></td>
         <td class="num" data-label="${t("Amount / repaid", "Jumlah / dibayar kembali")}">${usdc(l.amount)} / ${usdc(l.repaid)} USDC</td>
+        <td class="num" data-label="${t("Interest due / paid", "Bunga terutang / dibayar")}">${owe.has(Number(l.id)) ? `${owe.get(Number(l.id)).map(usdc).join(" / ")} USDC` : "–"}</td>
         <td data-label="${t("Due", "Jatuh tempo")}">${date(l.due)}</td>
         <td data-label="Status"><span class="badge ${esc(l.status)}">${esc(word(l.status))}</span>${l.was_late && l.status !== "Late" ? ` <span class="muted">(${t("was late", "pernah terlambat")})</span>` : ""}${why(l) && `<span class="claim">${why(l)}</span>`}</td></tr>`))}`;
   });

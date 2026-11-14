@@ -179,6 +179,29 @@ test("0.3.6: the agent report shows its recovery record and the ramp", async ({ 
   await expect(r).toContainText(/from 25% back to all of it over \d+ days/);
 });
 
+// 0.3.7 data may be filed on-chain any time: each check holds whether it exists yet or not
+test("0.3.7: polls' by-laws and DAO proposals, and how juries are drawn, in Commons", async ({ page }) => {
+  await page.goto("/dashboard.html#/commons");
+  await expect(page.locator("#c-jury")).toContainText(/Juries are drawn (by reputation \(square-root weighted, so no one member can capture a jury\)|uniformly)/);
+  const polls = page.locator("#c-polls");
+  await expect(polls.locator("tbody tr").first()).toBeVisible();
+  for (const row of await polls.locator("tbody tr").all()) {
+    const text = await row.innerText();
+    if (text.includes("by-laws v")) expect(text).toMatch(/by-laws v\d+, [0-9a-f]{10}…/);
+    if (text.includes("became DAO proposal")) expect(text).toMatch(/Its winning by-laws became DAO proposal #\d+( \(\w+\))?\./);
+  }
+});
+
+test("0.3.7: interest on loans between co-ops, and the loans the agent asked for", async ({ page }) => {
+  await page.goto("/dashboard.html#/federation");
+  const loans = page.locator("#f-loans");
+  await expect(loans.locator("thead")).toContainText("Interest due / paid");
+  await expect(loans.locator("tbody tr").first()).toContainText(/\d+\.\d\d \/ \d+\.\d\d USDC[\s\S]*\d+\.\d\d \/ \d+\.\d\d USDC/);
+  const asks = page.locator("#f-asks");
+  await expect(asks).toContainText(/none yet|The agent asked for this loan: (DAO proposal #\d+|not filed with the DAO yet)/);
+  for (const li of await asks.locator("li").all()) await expect(li).toContainText(/USDC to \S+ for \d+ days at [\d.]+%.*; reason: “/);
+});
+
 test("join from zero: a visitor sees each step with what the chain asks for, and a wallet button", async ({ page }) => {
   await page.goto("/dashboard.html#/membership");
   const steps = page.locator("#join-steps");
