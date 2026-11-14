@@ -175,6 +175,11 @@ test("a member sets where payouts land, sees the work-record token and the Ether
 test("deep links land on their section, and back/forward move between them", async ({ page }) => {
   await page.goto("/#audit");
   await expect(page.locator("#audit")).toBeInViewport();
+  // the page keeps only the first deep link in place while the chain data fills the sections above it; a later link
+  // would be pushed away by sections still loading, so follow it once the page has stopped growing
+  const height = () => page.evaluate(() => document.body.scrollHeight);
+  await expect.poll(async () => { const h = await height(); await page.waitForTimeout(1500); return h === await height(); },
+    { timeout: 60_000 }).toBe(true);
   // like following an in-page link (the section nav is hidden on narrow screens)
   await page.evaluate(() => { location.hash = "#shares"; });
   await expect(page).toHaveURL(/#shares$/);
