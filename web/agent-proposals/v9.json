@@ -1,0 +1,28 @@
+{
+  "version": 9,
+  "changes": {
+    "bid.price_usdc": 3,
+    "job_filter.min_price_usdc": 2,
+    "job_filter.tags_any": [
+      "research",
+      "translation",
+      "writing",
+      "web3"
+    ]
+  },
+  "dropped": [],
+  "evaluation": "The current by-laws have attracted only 4 jobs in their short active period, which is too few to conclusively evaluate.",
+  "factsSha": "259f34d2f0d456db3d3c2ae7ae6be81bd265744555d6ba7a682e2006864d1444",
+  "costMicroUsd": 1415,
+  "inference": "41e98c51-0252-5847-a1cf-0e8747498761",
+  "model": "deepseek/deepseek-v3.2",
+  "tee_signer": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
+  "at": "2026-11-14T05:42:34.267Z",
+  "proposed": true,
+  "uri": "config/config.v9.yaml",
+  "hash": "5b38ed7c9a4a75ebf1e53fed7b3233b2355195c4962b0f444fae4529663fae14",
+  "reason": "Current by-laws: 4 jobs, avg price $3.75 (below our $5 ask), inference $0.001 (well below $0.5 limit). Lowering bid to $3 and min price to $2 could attract more work like pre-version-8 jobs (33 jobs, avg $1.94). Narrowing tags to top categories (research, translation, writing, web3) focuses scope. R | facts sha256 259f34d2f0d456db…, inference 41e98c51-0252… (TEE)",
+  "proposal": 139,
+  "submitted": "8Lk5dt6UDWEyBSdmo6f97LwxJM2fYE3VjYE7vEzmx4qB",
+  "relayer": "kop-relayer-mw4i2iwk.testnet"
+}

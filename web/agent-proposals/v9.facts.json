@@ -1,0 +1,96 @@
+{
+  "contract": "koperasi-mw4i2iwk.testnet",
+  "read_at": "2026-11-14T05:42:01.188Z",
+  "by_laws": {
+    "version": 8,
+    "active_since": "2026-11-13T19:38:02.270Z",
+    "price_usdc": 5,
+    "limits": {
+      "max_inference_per_job_usd": 0.5,
+      "max_inference_per_day_usd": 5
+    },
+    "job_filter": {
+      "tags_any": [
+        "research",
+        "translation",
+        "localization",
+        "writing",
+        "documentation",
+        "web3",
+        "crypto"
+      ],
+      "min_price_usdc": 3
+    }
+  },
+  "jobs_before_these_by_laws": {
+    "jobs": 33,
+    "paid": 23,
+    "refunded": 2,
+    "disputed": 2,
+    "submitted": 6,
+    "avg_price_usdc": 1.9363636363636365,
+    "avg_inference_usd": 0.0005413333333333332
+  },
+  "jobs_under_these_by_laws": {
+    "jobs": 4,
+    "paid": 2,
+    "refunded": 0,
+    "disputed": 0,
+    "submitted": 2,
+    "avg_price_usdc": 3.75,
+    "avg_inference_usd": 0.0011315
+  },
+  "jobs_by_kind": {
+    "demo-court": 11,
+    "demo-": 29,
+    "taskbond-": 4
+  },
+  "court": {
+    "cases": 11,
+    "upheld": 7,
+    "strikes_live": 1,
+    "suspended": false
+  },
+  "risk_fund_usdc": 2.455003,
+  "agent_share_bps": 500,
+  "standing_bps": 5000,
+  "my_last_proposal": {
+    "version": 8,
+    "reason": "Version 7 by-laws: 4 jobs, 4 paid, 0 refunded/disputed. Avg price $4 (below our $5 ask), avg inference $0.0005 (well below $0.5 per-job limit). Risk fund low ($1.5). | facts sha256 c09895db22a7615e…, inference 94386817-9e11… (TEE)",
+    "dao_proposal": 136
+  },
+  "by_laws_history": [
+    {
+      "version": 1,
+      "at": "2026-11-06"
+    },
+    {
+      "version": 2,
+      "at": "2026-11-06"
+    },
+    {
+      "version": 3,
+      "at": "2026-11-06"
+    },
+    {
+      "version": 4,
+      "at": "2026-11-10"
+    },
+    {
+      "version": 5,
+      "at": "2026-11-13"
+    },
+    {
+      "version": 6,
+      "at": "2026-11-13"
+    },
+    {
+      "version": 7,
+      "at": "2026-11-13"
+    },
+    {
+      "version": 8,
+      "at": "2026-11-13"
+    }
+  ]
+}

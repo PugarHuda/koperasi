@@ -27,9 +27,14 @@ export async function agentFacts(dep, config) {
     view(K, "get_config_history", {}), view(K, "get_agent_standing"), view(K, "get_risk_fund"), view(K, "get_agent_member"),
     view(K, "get_agent_proposals"), all(K, "get_cases")]);
   const since = Number(cfg.activated_at);
+  // prices only from jobs paid in USDC: Taskbond pays in testnet NEAR (its receipts carry 0 USDC) and court demo jobs are
+  // not sales; counting them made the average look low (by-laws v9, proposed from that figure, was a mistake)
+  const usdcJobs = (rs) => rs.filter((r) => BigInt(r.price) > 0n && !r.job_id.startsWith("demo-court") && !r.job_id.startsWith("taskbond-"));
   const tally = (rs) => ({ jobs: rs.length, paid: rs.filter((r) => r.status === "Paid").length, refunded: rs.filter((r) => r.status === "Refunded").length,
     disputed: rs.filter((r) => r.status === "Disputed").length, submitted: rs.filter((r) => r.status === "Submitted").length,
-    avg_price_usdc: rs.length ? rs.reduce((s, r) => s + usd(r.price), 0) / rs.length : 0,
+    usdc_sales: usdcJobs(rs).length,
+    avg_price_usdc_of_sales: usdcJobs(rs).length ? usdcJobs(rs).reduce((s, r) => s + usd(r.price), 0) / usdcJobs(rs).length : 0,
+    taskbond_jobs_paid_in_near: rs.filter((r) => r.job_id.startsWith("taskbond-")).length,
     avg_inference_usd: rs.length ? rs.reduce((s, r) => s + usd(r.inference_cost), 0) / rs.length : 0 });
   return {
     cfg,

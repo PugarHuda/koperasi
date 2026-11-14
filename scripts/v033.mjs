@@ -9,7 +9,8 @@
 //               the steward deposits it as earnings and the agent saves 10% of it; a case upheld against an agent's job
 //               is refunded from the risk fund at once, with no proposal (and is a strike, which halves the agent's share)
 //   propose:    the agent reads its record from the chain (and how its last proposal turned out), writes new by-laws with
-//               the voted model on a TEE-verified server, signs them; a relayer submits; the members vote
+//               the voted model on a TEE-verified server, signs them; a relayer submits; the proposal stays open for the
+//               members (add --approve to have the demo members vote for it)
 // The result is saved in the deployment files (`v033`); `npm run verify` reads every step back.
 import fs from "node:fs";
 import path from "node:path";
@@ -147,7 +148,9 @@ if (run("propose")) {
   const { agentPropose } = await import("../agent/propose.mjs");
   const r = await agentPropose({ dep });
   saved({ propose: r });
-  if (r.proposed && !want.includes("--no-vote")) {
+  // the members judge it: nothing votes for them unless --approve is given (v9 was approved by this script's votes and
+  // rested on a wrong average; a proposal is now left open for the members to read first)
+  if (r.proposed && want.includes("--approve")) {
     for (const v of [A, B, S]) {
       if ((await view(D, "get_proposal", { id: r.proposal })).status !== "InProgress") break;
       await vote(account(v), D, r.proposal);
