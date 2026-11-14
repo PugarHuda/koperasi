@@ -1950,8 +1950,8 @@ function eddsa(Point, cHash, eddsaOpts = {}) {
     const s = Fn2.create(r2 + k2 * scalar);
     if (!Fn2.isValid(s))
       throw new Error("sign failed: invalid s");
-    const rs = concatBytes2(R2, Fn2.toBytes(s));
-    return abytes2(rs, lengths.signature, "result");
+    const rs2 = concatBytes2(R2, Fn2.toBytes(s));
+    return abytes2(rs2, lengths.signature, "result");
   }
   const verifyOpts = {
     zip215: opts.zip215
@@ -3816,9 +3816,9 @@ var init_weierstrass = __esm({
       },
       hexFromSig(sig) {
         const { _tlv: tlv, _int: int } = DER;
-        const rs = tlv.encode(2, int.encode(sig.r));
+        const rs2 = tlv.encode(2, int.encode(sig.r));
         const ss = tlv.encode(2, int.encode(sig.s));
-        const seq = rs + ss;
+        const seq = rs2 + ss;
         return tlv.encode(48, seq);
       }
     };
@@ -12064,8 +12064,8 @@ var init_chainsig = __esm({
     eip191 = (msg) => keccak_256(Buffer.from(`Ethereum Signed Message:
 ${Buffer.byteLength(msg)}${msg}`));
     recover = (hash, sig) => {
-      const rs = Buffer.from(sig.big_r.affine_point.slice(2) + sig.s.scalar, "hex");
-      const pub = secp256k1.recoverPublicKey(Uint8Array.from([sig.recovery_id, ...rs]), hash, { prehash: false });
+      const rs2 = Buffer.from(sig.big_r.affine_point.slice(2) + sig.s.scalar, "hex");
+      const pub = secp256k1.recoverPublicKey(Uint8Array.from([sig.recovery_id, ...rs2]), hash, { prehash: false });
       return addressOf(secp256k1.Point.fromBytes(pub).toBytes(false).subarray(1));
     };
     signerOf = (msg, sig) => recover(eip191(msg), sig);
@@ -12228,7 +12228,7 @@ async function gate(tx, sender, voted, jobId) {
   const job = out.job ? `; job ${String(out.job.id).slice(0, 14)}\u2026 ${out.job.allowed ? "allowed" : "REFUSED"} by the by-laws (${out.job.reason})` : "";
   return { ok, out, line: `tx ${tx} by ${sender}: read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}\u2026 = voted ${String(out.voted_sha256).slice(0, 12)}\u2026${job}` };
 }
-var PAGE, d2, view2, argsOf, near, usd, failed, inFlight, waiting, SEPOLIA_RPCS, BASE_SEPOLIA_RPCS, EVM_RPCS, CHAIN_NAME, NEAR_TX_RPCS, check, info, policy, board, contributors, audit, proposal, last, proposals, approvedCall, fileHash, byLaws, acct, code, want, upgraded, keys, full, agentKeys, scoped, role, daoMembers, members, outside, vp, wide, tasksRole, r, ruleVote, vetoVote, tasks, steward, overdue, termDays, termEnds, cases, allReceipts, routes, tokens, pledges, pclaims, GATE_WASM, GATE_WASMS, shares, receipts, proofs, parsedProofs, proven, gated, third, market, usdc, TP_VERIFIER, TP_RELAYER, crossChain;
+var PAGE, d2, view2, argsOf, near, usd, failed, inFlight, waiting, SEPOLIA_RPCS, BASE_SEPOLIA_RPCS, EVM_RPCS, CHAIN_NAME, NEAR_TX_RPCS, check, info, policy, board, contributors, audit, proposal, last, proposals, approvedCall, fileHash, byLaws, acct, code, want, upgraded, keys, full, agentKeys, scoped, role, daoMembers, members, outside, vp, wide, tasksRole, r, ruleVote, vetoVote, tasks, steward, overdue, termDays, termEnds, cases, allReceipts, routes, tokens, pledges, pclaims, rs, GATE_WASM, GATE_WASMS, shares, receipts, proofs, parsedProofs, proven, gated, third, market, usdc, TP_VERIFIER, TP_RELAYER, crossChain;
 var init_verify = __esm({
   async "scripts/verify.mjs"() {
     init_lib();
@@ -12515,6 +12515,37 @@ var init_verify = __esm({
         voted.length > 0 && voted.every((x2) => x2.ok) && i.owner === await daoAddress(d2.dao),
         "the agent's NEAR Intents wallet is owned by the DAO: every owner intent was signed only after a members' vote",
         `${i.agent_id} on ${i.provider}, owner ${i.owner} (the DAO's Chain Signatures address); ${voted.map((x2) => x2.line).join("; ")}`
+      );
+    }
+    rs = d2.intents?.referral_share;
+    if (rs?.tx) {
+      const TOKEN = "usdc.tidepool-sandbox.testnet";
+      const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: rs.tx, sender_account_id: "maker.tidepool-sandbox.testnet", wait_until: "FINAL" });
+      const call2 = t2?.transaction.actions[0]?.FunctionCall;
+      let w2 = null, signer = null;
+      try {
+        const msg = JSON.parse(JSON.parse(Buffer.from(call2.args, "base64").toString()).signed[0].payload.message);
+        signer = msg.signer_id;
+        w2 = msg.verifying_contract === "verifier.tidepool-sandbox.testnet" ? msg.intents.find((x2) => x2.intent === "ft_withdraw") : null;
+      } catch {
+      }
+      const moved = (t2?.receipts_outcome ?? []).filter((o) => o.outcome.executor_id === TOKEN).flatMap((o) => o.outcome.logs).flatMap((l2) => {
+        try {
+          const e = JSON.parse(l2.replace(/^EVENT_JSON:/, ""));
+          return e.event === "ft_transfer" ? e.data : [];
+        } catch {
+          return [];
+        }
+      }).find((x2) => x2.new_owner_id === rs.to);
+      const [receipt, accepted] = await view2(d2.contract, "get_receipt_with_referral", { job_id: rs.job }) ?? [];
+      const [board2] = await view2(rs.coop, "get_referrals", { from: rs.referral, limit: 1 });
+      const p2 = proposals.find((q2) => q2.id === rs.policy?.proposal);
+      const share = receipt ? BigInt(receipt.price) * BigInt(rs.bps) / 10000n : -1n;
+      const ok = t2?.transaction.receiver_id === "verifier.tidepool-sandbox.testnet" && call2?.method_name === "execute_intents" && !t2.receipts_outcome.some((o) => o.outcome.status.Failure) && w2?.token === TOKEN && w2.receiver_id === rs.to && w2.memo === rs.memo && w2.memo.includes(rs.job) && BigInt(w2.amount) === share && share <= 2000000n && rs.bps === 3e3 && moved && BigInt(moved.amount) === share && board2?.job_id === rs.job && board2.to_coop === d2.contract && accepted?.from_coop === rs.coop && accepted.referral_id === rs.referral && p2?.status === "Approved" && p2.kind.FunctionCall?.receiver_id === SIGNER && p2.description.includes(rs.policy.intent_sha256) && p2.description.includes(rs.memo);
+      check(
+        ok,
+        "the agent paid the sister co-op its referral share through a NEAR intent, for a job the sister passed here, by a rule the members voted",
+        `${rs.coop}'s referral #${rs.referral} passed ${rs.job} to ${d2.contract} (receipt ${receipt ? usd(receipt.price) : "?"} USDC); vote #${rs.policy?.proposal} ${p2?.status}; NEAR ${rs.tx.slice(0, 8)}\u2026 ft_withdraw ${w2?.amount ?? "?"} ${w2?.token ?? ""} by ${signer?.slice(0, 12)}\u2026 memo "${w2?.memo ?? ""}"; ${TOKEN} moved ${moved?.amount ?? "nothing"} to ${rs.to} (${ok ? "match" : "MISMATCH"})`
       );
     }
     GATE_WASM = sha2562(await file("web/outlayer/bylaws-check.wasm", "outlayer/bylaws-check.wasm"));

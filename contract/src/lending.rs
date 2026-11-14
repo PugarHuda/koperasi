@@ -827,7 +827,9 @@ impl Koperasi {
 // as before. A failed transfer goes to the DAO's unforwarded balance (`flush_to_dao`): never sent twice.
 
 const KEY_FED_DIVIDEND: &[u8] = b"federation_dividend_bps";
-const MAX_DIVIDEND_RECIPIENTS: usize = 20;
+// each part is one ft_transfer (10 Tgas) and its callback (5 Tgas), all inside the repayment's ft_on_transfer: five fit in
+// the gas a repayment attaches (100 Tgas+), so too many sisters can never make a repayment run out of gas and revert
+const MAX_DIVIDEND_RECIPIENTS: usize = 5;
 const GAS_DIVIDEND_PAID: Gas = Gas::from_tgas(5);
 
 fn dividend_key(id: u32) -> Vec<u8> {

@@ -14,6 +14,10 @@
 //                                            contract's voted share rule, each part paid on the member's own route
 //   node scripts/intents.mjs share auto      the same on the by-laws' schedule (v5 `profit_share`): does nothing until
 //                                            one is due; the agent's runtime starts it on every pass
+//   node scripts/intents.mjs refshare        federation resolution 3, paid through an intent: the sister co-op's agent
+//                                            passes this co-op a job, this co-op's agent takes and does it, the members
+//                                            vote the wallet may pay the sister's DAO for that job (memo pinned), and the
+//                                            agent pays it 30% of the job's earnings on NEAR (ft_withdraw); resumable
 //
 // The owner is the DAO's Ethereum address from NEAR Chain Signatures: it has no private key, so every owner intent
 // (create, grant, policy, freeze) is an ERC-191 message the MPC network signs only when the DAO calls it, by a members'
@@ -24,10 +28,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { baseDecode } from "near-api-js";
+import { KeyPair, baseDecode } from "near-api-js";
 import { splitShare } from "../web/share.js";
 import { loadApprovedConfig } from "../agent/runtime.mjs";
-import { DEPLOYMENT, ROOT, view } from "./lib.mjs";
+import { DEPLOYMENT, LOCAL_DEPLOYMENT, ROOT, account, callRaw, sha256, txUrl, view } from "./lib.mjs";
 import { PATH, SIGNER, daoAddress, eip191, recover, signByVote } from "./chainsig.mjs";
 
 const BASE = "https://www.usetidepool.tech/v1";
@@ -328,6 +332,83 @@ if (cmd === "create") {
   }
   if (entry.payouts.every((x) => x.status === "SUCCESS")) delete entry.pending;
   save();
+} else if (cmd === "refshare") {
+  // Federation resolution 3: the co-op that did a job another co-op brought pays that co-op 30% of what it earned. Every
+  // job so far went from this co-op to its sister (the sister paid: v038, federation.trades), so this one goes the other
+  // way: the sister's agent passes a job here, this co-op's agent does it, and this co-op pays the share through an intent.
+  // Each step is saved when it lands: run it again to resume.
+  const sis = JSON.parse(fs.readFileSync(LOCAL_DEPLOYMENT, "utf8"));
+  const S = sis.contract, SD = sis.dao, K = dep.contract;
+  const PRICE = 4_000_000n, BPS = 3000n, MAX = 2_000_000n; // ≤ 2 USDC a referral share, as the vote says
+  const units = (PRICE * BPS) / 10_000n;
+  if (units > MAX) throw new Error(`a share of ${units} is over the ${MAX} the members vote`);
+  const r = (w.referral_share ??= { coop: S, to: SD, price: String(PRICE), bps: Number(BPS), amount: Number(units) / 1e6 });
+  const relayer = account(`kop-relayer-${dep.tag}.testnet`);
+  const signed = (who, msg) => Buffer.from(KeyPair.fromString(JSON.parse(fs.readFileSync(path.join(ROOT, ".keys", `${who}.json`), "utf8")).private_key)
+    .sign(Buffer.from(msg)).signature).toString("base64");
+  const ret = (x) => JSON.parse(Buffer.from(x.status.SuccessValue || "bnVsbA==", "base64").toString());
+  if (!r.job) { // 1. the sister's agent passes the job to this co-op: it signs, a relayer submits
+    const args = { job_id: `demo-sisref-${Date.now().toString(36)}`, to_coop: K, budget_usdc: String(PRICE),
+      reason: `Passed to ${K} under federation resolution 3: it does the work, and pays this co-op 30% of what the job earns` };
+    const msg = await view(S, "get_referral_message", args);
+    if (!msg.startsWith(`koperasi-agent-referral/1 ${S} #`) || !msg.includes(` ${args.job_id} ${K} ${PRICE}\n`)) throw new Error(`unexpected message: ${msg}`);
+    const t = await callRaw(relayer, S, "post_referral", { ...args, signature: signed(sis.agent, msg) }, { tgas: 50 });
+    Object.assign(r, { job: args.job_id, referral: ret(t), post_tx: t.transaction.hash });
+    save();
+    console.log(`${S}'s agent passed ${r.job} to ${K} (referral #${r.referral}): ${txUrl(r.post_tx)}`);
+  }
+  if (!r.accept_tx) { // 2. this co-op's agent accepts it: the contract reads it from the sister's board
+    const msg = await view(K, "get_accept_message", { from_coop: S, referral_id: r.referral });
+    if (!new RegExp(`^koperasi-agent-accept/1 ${K} #\\d+ ${S} ${r.referral}$`).test(msg)) throw new Error(`unexpected message: ${msg}`);
+    const t = await callRaw(relayer, K, "accept_referral", { from_coop: S, referral_id: r.referral, signature: signed(dep.agent, msg) }, { tgas: 80 });
+    r.accept_tx = t.transaction.hash;
+    save();
+    console.log(`${K} accepted it: ${txUrl(r.accept_tx)}`);
+  }
+  const info = await view(K, "get_info");
+  if (!r.receipt_tx) { // 3. this co-op's agent records the job's receipt (its key opens only receipts)
+    const t = await callRaw(account(dep.agent), K, "record_receipt", { job_id: r.job, price: String(PRICE), inference_cost: "0", config_hash: info.config.hash,
+      deliverable_hash: sha256(`referred job ${r.job}`), proof: null }, { tgas: 30 });
+    r.receipt_tx = t.transaction.hash;
+    save();
+    console.log(`receipt of ${r.job} (${Number(PRICE) / 1e6} USDC): ${txUrl(r.receipt_tx)}`);
+  }
+  if (!r.earnings_tx) { // 4. the steward deposits what the job earned; this co-op's contract share is 0, so nothing leaves here
+    if ((await view(K, "get_referral_share")) !== 0) throw new Error(`${K} pays referral shares itself now: it would pay twice`);
+    const t = await callRaw(account(dep.steward), info.usdc_id, "ft_transfer_call", { receiver_id: K, amount: String(PRICE), msg: `earnings:${r.job}` }, { deposit: 1n, tgas: 150 });
+    r.earnings_tx = t.transaction.hash;
+    save();
+    console.log(`steward deposited the earnings: ${txUrl(r.earnings_tx)}`);
+  }
+  r.memo = `referral share 30% of ${r.job} (federation resolution 3) from ${K}`;
+  if (!r.policy) { // 5. the members vote the wallet may pay the sister's DAO, for this job only (the memo is part of the rule)
+    const cur = (await api("GET", `/agents/${w.agent_id}/policy`)).json;
+    if (!Number.isInteger(cur.revision)) throw new Error(`policy: no revision (${JSON.stringify(cur).slice(0, 200)})`);
+    const dest = { action: "withdraw", chain: "near", address: SD, memo: r.memo };
+    const policy = { ...cur.policy, destinations: { ...cur.policy.destinations, list: [...cur.policy.destinations.list.filter((x) => x.address !== SD), dest] } };
+    const v = await byVote("policy_update", { agent_id: w.agent_id, policy, expected_revision: cur.revision },
+      `the agent's wallet may also pay the sister co-op's treasury ${SD} on NEAR its referral share for job ${r.job} (federation resolution 3: 30% of the ${Number(PRICE) / 1e6} USDC it earned = ${Number(units) / 1e6} USDC, at most 2 USDC), memo "${r.memo}"; the members' payouts are unchanged, still held 10 minutes each`);
+    r.policy = { proposal: v.proposal, tx: v.tx, intent_sha256: v.digest, revision: cur.revision + 1 };
+    save();
+  }
+  if (!(await view(USDC.slice(7), "storage_balance_of", { account_id: SD }))) { // ft_withdraw needs the receiver registered
+    const t = await callRaw(account(dep.steward), USDC.slice(7), "storage_deposit", { account_id: SD, registration_only: true }, { deposit: 1_250_000_000_000_000_000_000n, tgas: 30 });
+    console.log(`registered ${SD} with ${USDC.slice(7)}: ${txUrl(t.transaction.hash)}`);
+  }
+  if (r.status !== "SUCCESS") { // 6. the agent pays it: an ft_withdraw intent to the sister's DAO, held 10 minutes first
+    const { token } = JSON.parse(fs.readFileSync(GRANT_FILE, "utf8"));
+    if (!r.payout) {
+      const p = await api("POST", `/agents/${w.agent_id}/withdraw`, { body: { asset: USDC, amount: String(units), chain: "near", recipient: SD, memo: r.memo }, grant: token });
+      if (!p.json.correlation_id) throw new Error(`withdraw: HTTP ${p.status} ${JSON.stringify(p.json.errors ?? p.json).slice(0, 300)}`);
+      r.payout = p.json.correlation_id;
+      save();
+    }
+    const st = await done(r.payout, "referral share");
+    console.log("referral share:", st.status, JSON.stringify(st.details ?? {}).slice(0, 400));
+    Object.assign(r, { status: st.status, tx: st.details?.tx_hash ?? null, at: new Date().toISOString() });
+    save();
+  }
+  console.log(JSON.stringify(r, null, 1));
 } else if (cmd !== "imported") {
-  console.log(fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(0, 16).join("\n"));
+  console.log(fs.readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(0, 20).join("\n"));
 }

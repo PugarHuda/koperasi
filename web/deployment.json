@@ -284,7 +284,31 @@
           }
         ]
       }
-    ]
+    ],
+    "referral_share": {
+      "coop": "koperasi-mw80aczw.testnet",
+      "to": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "price": "4000000",
+      "bps": 3000,
+      "amount": 1.2,
+      "job": "demo-sisref-mwglrabc",
+      "referral": 0,
+      "post_tx": "FFerfTbFNcRYAk9HY5njXXiGZuXWXvv7tE7xVWNutyxx",
+      "accept_tx": "ByEGrbaSspu9GGXnHKumWRCvW85KTaKfAssmTXZPkwgX",
+      "receipt_tx": "BPdvBgrRpHjSGZ3KgpJpTwJPFRCcJwLaXYRRYsTwGEP",
+      "earnings_tx": "C9ozqjSpPV6ozKWtqRTwAfzd85tGQnY2QV2Kqz8fH5iz",
+      "memo": "referral share 30% of demo-sisref-mwglrabc (federation resolution 3) from koperasi-mw4i2iwk.testnet",
+      "policy": {
+        "proposal": 155,
+        "tx": "ACBqrFT34GJLZc25bTTfoBkw1LXiYwACHEaWQ8TvKSJc",
+        "intent_sha256": "687f21ee1e971a5f0e8c02cc2a2dcef4df862b040e32dc6f90d93083e377725e",
+        "revision": 3
+      },
+      "payout": "exec_f096c485d2529a8526410851",
+      "status": "SUCCESS",
+      "tx": "Gwd1VA1qHtDjsKgiPTfpJjz9hGUrjnGXSYAww42UTw2J",
+      "at": "2026-11-14T16:21:46.395Z"
+    }
   },
   "outlayer": {
     "provider": "OutLayer (Intel TDX), outlayer.testnet",

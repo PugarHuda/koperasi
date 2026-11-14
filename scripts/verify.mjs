@@ -301,6 +301,38 @@ if (d.intents) {
     `${i.agent_id} on ${i.provider}, owner ${i.owner} (the DAO's Chain Signatures address); ${voted.map((x) => x.line).join("; ")}`);
 }
 
+// a referral share paid to the sister co-op through an intent (federation resolution 3), both sides re-read: the sister's
+// board passed the job here and this co-op took it and earned its receipt's price; the members voted the wallet a rule
+// for that payment alone (memo pinned); on NEAR the agent's signed ft_withdraw intent ran on Tidepool's verifier and the
+// token itself moved 30% of that price, at most 2 USDC, to the sister's DAO
+const rs = d.intents?.referral_share;
+if (rs?.tx) {
+  const TOKEN = "usdc.tidepool-sandbox.testnet";
+  const t = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: rs.tx, sender_account_id: "maker.tidepool-sandbox.testnet", wait_until: "FINAL" });
+  const call = t?.transaction.actions[0]?.FunctionCall;
+  let w = null, signer = null;
+  try {
+    const msg = JSON.parse(JSON.parse(Buffer.from(call.args, "base64").toString()).signed[0].payload.message);
+    signer = msg.signer_id;
+    w = msg.verifying_contract === "verifier.tidepool-sandbox.testnet" ? msg.intents.find((x) => x.intent === "ft_withdraw") : null;
+  } catch { /* not an intents call: w stays null */ }
+  const moved = (t?.receipts_outcome ?? []).filter((o) => o.outcome.executor_id === TOKEN).flatMap((o) => o.outcome.logs)
+    .flatMap((l) => { try { const e = JSON.parse(l.replace(/^EVENT_JSON:/, "")); return e.event === "ft_transfer" ? e.data : []; } catch { return []; } })
+    .find((x) => x.new_owner_id === rs.to);
+  const [receipt, accepted] = (await view(d.contract, "get_receipt_with_referral", { job_id: rs.job })) ?? [];
+  const [board] = await view(rs.coop, "get_referrals", { from: rs.referral, limit: 1 });
+  const p = proposals.find((q) => q.id === rs.policy?.proposal);
+  const share = receipt ? (BigInt(receipt.price) * BigInt(rs.bps)) / 10_000n : -1n;
+  const ok = t?.transaction.receiver_id === "verifier.tidepool-sandbox.testnet" && call?.method_name === "execute_intents"
+    && !t.receipts_outcome.some((o) => o.outcome.status.Failure) && w?.token === TOKEN && w.receiver_id === rs.to && w.memo === rs.memo && w.memo.includes(rs.job)
+    && BigInt(w.amount) === share && share <= 2_000_000n && rs.bps === 3000 && moved && BigInt(moved.amount) === share
+    && board?.job_id === rs.job && board.to_coop === d.contract && accepted?.from_coop === rs.coop && accepted.referral_id === rs.referral
+    && p?.status === "Approved" && p.kind.FunctionCall?.receiver_id === SIGNER && p.description.includes(rs.policy.intent_sha256) && p.description.includes(rs.memo);
+  check(ok, "the agent paid the sister co-op its referral share through a NEAR intent, for a job the sister passed here, by a rule the members voted",
+    `${rs.coop}'s referral #${rs.referral} passed ${rs.job} to ${d.contract} (receipt ${receipt ? usd(receipt.price) : "?"} USDC); vote #${rs.policy?.proposal} ${p?.status}; `
+    + `NEAR ${rs.tx.slice(0, 8)}… ft_withdraw ${w?.amount ?? "?"} ${w?.token ?? ""} by ${signer?.slice(0, 12)}… memo "${w?.memo ?? ""}"; ${TOKEN} moved ${moved?.amount ?? "nothing"} to ${rs.to} (${ok ? "match" : "MISMATCH"})`);
+}
+
 // the by-laws gate, run inside an Intel TDX enclave by OutLayer: the tx ran this repo's wasm, and resumed with a match
 const GATE_WASM = sha256(await file("web/outlayer/bylaws-check.wasm", "outlayer/bylaws-check.wasm"));
 // earlier builds of the same program (git history of web/outlayer/bylaws-check.wasm): gates already on-chain ran them
