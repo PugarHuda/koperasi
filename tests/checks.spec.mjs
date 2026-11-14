@@ -10,7 +10,7 @@ const go = async (page) => {
 
 test("the automatic checks reach a verdict from the chain and the repo", async ({ page }) => {
   await go(page);
-  await expect(page.locator("#ck-bylaws")).toHaveClass(/pass/);
+  await expect(page.locator("#ck-bylaws")).toHaveClass(/pass/, { timeout: 60_000 }); // first in its worker: read cold
   await expect(page.locator("#ck-bylaws .ck-out")).toContainText("Your browser hashed");
   await expect(page.locator("#ck-code")).toHaveClass(/pass/);
   await expect(page.locator("#ck-code .ck-out")).toContainText("no full-access key");

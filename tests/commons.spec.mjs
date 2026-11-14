@@ -16,7 +16,7 @@ const kase = (extra = {}) => ({ id: 0, job_id: "job-1", claimant: BOB, refund_to
 test("the commons section shows the court case, its jurors and the refund, each member's standing, and the Ethereum address", async ({ page }) => {
   await page.goto("/#commons");
   const c = page.locator("#cases tbody tr", { hasText: "demo-court-mwag2r51" });
-  await expect(c).toContainText("upheld: refunded");
+  await expect(c).toContainText("upheld: refunded", { timeout: 60_000 }); // the last section the page fills: cold, Firefox took over 30 s
   await expect(c.locator("a", { hasText: "DAO proposal #60" })).toBeVisible();
   // scripts/scenarios.mjs: two cases the jurors did not uphold, a pledge nobody called in yet
   await expect(page.locator("#cases tbody tr", { hasText: "not upheld" }).nth(1)).toBeVisible(); // at least two (more were added later)
@@ -47,7 +47,7 @@ test("0.2.8: the passport stamp from a sister co-op is shown on the work record,
   await page.goto(`/cert.html?who=kop-carol-mw80aczw.testnet`);
   await expect(page.locator("#cert-sum")).toContainText(/2 finished at koperasi-mw80aczw\.testnet.*counts as one trust source here/);
   await page.goto("/#checks");
-  await expect(page.locator("#ck-attacks")).toContainText(/(\d+) of \1 attacks on this co-op failed on-chain/, { timeout: 30_000 });
+  await expect(page.locator("#ck-attacks")).toContainText(/(\d+) of \1 attacks on this co-op failed on-chain/, { timeout: 60_000 });
   await expect(page.locator("#ck-attacks")).toHaveClass(/pass/);
   await page.goto("/#commons");
   await expect(page.locator("#duties")).toContainText(/The agent answers to the court[\s\S]*Mandatory dues/);

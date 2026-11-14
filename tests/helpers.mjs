@@ -1,13 +1,30 @@
 // Shared by the browser specs: which requests are NEAR RPC calls, and how to answer chosen view calls ourselves.
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test as base } from "@playwright/test";
 
 export const RPC = /(rpc\.fastnear\.com|test\.rpc\.fastnear\.com|near-testnet\.drpc\.org|rpc\.testnet\.fastnear\.com)/;
 
 // Six browser profiles from one runner hit the public RPCs' per-IP limit (429) and tests failed at random. A read the
-// chain answered is kept for the rest of the worker and answered from here, so each distinct read reaches the network
+// chain answered is kept for the rest of the run and answered from here, so each distinct read reaches the network
 // about once. Routes a test sets on its page (answerViews, an RPC that is down) come first, as page routes do.
-// ponytail: per-worker, never expires; a run is ~40 min and the specs only read, so state drift is not a concern.
-const answered = new Map();
+// It is kept on disk, shared by every worker of the run (they are the runner's children): a worker that starts after a
+// failure, or for the next profile, starts warm. Cold, Firefox needed more than the 30 s an assertion waits to fill the
+// page, so one failure restarted the worker cold and every Firefox test failed.
+// ponytail: never expires within a run (~1 h; the specs only read); one folder per run left in the temp dir.
+const DIR = join(tmpdir(), `koperasi-rpc-${process.ppid}`);
+mkdirSync(DIR, { recursive: true });
+const file = (key) => join(DIR, createHash("sha1").update(key).digest("hex"));
+const recall = (key) => { try { return JSON.parse(readFileSync(file(key), "utf8")); } catch { return undefined; } };
+const keep = (key, json) => {
+  const f = file(key);
+  writeFileSync(`${f}.${process.pid}`, JSON.stringify(json));
+  renameSync(`${f}.${process.pid}`, f); // whole or absent for the other workers
+};
+// the chain's own answer is the same on every RPC and every ask (as web/near.js judges it): a result, a contract's refusal
+const settled = (json) => json?.result || /UNKNOWN_ACCOUNT|NO_CONTRACT_CODE|CONTRACT_EXECUTION_ERROR/.test(JSON.stringify(json?.error ?? ""));
 /** The page's own testnet RPCs (web/near.js), tried in turn when one is rate-limited. */
 const MIRRORS = ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.fastnear.com"];
 export const test = base.extend({
@@ -17,9 +34,10 @@ export const test = base.extend({
       if (req.method() !== "POST") return route.fallback();
       const { id, ...rest } = req.postDataJSON?.() ?? {};
       const key = JSON.stringify(rest);
-      if (answered.has(key)) {
+      const known = recall(key);
+      if (known) {
         return route.fulfill({ contentType: "application/json", headers: { "access-control-allow-origin": "*" },
-          body: JSON.stringify({ ...answered.get(key), id }) });
+          body: JSON.stringify({ ...known, id }) });
       }
       // a rate-limited answer (HTTP 429, or fastnear's JSON-RPC error -429 with HTTP 200) is retried on the other RPCs,
       // then once more after a pause: the page's own fallback would see the same limit from this runner's one IP
@@ -29,7 +47,7 @@ export const test = base.extend({
         try { res = await route.fetch({ url, timeout: 8000 }); } catch { res = null; continue; }
         const json = res.ok() ? await res.json().catch(() => null) : null;
         if (res.status() === 429 || json?.error?.code === -429 || /rate limit/i.test(JSON.stringify(json?.error ?? ""))) continue;
-        if (json?.result && !json.error && !json.result.error) answered.set(key, json);
+        if (settled(json)) keep(key, json);
         break;
       }
       if (!res) return route.abort("timedout").catch(() => {});

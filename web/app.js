@@ -482,8 +482,10 @@ cargo near build reproducible-wasm
     }).join("");
     if (info.steward && ends) $("audit-term").innerHTML = `The steward serves ${days} days by the members' vote, until <strong>${date(ends)}</strong>; then anyone can end the term and the role waits for a new vote.`;
   }).catch(() => {
-    rows($("pledges").tBodies[0], "");
-    rows($("cases").tBodies[0], "");
+    // a failed read is not an empty record: say so (rows("") would print "Nothing yet.")
+    for (const id of ["pledges", "cases"]) {
+      $(id).tBodies[0].innerHTML = `<tr><td colspan="4" class="muted">Could not read this from NEAR right now (a busy public RPC). Reload to try again.</td></tr>`;
+    }
   });
   if (dep.chainSignatures) {
     const c = dep.chainSignatures;

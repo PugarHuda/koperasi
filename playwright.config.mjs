@@ -22,7 +22,8 @@ export default defineConfig({
   },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"], viewport: { width: 1280, height: 800 } } },
+    // Firefox loads the page about twice as slowly (every RPC POST costs it more): the same checks, more time
+    { name: "firefox", use: { ...devices["Desktop Firefox"], viewport: { width: 1280, height: 800 } }, expect: { timeout: 60_000 } },
     { name: "webkit", use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 800 } } },
     { name: "tablet", use: { ...devices["iPad (gen 7)"], browserName: "chromium" } },
     { name: "mobile", use: { ...devices["Pixel 7"] } },
