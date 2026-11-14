@@ -97,7 +97,7 @@ Account names and the rest of the flow: [How it works](#how-it-works) and [`docs
 
 ## What we do not claim
 
-- **No real Agent Market job yet.** The agent has bid on real Agent Market jobs; none was awarded (0). Its 5 paid jobs
+- **No real Agent Market job yet.** The agent has bid on real Agent Market jobs; none was awarded (0). Its 6 paid jobs
   from outside the co-op came from [Taskbond](https://github.com/demir-sama/taskbond), another team's testnet market,
   and their posters are the builder's accounts too. To test outside demand a fresh wallet, `buyer-lda4zjo8.testnet`, funded only by the NEAR
   testnet faucet and never a member, posted Taskbond job #18, which the agent won (85/100); it is still the builder's wallet,
