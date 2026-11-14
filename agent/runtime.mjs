@@ -421,6 +421,16 @@ export async function runOnce({ dep = JSON.parse(fs.readFileSync(DEPLOYMENT, "ut
       log(`the by-laws proposal step failed: ${String(e?.message).slice(0, 200)}`); // never stops the agent's work
     }
   }
+  // 0.3.8: the agent acts on the members' answer to a poll it opened itself (agent/followup.mjs): it puts a change to
+  // them as a new poll carrying the by-laws, or notes that they kept the current way
+  if (me === dep.agent && !process.env.KOP_NO_PROPOSE) {
+    try {
+      const { maybeFollowup } = await import("./followup.mjs");
+      await maybeFollowup({ dep, log, state: loadState(), save: saveState });
+    } catch (e) {
+      log(`the poll follow-up step failed: ${String(e?.message).slice(0, 200)}`);
+    }
+  }
   // profit shares on the by-laws' schedule (v5 `profit_share`): `intents.mjs share auto` decides whether one is due and
   // holds a lock, so starting it on every pass is safe; it runs on its own (the wallet's timelocks take minutes a payout)
   if (config.profit_share && dep.intents?.agent_id && !process.env.KOP_NO_SHARE) {
