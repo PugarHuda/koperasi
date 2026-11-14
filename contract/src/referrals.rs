@@ -5,11 +5,75 @@
 //! own board and keeps it only if it is there and names this co-op. A receipt recorded later for that job is linked
 //! to it (`get_referral_for_job`, `get_receipt_with_referral`). The last 200 accepted are kept.
 //!
+//! - **The referral share, paid automatically** (0.3.8, Federation resolution 3): the members vote a share
+//!   (`set_referral_share`, at most 50%) and each sister co-op's treasury (`set_coop_treasury`). When the steward deposits
+//!   a job's earnings with `ft_transfer_call` msg `"earnings:<job_id>"` and that job came from an accepted referral, that
+//!   share goes to the referring co-op's treasury, once per job; the rest is booked as usual. A failed transfer goes to
+//!   the DAO's unforwarded balance, for the members to pay by vote as before.
+//!
 //! State lives under its own storage keys, so the upgrade needs no state migration.
 
 use crate::solidarity::{Referral, MAX_REFERRALS};
 use crate::tasks::{load, save};
 use crate::*;
+
+const KEY_REFERRAL_SHARE: &[u8] = b"referral_share_bps";
+pub const MAX_REFERRAL_SHARE_BPS: u16 = 5000;
+
+fn treasury_key(coop: &AccountId) -> Vec<u8> {
+    format!("coop_treasury:{coop}").into_bytes()
+}
+/// job_id -> the referral share paid for it: once per job.
+fn share_paid_key(job_id: &str) -> Vec<u8> {
+    format!("referral_share_paid:{job_id}").into_bytes()
+}
+
+/// The referral share sent for a job; `failed` when the transfer bounced and the amount went to the DAO instead.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct ReferralSharePaid {
+    pub from_coop: AccountId,
+    pub to: AccountId,
+    pub amount: U128,
+    pub failed: bool,
+    pub at: U64,
+}
+
+impl Koperasi {
+    /// From `ft_on_transfer` ("earnings:<job_id>"): send the referral share of `amount` for this job, if the job came from
+    /// an accepted referral whose co-op has a treasury, the share is set, and none was sent for it yet. Returns what was sent.
+    pub(crate) fn pay_referral_share(&mut self, job_id: &str, amount: u128) -> u128 {
+        let bps = load::<u16>(KEY_REFERRAL_SHARE).unwrap_or(0) as u128;
+        if bps == 0 || env::storage_has_key(&share_paid_key(job_id)) {
+            return 0;
+        }
+        let Some(r) = self.get_referral_for_job(job_id.to_string()) else { return 0 };
+        // the referring co-op must still be a sister the members recognise (a dropped one keeps no claim)
+        if !self.get_sister_coops().contains(&r.from_coop) {
+            return 0;
+        }
+        let Some(to) = load::<AccountId>(&treasury_key(&r.from_coop)) else { return 0 };
+        // the share is cut from what this job earned, never from the whole deposit: at most the job's receipt price and
+        // the budget the referral named; no receipt for the job here, no share
+        let Some(i) = self.receipt_index.get(&job_id.to_string()) else { return 0 };
+        let price = self.receipts.get(*i).map_or(0, |x| x.price.0);
+        let base = amount.min(price).min(r.budget_usdc.0);
+        let share = base * bps / BPS;
+        if share == 0 {
+            return 0;
+        }
+        save(&share_paid_key(job_id), &ReferralSharePaid { from_coop: r.from_coop.clone(), to: to.clone(), amount: U128(share),
+            failed: false, at: U64(env::block_timestamp()) });
+        bump(KEY_IN_FLIGHT, share, false);
+        Event::ReferralSharePaid { job_id: job_id.into(), from_coop: r.from_coop, to: to.clone(), amount: U128(share) }.emit();
+        let _ = ext_ft::ext(self.usdc_id.clone())
+            .with_attached_deposit(NearToken::from_yoctonear(1))
+            .with_static_gas(GAS_FT_TRANSFER)
+            .ft_transfer(to, U128(share), Some(format!("koperasi referral share {job_id}")))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_CALLBACK).on_referral_share(job_id.into(), U128(share)));
+        share
+    }
+}
 
 const KEY_ACCEPTED_COUNT: &[u8] = b"accepted_ref_count";
 /// Acceptance signatures consumed so far: only ever goes up (its own nonce, apart from the board's and the by-laws').
@@ -123,6 +187,58 @@ impl Koperasi {
     /// The sister co-op's referral this job came from, if it was accepted here (and is still kept).
     pub fn get_referral_for_job(&self, job_id: String) -> Option<AcceptedReferral> {
         load::<u32>(&job_key(&job_id)).and_then(|i| load(&accepted_key(i)))
+    }
+
+    /// Callback of a referral share's transfer: failed, the amount goes to the DAO's unforwarded balance (`flush_to_dao`)
+    /// and the job stays marked, so the members pay the sister by vote as before; never sent twice.
+    #[private]
+    pub fn on_referral_share(&mut self, job_id: String, amount: U128, #[callback_result] r: Result<(), PromiseError>) {
+        bump(KEY_IN_FLIGHT, amount.0, true);
+        if r.is_err() {
+            self.unforwarded += amount.0;
+            let mut p: ReferralSharePaid = load(&share_paid_key(&job_id)).unwrap_or_else(|| env::panic_str("no referral share"));
+            p.failed = true;
+            save(&share_paid_key(&job_id), &p);
+            Event::ReferralShareFailed { job_id, from_coop: p.from_coop, amount }.emit();
+        }
+    }
+
+    /// DAO only: the share (bps, at most 5000) of a referred job's earnings paid to the co-op that referred it (0: none).
+    pub fn set_referral_share(&mut self, bps: u16) {
+        self.assert_dao();
+        require!(bps <= MAX_REFERRAL_SHARE_BPS, "at most 5000 bps");
+        save(KEY_REFERRAL_SHARE, &bps);
+        Event::ReferralShareSet { bps }.emit();
+    }
+
+    pub fn get_referral_share(&self) -> u16 {
+        load(KEY_REFERRAL_SHARE).unwrap_or(0)
+    }
+
+    /// DAO only: where a sister co-op's referral share is paid (its treasury, i.e. its DAO; not a contract of either
+    /// co-op); None removes it.
+    pub fn set_coop_treasury(&mut self, coop: AccountId, treasury: Option<AccountId>) {
+        self.assert_dao();
+        match &treasury {
+            Some(t) => {
+                require!(self.get_sister_coops().contains(&coop), "not a sister co-op the members recognise");
+                require!(*t != coop && *t != env::current_account_id(), "pay the sister's treasury (its DAO), not a contract");
+                save(&treasury_key(&coop), t);
+            }
+            None => {
+                env::storage_remove(&treasury_key(&coop));
+            }
+        }
+        Event::CoopTreasurySet { coop, treasury }.emit();
+    }
+
+    pub fn get_coop_treasury(&self, coop: AccountId) -> Option<AccountId> {
+        load(&treasury_key(&coop))
+    }
+
+    /// The referral share sent for a job, if any.
+    pub fn get_referral_share_paid(&self, job_id: String) -> Option<ReferralSharePaid> {
+        load(&share_paid_key(&job_id))
     }
 
     /// A job's receipt and the referral it came from, if any.

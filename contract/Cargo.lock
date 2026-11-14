@@ -1759,7 +1759,7 @@ dependencies = [
 
 [[package]]
 name = "koperasi"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "ed25519-dalek",
  "near-api",

@@ -3954,3 +3954,279 @@ fn anyone_may_submit_the_agents_signed_loan_suggestion_once() {
     k.on_loan_suggested(sister.clone(), U128(100_000), relayer.clone(), Err(PromiseError::Failed));
     assert!(fails(|| agent_suggests(&mut k, &relayer, DAY, &sister, 100_000, 30, 300, why, Some(sig.clone()))), "replayed: nonce 0 was used");
 }
+
+// ---------- 0.3.8: the agent opens technical polls ----------
+
+const POLL_FEE: NearToken = NearToken::from_millinear(10);
+
+fn agent_poll(k: &mut Koperasi, who: &AccountId, ns: u64, fee: NearToken, q: &str, b: Option<Vec<Option<polls::BylawsRef>>>,
+              why: &str, sig: Option<String>) -> u32 {
+    at_paying(who, ns, fee);
+    k.agent_open_poll(q.into(), vec!["bge-m3".into(), "keep".into()], 24, b, why.into(), sig)
+}
+
+/// The agent opens a technical poll directly, one at a time; members vote, anyone closes; its by-laws go to the DAO.
+#[test]
+fn the_agent_opens_a_technical_poll_one_at_a_time_and_its_by_laws_reach_the_dao() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let why = "refunds rose 3x since v1: retrieval misses";
+    assert!(fails(|| { agent_poll(&mut k, &acc("alice.testnet"), DAY, POLL_FEE, "q?", None, why, None); }), "a member is not the agent");
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY, NearToken::from_millinear(9), "q?", None, why, None); }), "storage deposit");
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY, POLL_FEE, "q?", Some(vec![bl(2, H2), None]), why, None); }), "0.01 more per reference");
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY, POLL_FEE, "q?", None, "", None); }), "empty reason");
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY, POLL_FEE, "q?", None, &"r".repeat(281), None); }), "reason too long");
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY, POLL_FEE, "", None, why, None); }), "the poll's own terms still hold");
+    assert!(k.get_agent_polls().is_empty());
+    let id = agent_poll(&mut k, &agent(), DAY, NearToken::from_millinear(20), "Switch the embedding model?", Some(vec![bl(2, H2), None]), why, None);
+    assert!(logs_have("\"agent_poll_opened\"") && logs_have(why) && logs_have("\"poll_opened\""));
+    let p = k.get_poll(id).unwrap();
+    assert_eq!((p.kind, p.by.clone(), p.agent_reason.as_deref()), (polls::PollKind::Technical, agent(), Some(why)));
+    let a = k.get_agent_polls();
+    assert_eq!((a.len(), a[0].id, a[0].reason.as_str()), (1, id, why));
+    // a member's poll is not the agent's
+    let mine = open_p(&mut k, "alice.testnet", polls::PollKind::Technical, DAY);
+    assert!(k.get_poll(mine).unwrap().agent_reason.is_none());
+    // one at a time: refused until the first is past its deadline
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY + 23 * 3_600_000_000_000, POLL_FEE, "again?", None, why, None); }), "still open");
+    vote(&mut k, "alice.testnet", id, 0, DAY + 1);
+    vote(&mut k, "bob.testnet", id, 0, DAY + 2);
+    assert!(fails(|| { at(&agent(), DAY + 3); k.vote_poll(id, 1); }), "the agent does not vote");
+    let id2 = agent_poll(&mut k, &agent(), 2 * DAY, POLL_FEE, "again?", None, why, None); // past the deadline, not closed yet
+    assert!(fails(|| { agent_poll(&mut k, &agent(), 2 * DAY, POLL_FEE, "third?", None, why, None); }), "the second is open");
+    at(&acc("anyone.testnet"), 2 * DAY);
+    assert_eq!(k.close_poll(id), Some(0));
+    at_paying(&acc("anyone.testnet"), 2 * DAY, tasks::PAYOUT_BOND);
+    let _ = k.poll_to_proposal(id);
+    let (_, args) = filed_proposal().expect("filed");
+    assert_eq!((args["version"].as_u64(), args["hash"].as_str()), (Some(2), Some(H2)));
+    // the second closes as usual (no votes), then a third may open
+    at(&acc("anyone.testnet"), 3 * DAY);
+    assert_eq!(k.close_poll(id2), None);
+    agent_poll(&mut k, &agent(), 3 * DAY, POLL_FEE, "third?", None, why, None);
+    assert_eq!(k.get_agent_polls().len(), 3);
+}
+
+/// Paused, suspended, or TEE-only and unattested: the agent opens no poll.
+#[test]
+fn the_agent_opens_no_poll_when_paused_suspended_or_unattested() {
+    let mut k = setup();
+    let why = "inference cost per job doubled";
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY, POLL_FEE, "q?", None, why, None); }), "paused");
+    as_(&dao(), near(0));
+    k.unpause();
+    at(&agent(), DAY);
+    for c in 0..3 {
+        meeting::strike(c);
+    }
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY, POLL_FEE, "q?", None, why, None); }), "suspended");
+    at(&dao(), DAY + 1); // strikes before the reinstatement no longer count
+    k.reinstate_agent();
+    as_(&dao(), near(0));
+    k.set_agent_tee(agent(), true);
+    assert!(fails(|| { agent_poll(&mut k, &agent(), DAY, POLL_FEE, "q?", None, why, None); }), "TEE-only, unattested");
+    as_(&dao(), near(0));
+    k.set_agent_tee(agent(), false);
+    agent_poll(&mut k, &agent(), DAY, POLL_FEE, "q?", None, why, None);
+}
+
+/// The signed path: anyone submits the agent's signature, once; question, options, by-laws, hours and reason are signed.
+#[test]
+fn anyone_may_submit_the_agents_signed_poll_once() {
+    use ed25519_dalek::{Signer, SigningKey};
+    let mut k = setup();
+    let relayer = acc("relayer.testnet");
+    let why = "two embedding models tie on our evals";
+    let sk = SigningKey::from_bytes(&[4; 32]);
+    let pk: Vec<u8> = [vec![0u8], sk.verifying_key().to_bytes().to_vec()].concat();
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(agent()).signer_account_id(agent())
+        .signer_account_pk(pk.try_into().unwrap()).block_timestamp(DAY);
+    testing_env!(b.build());
+    k.record_receipt("j-pk".into(), U128(1), U128(0), H1.into(), "00".into(), None);
+    let opts = vec!["bge-m3".to_string(), "keep".to_string()];
+    let refs = Some(vec![bl(2, H2), None]);
+    let msg = k.get_agent_poll_message("Switch?".into(), opts.clone(), 24, refs.clone(), why.into());
+    // the content hash is the sha256 of the compact JSON, keys in this order
+    let json = format!("{{\"question\":\"Switch?\",\"options\":[\"bge-m3\",\"keep\"],\"bylaws\":[{{\"version\":2,\"hash\":\"{H2}\",\"uri\":\"config/config.v2.yaml\"}},null]}}");
+    let hex: String = env::sha256(json.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(msg, format!("koperasi-agent-poll/1 koperasi.testnet #0 24 {hex}\n{why}"));
+    assert_eq!(msg, polls::agent_poll_message(&me(), 0, 24, &polls::agent_poll_content("Switch?", &opts, &refs), why));
+    let enc = |s: &SigningKey| near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, s.sign(msg.as_bytes()).to_bytes());
+    let sig = enc(&sk);
+    let fee = NearToken::from_millinear(20);
+    let try_ = |k: &mut Koperasi, ns: u64, q: &str, o: Vec<String>, h: u32, b: Option<Vec<Option<polls::BylawsRef>>>, w: &str, s: Option<String>| {
+        at_paying(&relayer, ns, fee);
+        k.agent_open_poll(q.into(), o, h, b, w.into(), s)
+    };
+    assert!(fails(|| { try_(&mut k, DAY, "Switch?", opts.clone(), 24, refs.clone(), why, None); }), "no signature");
+    assert!(fails(|| { try_(&mut k, DAY, "Switch?", opts.clone(), 24, refs.clone(), why, Some("AAAA".into())); }), "not 64 bytes");
+    assert!(fails(|| { try_(&mut k, DAY, "Switch now?", opts.clone(), 24, refs.clone(), why, Some(sig.clone())); }), "the question is signed");
+    assert!(fails(|| { try_(&mut k, DAY, "Switch?", vec!["keep".into(), "bge-m3".into()], 24, refs.clone(), why, Some(sig.clone())); }), "the options are signed");
+    assert!(fails(|| { try_(&mut k, DAY, "Switch?", opts.clone(), 24, Some(vec![bl(3, H2), None]), why, Some(sig.clone())); }), "the by-laws are signed");
+    assert!(fails(|| { try_(&mut k, DAY, "Switch?", opts.clone(), 48, refs.clone(), why, Some(sig.clone())); }), "the hours are signed");
+    assert!(fails(|| { try_(&mut k, DAY, "Switch?", opts.clone(), 24, refs.clone(), "other", Some(sig.clone())); }), "the reason is signed");
+    assert!(fails(|| { try_(&mut k, DAY, "Switch?", opts.clone(), 24, refs.clone(), why, Some(enc(&SigningKey::from_bytes(&[3; 32])))); }), "another key");
+    let id = try_(&mut k, DAY, "Switch?", opts.clone(), 24, refs.clone(), why, Some(sig.clone()));
+    assert_eq!(k.get_poll(id).unwrap().by, agent(), "the agent opened it, not the relayer");
+    // replayed once the poll is decided: the signature was for nonce 0
+    assert!(fails(|| { try_(&mut k, 3 * DAY, "Switch?", opts.clone(), 24, refs.clone(), why, Some(sig.clone())); }), "replayed");
+    assert!(k.get_agent_poll_message("Switch?".into(), opts.clone(), 24, refs.clone(), why.into()).contains(" #1 "));
+    // its own nonce: the by-laws proposal and accept messages still start at 0
+    assert!(k.get_agent_proposal_message(2, H2.into(), "u".into(), "r".into()).contains(" #0 "));
+    assert!(k.get_accept_message(acc("kop-two.testnet"), 0).contains(" #0 "));
+}
+
+/// An agent poll's record leaves with the poll once 100 newer polls push it out.
+#[test]
+fn an_agent_polls_record_leaves_with_the_poll() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    let id = agent_poll(&mut k, &agent(), DAY, POLL_FEE, "q?", None, "why", None);
+    for _ in 0..polls::MAX_POLLS {
+        open_p(&mut k, "alice.testnet", polls::PollKind::General, 3 * DAY);
+    }
+    assert!(k.get_poll(id).is_none());
+    assert!(k.get_agent_polls().is_empty());
+    assert!(env::storage_read(format!("poll_agent:{id}").as_bytes()).is_none());
+}
+
+// ---------- 0.3.8: the referral share, paid automatically ----------
+
+/// USDC transfers the contract started: (receiver, amount).
+fn ft_transfers() -> Vec<(String, u128)> {
+    near_sdk::test_utils::get_created_receipts().iter().flat_map(|r| r.actions.clone()).filter_map(|a| match a {
+        near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, .. } if method_name == b"ft_transfer" => {
+            let v: Value = near_sdk::serde_json::from_slice(&args).unwrap();
+            Some((v["receiver_id"].as_str().unwrap().to_string(), v["amount"].as_str().unwrap().parse().unwrap()))
+        }
+        _ => None,
+    }).collect()
+}
+
+/// A steward, a sister co-op whose job "j-ref" was accepted here, its treasury, a 30% share.
+fn referral_setup() -> (Koperasi, AccountId, AccountId) {
+    let mut k = setup();
+    let sister = acc("kop-two.testnet");
+    let treasury = acc("kop-two.sputnik-v2.testnet");
+    as_(&dao(), near(0));
+    k.set_steward(Some(steward()));
+    k.set_sister_coops(vec![sister.clone()]);
+    k.set_referral_share(3000);
+    k.set_coop_treasury(sister.clone(), Some(treasury.clone()));
+    at(&me(), DAY);
+    k.on_referral_read(sister.clone(), 0, Ok(ref_board(0, "j-ref", &me())));
+    // the job's own receipt: the share is cut from at most its price and the referral's budget (5 USDC)
+    receipt(&mut k, "j-ref", 10_000_000, H1);
+    (k, sister, treasury)
+}
+
+fn deposit(k: &mut Koperasi, from: &AccountId, amount: u128, msg: &str) -> u128 {
+    as_(&usdc(), near(0));
+    match k.ft_on_transfer(from.clone(), U128(amount), msg.into()) {
+        PromiseOrValue::Value(v) => v.0,
+        _ => panic!("expected a value"),
+    }
+}
+
+/// Only the DAO sets the share (at most 50%) and a sister's treasury (not a contract); None removes it.
+#[test]
+fn only_the_dao_sets_the_referral_share_and_a_sisters_treasury() {
+    let mut k = setup();
+    let sister = acc("kop-two.testnet");
+    let t = acc("kop-two.sputnik-v2.testnet");
+    assert_eq!(k.get_referral_share(), 0);
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_referral_share(3000); }), "only the DAO");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_referral_share(5001); }), "at most 5000 bps");
+    as_(&dao(), near(0));
+    k.set_referral_share(5000);
+    assert!(logs_have("\"referral_share_set\""));
+    k.set_referral_share(3000);
+    assert_eq!(k.get_referral_share(), 3000);
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_coop_treasury(sister.clone(), Some(t.clone())); }), "not a sister yet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone()]);
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_coop_treasury(sister.clone(), Some(t.clone())); }), "only the DAO");
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_coop_treasury(sister.clone(), None); }), "only the DAO (removal)");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_coop_treasury(sister.clone(), Some(sister.clone())); }), "the sister's contract");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_coop_treasury(sister.clone(), Some(me())); }), "this contract");
+    as_(&dao(), near(0));
+    k.set_coop_treasury(sister.clone(), Some(t.clone()));
+    assert!(logs_have("\"coop_treasury_set\""));
+    assert_eq!(k.get_coop_treasury(sister.clone()), Some(t));
+    k.set_coop_treasury(sister.clone(), None);
+    assert_eq!(k.get_coop_treasury(sister), None);
+}
+
+/// "earnings:<job>" for a referred job: 30% to the sister's treasury, once; the rest booked as usual.
+#[test]
+fn a_referred_jobs_earnings_pay_the_referring_coop_its_share_once() {
+    let (mut k, sister, treasury) = referral_setup();
+    as_(&dao(), near(0));
+    k.set_agent_saves(1000);
+    assert_eq!(deposit(&mut k, &steward(), 10_000_000, "earnings:j-ref"), 0);
+    assert_eq!(ft_transfers(), vec![(treasury.to_string(), 1_500_000), (dao().to_string(), 7_650_000)], "30% of the job's share base (its 5 USDC budget, not the 10 USDC deposit); the agent saves 10% of the rest");
+    assert!(logs_have("\"referral_share_paid\"") && logs_have("\"job_id\":\"j-ref\"") && logs_have("\"to\":\"kop-two.sputnik-v2.testnet\""));
+    let p = k.get_referral_share_paid("j-ref".into()).unwrap();
+    assert_eq!((p.from_coop, p.to, p.amount.0, p.failed), (sister.clone(), treasury.clone(), 1_500_000, false));
+    assert_eq!(k.get_audit().deposited.0, 10_000_000, "the whole deposit counts as passed on");
+    assert_eq!(k.get_risk_fund().0, U128(850_000));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 9_150_000, "both transfers in flight");
+    at(&me(), DAY);
+    k.on_referral_share("j-ref".into(), U128(1_500_000), Ok(()));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 7_650_000);
+    // once per job: a second deposit for it pays no share again
+    deposit(&mut k, &steward(), 1_000_000, "earnings:j-ref");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 900_000)]);
+    assert_eq!(k.get_referral_share_paid("j-ref".into()).unwrap().amount.0, 1_500_000);
+}
+
+/// Every case that pays no share: plain "earnings", its own job, no job named, not the steward, another msg, no share
+/// voted, no treasury.
+#[test]
+fn earnings_pay_no_referral_share_unless_every_condition_holds() {
+    let (mut k, sister, _) = referral_setup();
+    deposit(&mut k, &steward(), 1_000_000, "earnings");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 1_000_000)], "plain earnings work as before");
+    deposit(&mut k, &steward(), 1_000_000, "earnings:j-own");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 1_000_000)], "a job of its own");
+    deposit(&mut k, &steward(), 1_000_000, "earnings:");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 1_000_000)], "no job named");
+    assert_eq!(deposit(&mut k, &acc("mallory.testnet"), 1_000_000, "earnings:j-ref"), 1_000_000, "not the steward: returned");
+    assert_eq!(deposit(&mut k, &steward(), 1_000_000, "earningsj-ref"), 1_000_000, "another msg: returned");
+    as_(&dao(), near(0));
+    k.set_referral_share(0);
+    deposit(&mut k, &steward(), 1_000_000, "earnings:j-ref");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 1_000_000)], "no share voted");
+    as_(&dao(), near(0));
+    k.set_referral_share(3000);
+    k.set_coop_treasury(sister, None);
+    deposit(&mut k, &steward(), 1_000_000, "earnings:j-ref");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 1_000_000)], "no treasury");
+    assert!(k.get_referral_share_paid("j-ref".into()).is_none(), "nothing paid for the job");
+    assert_eq!(k.get_audit().deposited.0, 5_000_000);
+}
+
+/// A failed transfer: the share goes to the DAO's unforwarded balance, the job stays marked (never sent twice).
+#[test]
+fn a_failed_referral_share_goes_to_the_dao_and_is_never_sent_twice() {
+    let (mut k, sister, _) = referral_setup();
+    deposit(&mut k, &steward(), 1, "earnings:j-ref");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 1)], "30% of 1 rounds to 0: nothing sent");
+    assert!(k.get_referral_share_paid("j-ref".into()).is_none(), "nor marked");
+    deposit(&mut k, &steward(), 2_000_000, "earnings:j-ref");
+    at(&me(), DAY);
+    k.on_referral_share("j-ref".into(), U128(600_000), Err(PromiseError::Failed));
+    assert!(logs_have("\"referral_share_failed\"") && logs_have("\"from_coop\":\"kop-two.testnet\""));
+    assert_eq!(k.get_info().unforwarded.0, 600_000);
+    let p = k.get_referral_share_paid("j-ref".into()).unwrap();
+    assert_eq!((p.from_coop, p.failed), (sister, true));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 1_400_000 + 1, "only the DAO transfers still in flight");
+    deposit(&mut k, &steward(), 2_000_000, "earnings:j-ref");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 2_000_000)], "not again");
+    at(&acc("anyone.testnet"), DAY);
+    k.flush_to_dao();
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 600_000)]);
+}
