@@ -83,7 +83,8 @@
 .try { border-color: rgba(255,213,74,.55); }
 .try .steps { margin: 0; }
 .cmd { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .4rem; }
-.cmd code { padding: .35rem .55rem; overflow-wrap: anywhere; font-size: .82rem; }
+.cmd { min-width: 0; max-width: 100%; }
+.cmd code { padding: .35rem .55rem; overflow-wrap: anywhere; word-break: break-all; white-space: normal; min-width: 0; max-width: 100%; font-size: .82rem; }
 .steps code { overflow-wrap: anywhere; }
 
 @media (max-width: 800px) {

@@ -751,10 +751,10 @@ Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_d
     const n = agent.strikes.length;
     const parts = [t(`<b>The agent answers to the court.</b> ${n
       ? `${n} case(s) upheld against its jobs in 90 days (${agent.strikes.map(([id]) => `#${esc(id)}`).join(", ")}): its daily inference budget is divided by ${2 ** n}`
-      : "No case upheld against its jobs in 90 days"}${agent.suspended ? "; <strong>suspended</strong> until the members reinstate it" : "; at 3 the contract suspends it"}.`,
+      : agent.reinstated_at ? `No case counts against it now: the members reinstated it on ${new Date(Number(agent.reinstated_at) / 1e6).toISOString().slice(0, 10)}, and cases upheld before that no longer count` : "No case upheld against its jobs in 90 days"}${agent.suspended ? "; <strong>suspended</strong> until the members reinstate it" : "; at 3 the contract suspends it"}.`,
     `<b>Agen tunduk pada pengadilan.</b> ${n
       ? `${n} perkara dikabulkan atas pekerjaannya dalam 90 hari (${agent.strikes.map(([id]) => `#${esc(id)}`).join(", ")}): anggaran inferensi hariannya dibagi ${2 ** n}`
-      : "Tidak ada perkara yang dikabulkan atas pekerjaannya dalam 90 hari"}${agent.suspended ? "; <strong>diskors</strong> sampai anggota memulihkannya" : "; pada perkara ke-3 kontrak menskorsnya"}.`)];
+      : agent.reinstated_at ? `Tidak ada perkara yang berlaku sekarang: anggota memulihkannya pada ${new Date(Number(agent.reinstated_at) / 1e6).toISOString().slice(0, 10)}, dan perkara sebelum itu tidak lagi dihitung` : "Tidak ada perkara yang dikabulkan atas pekerjaannya dalam 90 hari"}${agent.suspended ? "; <strong>diskors</strong> sampai anggota memulihkannya" : "; pada perkara ke-3 kontrak menskorsnya"}.`)];
     if (dues && BigInt(dues.amount) > 0n) parts.push(t(`<b>Mandatory dues:</b> ${nearAmt(dues.amount)} NEAR every ${esc(dues.every_days)} days into the treasury, voted by the members; 7 days behind and a member loses good standing.`,
       `<b>Simpanan wajib:</b> ${nearAmt(dues.amount)} NEAR setiap ${esc(dues.every_days)} hari ke kas, diputuskan oleh anggota; terlambat 7 hari dan anggota kehilangan status baik.`));
     // contract 0.3.0: funds from the surplus, and the savings-and-loan fund
