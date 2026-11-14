@@ -2,7 +2,7 @@
 export const dep = await (await fetch("deployment.json")).json();
 export const testnet = dep.network !== "mainnet";
 const RPCS = testnet
-  ? ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.fastnear.com"]
+  ? ["https://test.rpc.fastnear.com", "https://near-testnet.drpc.org", "https://rpc.testnet.fastnear.com", "https://archival-rpc.testnet.fastnear.com", "https://rpc.testnet.near.org"]
   : ["https://free.rpc.fastnear.com", "https://near.drpc.org", "https://rpc.mainnet.fastnear.com"];
 export const RPC_URLS = RPCS;
 // stick to the last RPC that answered: a rate-limited one (429, which also fails CORS) is then tried once, not per call
