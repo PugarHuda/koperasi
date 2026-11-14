@@ -767,6 +767,10 @@ impl Koperasi {
                     .then(Self::ext(env::current_account_id()).with_static_gas(GAS_SHARE).on_dao_balance(amount))
                     .into()
             }
+            // 0.3.6: a sister co-op repays a loan from the risk fund (anyone may send it)
+            m if m.starts_with(crate::lending::SISTER_REPAY_PREFIX) => {
+                PromiseOrValue::Value(U128(self.sister_repay(&m[crate::lending::SISTER_REPAY_PREFIX.len()..], amount.0)))
+            }
             _ => PromiseOrValue::Value(amount),
         }
     }
@@ -996,5 +1000,6 @@ mod reach;
 mod meeting;
 mod lending;
 mod solidarity;
+mod polls;
 pub use commons::*;
 pub use tasks::*;

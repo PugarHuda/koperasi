@@ -3103,3 +3103,254 @@ fn the_agent_refers_jobs_to_sister_coops() {
     k.pause();
     assert!(fails(|| { at(&agent(), DAY); refer(&mut k, &sister, None); }), "paused");
 }
+
+// ---------- 0.3.6 part B: polls ----------
+
+const HOUR: u64 = 3_600_000_000_000;
+
+fn open_p(k: &mut Koperasi, who: &str, kind: polls::PollKind, ns: u64) -> u32 {
+    at_paying(&acc(who), ns, NearToken::from_millinear(10));
+    k.open_poll("Which embedding model?".into(), vec!["a".into(), "b".into()], kind, 24)
+}
+
+fn vote(k: &mut Koperasi, who: &str, id: u32, option: u32, ns: u64) -> u128 {
+    at(&acc(who), ns);
+    k.vote_poll(id, option).0
+}
+
+/// A general poll: one member, one vote; every refusal on opening, voting and closing.
+#[test]
+fn a_general_poll_counts_one_member_one_vote_and_refuses_what_it_should() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet", "carol.testnet"]);
+    use polls::PollKind::General;
+    let try_open = |k: &mut Koperasi, who: &str, fee: u128, q: String, opts: Vec<String>, hours: u32| {
+        at_paying(&acc(who), DAY, NearToken::from_millinear(fee));
+        k.open_poll(q, opts, General, hours)
+    };
+    let two = || vec!["yes".to_string(), "no".to_string()];
+    assert!(fails(|| { try_open(&mut k, "mallory.testnet", 10, "q".into(), two(), 24); }), "only a member");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 9, "q".into(), two(), 24); }), "attach the fee");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 10, " ".into(), two(), 24); }), "empty question");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 10, "x".repeat(281), two(), 24); }), "question too long");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 10, "q".into(), vec!["only".into()], 24); }), "one option");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 10, "q".into(), (0..9).map(|i| i.to_string()).collect(), 24); }), "nine options");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 10, "q".into(), vec!["a".into(), "".into()], 24); }), "empty option");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 10, "q".into(), vec!["a".into(), "b".repeat(81)], 24); }), "option too long");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 10, "q".into(), two(), 0); }), "0 hours");
+    assert!(fails(|| { try_open(&mut k, "alice.testnet", 10, "q".into(), two(), 721); }), "over 30 days");
+    assert_eq!(k.get_polls(None, None).len(), 0, "nothing was kept by a refused poll");
+
+    let id = try_open(&mut k, "alice.testnet", 10, "Hold the annual meeting online?".into(), (0..8).map(|i| format!("o{i}")).collect(), 24);
+    assert_eq!(id, 0);
+    assert!(logs_have("\"poll_opened\"") && logs_have("\"mode\":\"one_member\""));
+    assert_eq!(vote(&mut k, "alice.testnet", id, 1, DAY + 1), 1);
+    assert!(logs_have("\"poll_voted\""));
+    assert!(fails(|| { vote(&mut k, "alice.testnet", id, 2, DAY + 2); }), "once each");
+    assert!(fails(|| { vote(&mut k, "mallory.testnet", id, 1, DAY + 2); }), "only a member");
+    assert!(fails(|| { vote(&mut k, "bob.testnet", id, 8, DAY + 2); }), "no such option");
+    assert!(fails(|| { vote(&mut k, "bob.testnet", 7, 0, DAY + 2); }), "no such poll");
+    vote(&mut k, "bob.testnet", id, 1, DAY + 2);
+    vote(&mut k, "carol.testnet", id, 3, DAY + 3);
+    assert!(fails(|| { at(&acc("anyone.testnet"), DAY + 23 * HOUR); k.close_poll(id); }), "still open");
+    assert!(fails(|| { vote(&mut k, "carol.testnet", id, 1, DAY + 24 * HOUR); }), "closed at the deadline");
+    at(&acc("anyone.testnet"), DAY + 24 * HOUR);
+    assert_eq!(k.close_poll(id), Some(1));
+    assert!(logs_have("\"poll_closed\"") && logs_have("\"result\":1"));
+    let p = k.get_poll(id).unwrap();
+    assert!(p.closed);
+    assert_eq!((p.tallies[1].0, p.tallies[3].0, p.voters.len()), (2, 1, 3));
+    assert!(fails(|| { at(&acc("anyone.testnet"), DAY + 25 * HOUR); k.close_poll(id); }), "closed once");
+    // a tie for first, or no votes: no result
+    let tie = open_p(&mut k, "bob.testnet", General, 2 * DAY);
+    vote(&mut k, "alice.testnet", tie, 0, 2 * DAY + 1);
+    vote(&mut k, "bob.testnet", tie, 1, 2 * DAY + 1);
+    let empty = open_p(&mut k, "bob.testnet", General, 2 * DAY);
+    at(&acc("anyone.testnet"), 3 * DAY);
+    assert_eq!(k.close_poll(tie), None);
+    assert_eq!(k.close_poll(empty), None);
+}
+
+/// A technical poll weighs votes by reputation only when the members voted that mode; general polls never do; the mode
+/// is fixed when a poll opens.
+#[test]
+fn a_technical_poll_is_weighed_by_reputation_only_if_the_by_laws_say_so() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet", "carol.testnet"]);
+    use polls::PollKind::{General, Technical};
+    commons::mark(&acc("alice.testnet"), |s| s.pledges_honored += 30); // weight 3000
+    commons::mark(&acc("bob.testnet"), |s| s.pledges_honored += 10); // weight 1000; carol 0
+    assert_eq!(k.get_technical_vote_mode(), "one_member");
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_technical_vote("reputation".into()); }), "only the DAO");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_technical_vote("plutocracy".into()); }), "bad mode");
+    // default: a technical poll is one member, one vote
+    let before = open_p(&mut k, "alice.testnet", Technical, DAY);
+    as_(&dao(), near(0));
+    k.set_technical_vote("reputation".into());
+    assert!(logs_have("\"technical_vote_set\""));
+    assert_eq!(k.get_technical_vote_mode(), "reputation");
+    let tech = open_p(&mut k, "alice.testnet", Technical, DAY);
+    let gen = open_p(&mut k, "alice.testnet", General, DAY);
+    assert_eq!(k.get_poll(tech).unwrap().mode, "reputation");
+    assert_eq!(k.get_poll(gen).unwrap().mode, "one_member");
+    assert_eq!(k.get_poll(before).unwrap().mode, "one_member", "the mode is fixed at opening");
+    for id in [before, tech, gen] {
+        let w = vote(&mut k, "alice.testnet", id, 0, DAY + 1);
+        assert_eq!(w, if id == tech { 3000 } else { 1 });
+        vote(&mut k, "bob.testnet", id, 1, DAY + 1);
+        vote(&mut k, "carol.testnet", id, 1, DAY + 1);
+    }
+    at(&acc("anyone.testnet"), 2 * DAY);
+    assert_eq!(k.close_poll(tech), Some(0), "3000 against 1000 + 0");
+    assert!(logs_have("\"mode\":\"reputation\""));
+    assert_eq!(k.close_poll(gen), Some(1), "1 against 2");
+    assert_eq!(k.close_poll(before), Some(1));
+    assert_eq!(k.get_poll(tech).unwrap().tallies.iter().map(|t| t.0).collect::<Vec<_>>(), vec![3000, 1000]);
+    // and back to one member, one vote
+    as_(&dao(), near(0));
+    k.set_technical_vote("one_member".into());
+    let id = open_p(&mut k, "bob.testnet", Technical, 3 * DAY);
+    assert_eq!(k.get_poll(id).unwrap().mode, "one_member");
+}
+
+/// Only the last 100 polls are kept; a dropped poll can no longer be voted or closed.
+#[test]
+fn only_the_last_100_polls_are_kept() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    for _ in 0..101 {
+        open_p(&mut k, "alice.testnet", polls::PollKind::General, DAY);
+    }
+    assert!(k.get_poll(0).is_none() && k.get_poll(100).is_some());
+    let all = k.get_polls(None, Some(500));
+    assert_eq!((all.len(), all[0].id, all[99].id), (100, 1, 100));
+    assert_eq!(k.get_polls(None, None).len(), 20);
+    assert_eq!(k.get_polls(Some(95), Some(10)).len(), 6);
+    assert!(fails(|| { vote(&mut k, "alice.testnet", 0, 0, DAY + 1); }));
+    assert!(fails(|| { at(&acc("anyone.testnet"), 3 * DAY); k.close_poll(0); }));
+}
+
+// ---------- 0.3.6 part B: loans to sister co-ops ----------
+
+fn unused(p: PromiseOrValue<U128>) -> u128 {
+    match p {
+        PromiseOrValue::Value(v) => v.0,
+        _ => panic!("a promise"),
+    }
+}
+
+fn sister_setup() -> (Koperasi, AccountId) {
+    let mut k = setup();
+    let sister = acc("koperasi-two.testnet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone()]);
+    lending::add_risk(1_000_000);
+    (k, sister)
+}
+
+fn lend(k: &mut Koperasi, coop: &AccountId, amount: u128, days: u32) {
+    at(&dao(), DAY);
+    let _ = k.lend_to_sister(coop.clone(), U128(amount), days);
+}
+
+fn repay(k: &mut Koperasi, msg: &str, amount: u128) -> u128 {
+    as_(&usdc(), near(0));
+    unused(k.ft_on_transfer(acc("koperasi-two.testnet"), U128(amount), msg.into()))
+}
+
+/// The DAO lends a sister co-op from the risk fund; every refusal; it is repaid (in parts) back into the fund.
+#[test]
+fn the_dao_lends_a_sister_coop_from_the_risk_fund_and_it_repays() {
+    let (mut k, sister) = sister_setup();
+    assert!(fails(|| { at(&acc("alice.testnet"), DAY); let _ = k.lend_to_sister(sister.clone(), U128(100), 30); }), "only the DAO");
+    assert!(fails(|| lend(&mut k, &acc("stranger.testnet"), 100, 30)), "not a sister");
+    assert!(fails(|| lend(&mut k, &sister, 500_001, 30)), "more than half the risk fund");
+    assert!(fails(|| lend(&mut k, &sister, 0, 30)), "nothing");
+    assert!(fails(|| lend(&mut k, &sister, 100, 0)), "0 days");
+    assert!(fails(|| lend(&mut k, &sister, 100, 366)), "over a year");
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| lend(&mut k, &sister, 100, 30)), "paused");
+    as_(&dao(), near(0));
+    k.unpause();
+    assert_eq!(k.get_sister_loans().len(), 0, "nothing kept by a refusal");
+
+    lend(&mut k, &sister, 500_000, 30);
+    assert!(logs_have("\"sister_loan\""));
+    assert_eq!(k.get_risk_fund().0 .0, 500_000);
+    assert_eq!(k.get_ledger().unwrap().1 .0, 500_000, "in flight until the callback");
+    let l = &k.get_sister_loans()[0];
+    assert_eq!((l.id, l.amount.0, l.status, l.due.0), (0, 500_000, lending::SisterLoanStatus::Open, DAY + 30 * DAY));
+    assert!(fails(|| lend(&mut k, &sister, 100, 30)), "one loan open per co-op");
+    at(&me(), DAY);
+    k.on_sister_lent(0, U128(500_000), Ok(()));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 0);
+    assert_eq!(k.get_risk_fund().0 .0, 500_000, "a transfer that went through keeps the loan");
+
+    // repayment: a bad id, a wrong token, an unknown loan: all returned
+    assert_eq!(repay(&mut k, "sister_repay:x", 10), 10);
+    assert_eq!(repay(&mut k, "sister_repay:9", 10), 10);
+    as_(&acc("fake-usdc.testnet"), near(0));
+    assert_eq!(unused(k.ft_on_transfer(sister.clone(), U128(10), "sister_repay:0".into())), 10, "only the co-op's USDC");
+    assert_eq!(k.get_risk_fund().0 .0, 500_000);
+    // in parts, anyone may pay; the excess is returned
+    assert_eq!(repay(&mut k, "sister_repay:0", 200_000), 0);
+    assert!(logs_have("\"sister_repaid\"") && logs_have("\"outstanding\":\"300000\""));
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Open);
+    assert_eq!(repay(&mut k, "sister_repay:0", 400_000), 100_000);
+    assert_eq!(k.get_risk_fund().0 .0, 1_000_000, "all back in the risk fund");
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Repaid);
+    assert_eq!(repay(&mut k, "sister_repay:0", 5), 5, "a repaid loan takes nothing more");
+    assert!(fails(|| { at(&acc("anyone.testnet"), 40 * DAY); k.mark_sister_late(0); }), "a repaid loan is not late");
+    // repaid: the co-op may borrow again
+    lend(&mut k, &sister, 100, 30);
+    assert_eq!(k.get_sister_loans()[1].id, 1);
+}
+
+/// A failed transfer rolls the books back: the fund is whole, the loan void and nothing more can be paid into it.
+#[test]
+fn a_failed_sister_loan_transfer_goes_back_to_the_risk_fund() {
+    let (mut k, sister) = sister_setup();
+    lend(&mut k, &sister, 400_000, 30);
+    at(&me(), DAY);
+    k.on_sister_lent(0, U128(400_000), Err(PromiseError::Failed));
+    assert!(logs_have("\"sister_loan_failed\""));
+    assert_eq!(k.get_risk_fund().0 .0, 1_000_000);
+    assert_eq!(k.get_ledger().unwrap().1 .0, 0);
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Failed);
+    assert_eq!(repay(&mut k, "sister_repay:0", 400_000), 400_000, "a void loan takes nothing");
+    assert!(fails(|| { at(&acc("anyone.testnet"), 40 * DAY); k.mark_sister_late(0); }), "a void loan is not late");
+    lend(&mut k, &sister, 400_000, 30); // not open: the co-op may be lent again
+}
+
+/// Past due, anyone calls a sister loan late: recorded here and told to the sister co-ops; that co-op is not lent again.
+/// A co-op another sister noted late is not lent either.
+#[test]
+fn a_late_sister_loan_is_recorded_and_told_and_blocks_further_loans() {
+    let (mut k, sister) = sister_setup();
+    lend(&mut k, &sister, 300_000, 10);
+    assert!(fails(|| { at(&acc("anyone.testnet"), 11 * DAY); k.mark_sister_late(0); }), "not due yet: due is day 11");
+    assert!(fails(|| { at(&acc("anyone.testnet"), 12 * DAY); k.mark_sister_late(5); }), "no such loan");
+    at(&acc("anyone.testnet"), 12 * DAY);
+    k.mark_sister_late(0);
+    assert!(logs_have("\"sister_late\"") && logs_have("\"outstanding\":\"300000\""));
+    assert!(fails(|| { at(&acc("anyone.testnet"), 12 * DAY); k.mark_sister_late(0); }), "once");
+    let l = &k.get_sister_loans()[0];
+    assert!(l.was_late && l.status == lending::SisterLoanStatus::Late);
+    assert_eq!(k.get_sister_late(sister.clone()), 1);
+    // still repayable; the record stays
+    assert_eq!(repay(&mut k, "sister_repay:0", 300_000), 0);
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Repaid);
+    assert_eq!(k.get_risk_fund().0 .0, 1_000_000);
+    assert!(fails(|| lend(&mut k, &sister, 100, 30)), "a loan to this co-op went late");
+    // a co-op that a sister noted late is refused too
+    let third = acc("koperasi-three.testnet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone(), third.clone()]);
+    as_(&sister, near(0));
+    k.note_late_elsewhere(third.clone(), true);
+    assert!(fails(|| lend(&mut k, &third, 100, 30)), "noted late by a sister");
+    as_(&sister, near(0));
+    k.note_late_elsewhere(third.clone(), false);
+    lend(&mut k, &third, 100, 30);
+}

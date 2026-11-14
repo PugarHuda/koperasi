@@ -486,3 +486,158 @@ impl Koperasi {
         load(&loan_key(&account_id))
     }
 }
+
+// ---------- 0.3.6: loans to sister co-ops from the risk fund ----------
+//
+// The members (DAO only) lend a sister co-op USDC from the risk fund (`lend_to_sister`): at most half of it, one loan
+// open per co-op, and never to a co-op whose loan from here went late or that a sister co-op noted late. No interest.
+// The borrower (or anyone) repays with ft_transfer_call msg "sister_repay:<id>", into the risk fund. A loan unpaid after
+// its due date can be called late by anyone (`mark_sister_late`): recorded here and told to every sister co-op.
+
+const KEY_SISTER_LOANS: &[u8] = b"sister_loans";
+const KEY_SISTER_LOAN_COUNT: &[u8] = b"sister_loan_count";
+/// Loans kept: when there are more, the oldest settled one (repaid or failed) is dropped.
+pub const MAX_SISTER_LOANS: usize = 100;
+/// The most of the risk fund one loan may take, in bps.
+const SISTER_CAP_BPS: u128 = 5_000;
+const GAS_SISTER_LENT: Gas = Gas::from_tgas(10);
+pub const SISTER_REPAY_PREFIX: &str = "sister_repay:";
+
+fn sister_late_key(coop: &AccountId) -> Vec<u8> {
+    format!("sister_late:{coop}").into_bytes()
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum SisterLoanStatus {
+    Open,
+    Repaid,
+    Late,
+    /// the transfer failed: the amount went back to the risk fund
+    Failed,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct SisterLoan {
+    pub id: u32,
+    pub coop: AccountId,
+    pub amount: U128,
+    pub repaid: U128,
+    pub lent_at: U64,
+    pub due: U64,
+    pub status: SisterLoanStatus,
+    pub was_late: bool,
+}
+
+fn sister_loans() -> Vec<SisterLoan> {
+    load(KEY_SISTER_LOANS).unwrap_or_default()
+}
+
+/// How many loans to `coop` went late (kept for good: the record of this co-op's own lending).
+pub(crate) fn sister_late_count(coop: &AccountId) -> u32 {
+    load(&sister_late_key(coop)).unwrap_or(0)
+}
+
+impl Koperasi {
+    /// `ft_on_transfer` with msg "sister_repay:<id>": repay a sister loan into the risk fund. Returns what is not used
+    /// (all of it for a bad id, a settled or failed loan; the excess over what is still owed).
+    pub(crate) fn sister_repay(&mut self, id: &str, amount: u128) -> u128 {
+        let Ok(id) = id.parse::<u32>() else { return amount };
+        let mut all = sister_loans();
+        let Some(l) = all.iter_mut().find(|l| l.id == id) else { return amount };
+        if !matches!(l.status, SisterLoanStatus::Open | SisterLoanStatus::Late) {
+            return amount;
+        }
+        let take = amount.min(l.amount.0 - l.repaid.0);
+        l.repaid.0 += take;
+        add_risk(take);
+        let outstanding = l.amount.0 - l.repaid.0;
+        if outstanding == 0 {
+            if l.status == SisterLoanStatus::Late {
+                crate::solidarity::tell_sisters(&l.coop, false); // settled: the sister co-ops lift their note
+            }
+            l.status = SisterLoanStatus::Repaid;
+        }
+        Event::SisterRepaid { id, coop: l.coop.clone(), amount: U128(take), outstanding: U128(outstanding) }.emit();
+        save(KEY_SISTER_LOANS, &all);
+        amount - take
+    }
+}
+
+#[near]
+impl Koperasi {
+    /// DAO only: lend sister co-op `coop` `amount` USDC from the risk fund for `days` (1 to 365). At most half the risk
+    /// fund; refused while a loan to it is open, if a loan to it ever went late here, or a sister co-op noted it late.
+    pub fn lend_to_sister(&mut self, coop: AccountId, amount: U128, days: u32) -> Promise {
+        self.assert_dao();
+        require!(!self.paused, "koperasi is paused");
+        require!(self.get_sister_coops().contains(&coop), "not a sister co-op the members recognise");
+        require!((1..=365).contains(&days), "term 1 to 365 days");
+        require!(amount.0 > 0 && amount.0 <= risk_fund() * SISTER_CAP_BPS / 10_000, "at most half the risk fund");
+        require!(sister_late_count(&coop) == 0, "a loan to this co-op went late");
+        require!(crate::solidarity::late_elsewhere(&coop).is_none(), "a sister co-op noted this co-op late");
+        let mut all = sister_loans();
+        require!(!all.iter().any(|l| l.coop == coop && matches!(l.status, SisterLoanStatus::Open | SisterLoanStatus::Late)),
+            "a loan to this co-op is still open");
+        let id: u32 = load(KEY_SISTER_LOAN_COUNT).unwrap_or(0);
+        save(KEY_SISTER_LOAN_COUNT, &(id + 1));
+        let now = env::block_timestamp();
+        let due = U64(now + days as u64 * DAY_NS);
+        all.push(SisterLoan { id, coop: coop.clone(), amount, repaid: U128(0), lent_at: U64(now), due, status: SisterLoanStatus::Open, was_late: false });
+        if all.len() > MAX_SISTER_LOANS {
+            if let Some(i) = all.iter().position(|l| matches!(l.status, SisterLoanStatus::Repaid | SisterLoanStatus::Failed)) {
+                all.remove(i);
+            }
+        }
+        save(KEY_SISTER_LOANS, &all);
+        take_risk(amount.0);
+        crate::bump(crate::KEY_IN_FLIGHT, amount.0, false);
+        Event::SisterLoan { id, coop: coop.clone(), amount, due }.emit();
+        ext_ft::ext(self.usdc_id.clone())
+            .with_attached_deposit(NearToken::from_yoctonear(1))
+            .with_static_gas(crate::GAS_FT_TRANSFER)
+            .ft_transfer(coop, amount, Some(format!("Koperasi sister loan #{id}: repay with ft_transfer_call msg {SISTER_REPAY_PREFIX}{id}")))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_SISTER_LENT).on_sister_lent(id, amount))
+    }
+
+    /// Callback of `lend_to_sister`: a failed transfer puts the amount back in the risk fund and the loan is void.
+    #[private]
+    pub fn on_sister_lent(&mut self, id: u32, amount: U128, #[callback_result] r: Result<(), PromiseError>) {
+        crate::bump(crate::KEY_IN_FLIGHT, amount.0, true);
+        if r.is_ok() {
+            return;
+        }
+        let mut all = sister_loans();
+        if let Some(l) = all.iter_mut().find(|l| l.id == id) {
+            l.status = SisterLoanStatus::Failed;
+            Event::SisterLoanFailed { id, coop: l.coop.clone(), amount }.emit();
+        }
+        add_risk(amount.0);
+        save(KEY_SISTER_LOANS, &all);
+    }
+
+    /// Anyone, after its due date: an unpaid sister loan is late; recorded here and told to every sister co-op.
+    pub fn mark_sister_late(&mut self, id: u32) {
+        let mut all = sister_loans();
+        let l = all.iter_mut().find(|l| l.id == id).unwrap_or_else(|| env::panic_str("no such sister loan"));
+        require!(l.status == SisterLoanStatus::Open, "not an open loan");
+        require!(env::block_timestamp() > l.due.0, "not due yet");
+        l.status = SisterLoanStatus::Late;
+        l.was_late = true;
+        save(&sister_late_key(&l.coop), &(sister_late_count(&l.coop) + 1));
+        crate::solidarity::tell_sisters(&l.coop, true);
+        Event::SisterLate { id, coop: l.coop.clone(), outstanding: U128(l.amount.0 - l.repaid.0) }.emit();
+        save(KEY_SISTER_LOANS, &all);
+    }
+
+    /// Loans to sister co-ops still kept (every open or late one; the last settled ones), oldest first.
+    pub fn get_sister_loans(&self) -> Vec<SisterLoan> {
+        sister_loans()
+    }
+
+    /// How many loans to `coop` went late here (a co-op with any is never lent to again by `lend_to_sister`).
+    pub fn get_sister_late(&self, coop: AccountId) -> u32 {
+        sister_late_count(&coop)
+    }
+}

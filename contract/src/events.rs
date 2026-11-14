@@ -305,4 +305,30 @@ pub enum Event {
     /// The co-op's agent passed a job to a sister co-op (the referral board).
     #[event_version("1.0.0")]
     JobReferred { id: u32, job_id: String, to_coop: AccountId, budget_usdc: U128 },
+
+    // ---------- 0.3.6 (part B): polls and loans to sister co-ops ----------
+    /// The members voted how technical polls are weighed ("reputation" or "one_member").
+    #[event_version("1.0.0")]
+    TechnicalVoteSet { mode: String },
+    /// A member opened a poll; `mode` is how its votes are weighed, fixed now.
+    #[event_version("1.0.0")]
+    PollOpened { id: u32, kind: crate::polls::PollKind, mode: String, by: AccountId, options: u32, closes_at: U64 },
+    /// A member voted in a poll, with the weight counted (1, or their reputation weight).
+    #[event_version("1.0.0")]
+    PollVoted { id: u32, by: AccountId, option: u32, weight: U128 },
+    /// A poll was counted after its deadline (`result` None: no votes or a tie for first).
+    #[event_version("1.0.0")]
+    PollClosed { id: u32, result: Option<u32>, mode: String, tallies: Vec<U128> },
+    /// The members lent a sister co-op USDC from the risk fund.
+    #[event_version("1.0.0")]
+    SisterLoan { id: u32, coop: AccountId, amount: U128, due: U64 },
+    /// A sister loan's transfer failed; the amount went back to the risk fund.
+    #[event_version("1.0.0")]
+    SisterLoanFailed { id: u32, coop: AccountId, amount: U128 },
+    /// A sister loan was (partly) repaid into the risk fund.
+    #[event_version("1.0.0")]
+    SisterRepaid { id: u32, coop: AccountId, amount: U128, outstanding: U128 },
+    /// A sister loan was called late after its due date; told to every sister co-op.
+    #[event_version("1.0.0")]
+    SisterLate { id: u32, coop: AccountId, outstanding: U128 },
 }
