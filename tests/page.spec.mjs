@@ -169,7 +169,7 @@ test("a newcomer is walked through joining", async ({ page }, testInfo) => {
   const panel = page.locator("#joinapp");
   await expect(panel).toContainText("Signed in as kop-publisher-mw5tkpfo.testnet");
   await expect(panel.locator("#w-join")).toHaveText(/Pay 0\.5 NEAR/);
-  await expect(panel.locator(".jsteps li")).toHaveCount(4);
+  await expect(panel.locator(".jsteps li")).toHaveCount(5);
   expect(errors).toEqual([]);
 });
 
