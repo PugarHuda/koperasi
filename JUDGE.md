@@ -55,6 +55,7 @@ every day (`.github/workflows/tests.yml`).
 | 13t | The agent routes work and weighs judgment (0.3.4) | `npm run verify`; `get_reputation_weights` | a second job passed to the sister co-op by the agent's own decision (budget below its price), paid by the sister's #27; weights after share #135 multiplied by each member's court record |
 | 13u | The Shade Agent registry | [`kop-tee-mwfb5bj2.testnet`](https://testnet.nearblocks.io/address/kop-tee-mwfb5bj2.testnet) `get_contract_info`; the co-op's `get_agent_tee` | the registry the members named (#134), owned by the co-op's DAO, with the code and machine they approved (#137); `get_agent("c4ebe4db…")` shows the worker attested until 21 Nov, admitted TEE-only by #138, and its receipt `demo-33693cb6…` recorded from inside the TDX VM |
 | 13v | The agent's own review, and the members' judgment | `/rat/agent-2026.md`, `/rat/agent-2026.rejected.md`; `npm run verify` | a first draft with factual errors rejected by #141; the corrected one accepted by #142, its sha256 in the proposal; by-laws v9 (the agent's mistake, #139) undone by the members' v10 (#140) |
+| 13w | The member dashboard | `/dashboard.html` (the header's "Open the member app") | a sidebar of views read live: KPIs, the agent (by-laws v10, the Shade Agent, its proposals), money, commons, federation; on localhost `?as=kop-bob-mw4i3w8f.testnet#/membership` shows a member's own panel |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source

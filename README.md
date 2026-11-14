@@ -112,7 +112,7 @@ quotes its line.
 | Members pay no gas | NEP-366 relayer, calls without a deposit: [7pziyP7a…](https://testnet.nearblocks.io/txns/7pziyP7aXe8aKMKKRSWo18dfCpAhTaHtHc2vTJsNmdBN) | (unit tests of `api/relay.mjs`) |
 | The model runs in a TEE, checkable by you | The voted model, deepseek-v3.2, is served through Chutes on NEAR AI Cloud: Intel TDX and 8 NVIDIA GPUs, re-verified by the agent within the hour before each job (saved daily in [`evidence/`](evidence)). The page checks it with your browser's nonce: the TDX quote against Intel's collateral, its report data bound to your nonce and to the instance's certificate, and the measurements (MRTD, RTMR0–3) equal to Chutes' pinned ones ([`web/chutes-measurements.json`](web/chutes-measurements.json), kept equal to the agent's by a unit test). Fixed 13 Nov: from by-laws v6 the page said *Not verified*, because it could not read a Chutes attestation | `node agent/tee.mjs deepseek/deepseek-v3.2` → `VERIFIED` |
 
-Live page: **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR).
+Live page: **https://koperasi-kohl.vercel.app** (static, reads the contract and the DAO straight from NEAR). The member dashboard: **https://koperasi-kohl.vercel.app/dashboard.html** (overview, membership, proposals, the agent, money, commons, federation, verify; `?as=<account>` previews a member on localhost).
 
 The members (alice, bob, the steward, guest-984702 and one who joined with a signed vouch) and carol, a contributor who
 is not a member, are the builder's demo accounts. They show that the mechanism works,
