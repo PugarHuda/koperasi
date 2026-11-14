@@ -266,6 +266,7 @@ impl Koperasi {
         require!(t.status == TaskStatus::Claimed, "task is not claimed");
         require!(t.contributor.as_ref() == Some(&env::predecessor_account_id()), "not your task");
         Event::TaskGivenUp { id, contributor: env::predecessor_account_id() }.emit();
+        crate::solidarity::note_task(&env::predecessor_account_id(), |q| q.handed_back += 1);
         t.contributor = None;
         t.status = TaskStatus::Open;
         save(&task_key(id), &t);
@@ -334,6 +335,7 @@ impl Koperasi {
         env::storage_remove(&due_key(id));
         t.status = TaskStatus::NeedsApproval;
         save(&task_key(id), &t);
+        crate::solidarity::note_task(t.contributor.as_ref().unwrap(), |q| q.vetoed += 1);
         Event::TaskVetoed { id, by: who }.emit();
     }
 
@@ -496,6 +498,7 @@ impl Koperasi {
                     .map_or(0, |r| (r.points as u128 * t.amount.0 / r.one_vote_max.0.max(1)).min(r.points as u128) as u64);
                 let contributor = t.contributor.clone().unwrap();
                 Event::TaskPaid { id, contributor: contributor.clone(), amount: t.amount, points }.emit();
+                crate::solidarity::note_task(&contributor, |q| q.paid += 1);
                 self.credit(&contributor, format!("task:{id}"), t.amount.0, points);
             }
             // still open (e.g. the role is missing from the policy) or unreadable: the members can vote it by hand,
