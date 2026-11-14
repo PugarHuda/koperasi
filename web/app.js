@@ -65,7 +65,7 @@ const brief = (tries = 3) => Promise.all([
   const chains = ["NEAR", ...(dep.chainSignatures?.transfer?.sent ? ["Ethereum"] : []),
     ...((dep.intents?.payouts ?? []).some((p) => p.chain === "base" && p.status === "SUCCESS") ? ["Base"] : [])];
   const where = chains.length > 1 ? `${chains.slice(0, -1).join(", ")} ${t("and", "dan")} ${chains.at(-1)}` : chains[0];
-  $("proofline").innerHTML = t(`Right now on NEAR testnet: ${members.length} members, ${proposals} DAO votes, ${paid.length} tasks paid, and payouts that landed on ${where}.`,
+  $("proofline").innerHTML = t(`Right now on NEAR testnet: ${members.length} members, ${proposals} DAO proposals, ${paid.length} tasks paid, and payouts that landed on ${where}.`,
     `Saat ini di testnet NEAR: ${members.length} anggota, ${proposals} pemungutan suara DAO, ${paid.length} tugas dibayar, dan pembayaran yang sampai di ${where}.`);
   $("counts").innerHTML = [
     [t("Members", "Anggota"), members.length, t("one vote each", "masing-masing satu suara")],
@@ -356,7 +356,7 @@ try {
       <li class="${x.version === info.config.version ? "current" : ""}">
         <span class="v">v${x.version}</span>
         <div>
-          <div class="meta">${date(x.activated_at)}${x.contributor ? t(`, proposed by ${esc(x.contributor)}`, `, diusulkan oleh ${esc(x.contributor)}`) : t(", founding by-laws", ", anggaran dasar pendirian")}${x.version === info.config.version ? t(". The agent runs this one.", ". Inilah yang dijalankan agen.") : ""}</div>
+          <div class="meta">${date(x.activated_at)}${x.contributor ? t(`, proposed by ${esc(x.contributor)}`, `, diusulkan oleh ${esc(x.contributor)}`) : x.version === 1 ? t(", founding by-laws", ", anggaran dasar pendirian") : t(", voted by the members", ", diputuskan anggota")}${x.version === info.config.version ? t(". The agent runs this one.", ". Inilah yang dijalankan agen.") : ""}</div>
           <div class="hash">sha256 ${esc(x.hash)}</div>
           <div class="meta">${esc(x.uri)}</div>
         </div>
@@ -462,7 +462,7 @@ try {
           <td class="num" data-label="${t("Inference", "Inferensi")}">$${(Number(r.inference_cost) / 1e6).toFixed(4)}</td>
           <td data-label="${t("By-laws", "Anggaran dasar")}">v${r.config_version} <span class="muted">${short(r.config_hash)}</span></td>
           <td data-label="Proof">${proofCell(proofs[i], r.job_id)}</td>
-          <td data-label="Status"><span class="badge ${r.status}">${r.status}</span></td></tr>`).join(""));
+          <td data-label="Status"><span class="badge ${esc(r.status)}">${t(esc(r.status), ({ Submitted: "Diserahkan", Paid: "Dibayar", Refunded: "Dikembalikan", Disputed: "Disengketakan" })[r.status] ?? esc(r.status))}</span></td></tr>`).join(""));
     });
   }).catch((e) => console.error(e));
 
@@ -764,8 +764,8 @@ Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_d
       `<b>Dana dari setiap pembagian SHU:</b> ${funds.map((f) => `${esc(f.name)} ${f.bps / 100}% ke <a href="${explorer(f.to)}">${esc(f.to)}</a>`).join("; ")}, diambil dari dana cadangan.`));
     if (loans) parts.push(t(`<b>Savings and loans:</b> a member in good standing with a guarantor borrows up to ${nearAmt(loans[0].max_loan)} NEAR for ${esc(loans[0].term_days)} days at ${loans[0].rate_bps / 100}% flat; the fund can lend ${nearAmt(loans[1])} NEAR now. A late loan costs the borrower and their guarantors good standing.`,
       `<b>Simpan pinjam:</b> anggota berstatus baik dengan penjamin bisa meminjam hingga ${nearAmt(loans[0].max_loan)} NEAR selama ${esc(loans[0].term_days)} hari dengan bunga flat ${loans[0].rate_bps / 100}%; dana bisa meminjamkan ${nearAmt(loans[1])} NEAR sekarang. Pinjaman yang terlambat membuat peminjam dan penjaminnya kehilangan status baik.`));
-    if (member && (member.share_bps || risk)) parts.push(t(`<b>The agent is a member too.</b> It gets ${member.share_bps / 100}% of every profit share, scaled by its standing (now ${member.standing_bps / 100}%: halved for each upheld case), into the risk fund that refunds its mistakes at once: ${risk ? `${usdc(risk[0])} USDC there now, it saves ${risk[1] / 100}% of its earnings` : ""}; ${usdc(member.shu_total)} USDC from its shares so far.`,
-      `<b>Agen juga anggota.</b> Ia mendapat ${member.share_bps / 100}% dari setiap pembagian SHU, disesuaikan dengan statusnya (kini ${member.standing_bps / 100}%: separuh untuk setiap perkara yang dikabulkan), masuk ke dana risiko yang langsung mengganti kesalahannya: ${risk ? `kini ${usdc(risk[0])} USDC di sana, ia menyisihkan ${risk[1] / 100}% dari pendapatannya` : ""}; ${usdc(member.shu_total)} USDC dari bagian SHU-nya sejauh ini.`));
+    if (member && (member.share_bps || risk)) parts.push(t(`<b>The agent is a member too.</b> It gets ${member.share_bps / 100}% of every profit share, scaled by its standing (now ${member.standing_bps / 100}%: halved for each upheld case, and after a suspension climbing back from 25% over the recovery ramp), into the risk fund that refunds its mistakes at once: ${risk ? `${usdc(risk[0])} USDC there now, it saves ${risk[1] / 100}% of its earnings` : ""}; ${usdc(member.shu_total)} USDC from its shares so far.`,
+      `<b>Agen juga anggota.</b> Ia mendapat ${member.share_bps / 100}% dari setiap pembagian SHU, disesuaikan dengan statusnya (kini ${member.standing_bps / 100}%: separuh untuk setiap perkara yang dikabulkan, dan setelah skorsing naik lagi dari 25% selama masa pemulihan), masuk ke dana risiko yang langsung mengganti kesalahannya: ${risk ? `kini ${usdc(risk[0])} USDC di sana, ia menyisihkan ${risk[1] / 100}% dari pendapatannya` : ""}; ${usdc(member.shu_total)} USDC dari bagian SHU-nya sejauh ini.`));
     if (repBps) parts.push(t(`<b>Reputation dividend:</b> ${repBps / 100}% of every profit share is split among members in good standing by their work since the last one (finished tasks, pledges kept, juries served), plus half their last weight.`,
       `<b>Dividen reputasi:</b> ${repBps / 100}% dari setiap pembagian SHU dibagi di antara anggota berstatus baik menurut kerja mereka sejak pembagian sebelumnya (tugas selesai, janji ditepati, tugas juri), ditambah separuh bobot terakhir mereka.`));
     // the agent's proposals and the federation's ceiling have their own cards below (#card-proposal, #card-credit)

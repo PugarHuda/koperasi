@@ -578,8 +578,8 @@ async function federation() {
     const res = [dep.federation?.resolution, ...(dep.federation?.resolutions ?? [])].filter(Boolean);
     return `<p>${t(`The federation <a href="${explorer(fedDao)}">${esc(fedDao)}</a> is a Sputnik DAO whose only members are co-ops' DAOs, one co-op one vote.`,
       `Federasi <a href="${explorer(fedDao)}">${esc(fedDao)}</a> adalah Sputnik DAO yang anggotanya hanya DAO koperasi, satu koperasi satu suara.`)}
-      ${ceil ? t(`Its ceiling, binding in this contract: loans at most <strong>${ceil.max_rate_bps / 100}%</strong> for ${esc(ceil.max_term_days)} days.`,
-        `Batas atasnya, mengikat di kontrak ini: pinjaman paling tinggi <strong>${ceil.max_rate_bps / 100}%</strong> untuk ${esc(ceil.max_term_days)} hari.`) : t("No loan ceiling set yet.", "Belum ada batas atas pinjaman.")}</p>
+      ${ceil ? t(`Its ceiling, binding in this contract on loans to members: at most <strong>${ceil.max_rate_bps / 100}%</strong> for ${esc(ceil.max_term_days)} days (loans between co-ops, below, follow the members' own vote and the borrower's credit score).`,
+        `Batas atasnya, mengikat di kontrak ini untuk pinjaman anggota: paling tinggi <strong>${ceil.max_rate_bps / 100}%</strong> untuk ${esc(ceil.max_term_days)} hari (pinjaman antarkoperasi, di bawah, mengikuti suara anggota dan skor kredit peminjam).`) : t("No loan ceiling set yet.", "Belum ada batas atas pinjaman.")}</p>
       <p>${t("Sister co-ops (their work records count here)", "Koperasi saudara (catatan kerja mereka dihitung di sini)")}: ${sisters.length ? sisters.map((s) => `<a href="${explorer(s)}">${esc(s)}</a>`).join(", ") : t("none", "tidak ada")}.</p>
       ${res.length ? `<ul class="tiers plain">${res.map((r) => `<li><b>#${esc(r.id)}</b><span>${esc(r.text)}</span></li>`).join("")}</ul>` : ""}
       <p class="small"><a href="/coops.html">${t("Every co-op on this code, and the federation's resolutions with each co-op's vote", "Setiap koperasi dengan kode ini, dan resolusi federasi beserta suara tiap koperasi")}</a>.</p>`;
