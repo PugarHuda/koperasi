@@ -1,6 +1,7 @@
 # Push notifications while the dashboard is closed: every 15 minutes, what newly waits on each member (votes, juries,
-# pledges, dues, loans, shares) goes to their ntfy.sh topic (scripts/notify.mjs). No secret: ntfy topics take anonymous
-# posts and the inbox is public chain data. What was already told is kept in the Actions cache, not in the repo.
+# pledges, dues, loans, shares) goes to their ntfy.sh topic (scripts/notify.mjs). The topic is an HMAC under the
+# NOTIFY_SECRET repository secret (the same value as the Vercel env var api/notify-topic.mjs uses), so nobody else can
+# compute it and post fake pushes. What was already told is kept in the Actions cache, not in the repo.
 name: notify
 on:
   schedule: [{ cron: "*/15 * * * *" }]
@@ -23,3 +24,5 @@ jobs:
           key: notify-${{ github.run_id }}
           restore-keys: notify-
       - run: node scripts/notify.mjs .notify/state.json
+        env:
+          NOTIFY_SECRET: ${{ secrets.NOTIFY_SECRET }}

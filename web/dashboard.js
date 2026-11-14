@@ -691,6 +691,9 @@ async function poll() {
 }
 const startPolling = () => { if (!timer) { timer = setInterval(poll, 60_000); poll(); } };
 const stopPolling = () => { clearInterval(timer); timer = 0; };
+// the member's private ntfy topic, kept for this page load only (it is theirs; a shared computer should not keep it)
+const ntfyTopics = new Map();
+let ntfyMsg = "";
 function notifyLine() {
   const el = $("notify");
   if (!me) { el.hidden = true; return; }
@@ -701,22 +704,46 @@ function notifyLine() {
       "Notifikasi browser, selama dasbor ini terbuka, saat ada pemungutan suara, tugas juri, janji, atau simpanan wajib yang menunggu Anda."))}
     ${t("Outside the page", "Di luar halaman")}:</span> <a class="small-link" href="/api/inbox?who=${encodeURIComponent(me)}">${t("your RSS feed", "feed RSS Anda")}</a>
     <br><span class="small" id="ntfy"></span>`;
-  // push with the page closed: scripts/notify.mjs posts to this ntfy.sh topic every 15 minutes (no account, no secret)
-  // ponytail: anyone who knows the account can compute the topic and post to it; a push is a hint, the chain is the truth.
-  // A private ntfy server with a publish token (or an HMAC topic from a CI secret) closes that, at the cost of a server.
+  // push with the page closed: scripts/notify.mjs posts to the member's ntfy.sh topic every 15 minutes. The topic is an
+  // HMAC under a server secret: the member's wallet signs notifyText (NEP-413) and /api/notify-topic hands it back.
   const who = me;
-  import("./share.js").then(({ ntfyTopic }) => ntfyTopic(C, who)).then((topic) => {
+  const show = () => {
     const el2 = $("ntfy");
     if (!el2 || who !== me) return;
+    const topic = ntfyTopics.get(who);
+    const head = `${t("Get push on your phone, even with this page closed", "Dapatkan push di ponsel, meski halaman ini tertutup")}:`;
+    if (!topic) {
+      el2.innerHTML = `${head} <button type="button" class="btn ghost small" id="ntfy-btn">${t("Get my private push topic", "Ambil topik push pribadi saya")}</button>
+        ${t("(your wallet signs a message: no transaction, no gas)", "(dompet Anda menandatangani pesan: tanpa transaksi, tanpa gas)")}
+        ${ntfyMsg ? `<br>${esc(ntfyMsg)}` : ""}`;
+      $("ntfy-btn").onclick = async () => {
+        try {
+          const [{ signText }, { notifyText }] = await Promise.all([wallet, import("./share.js")]);
+          const ts = Date.now();
+          const s = await signText(notifyText(C, who, ts), C);
+          if (s.account && s.account !== who) throw new Error(t(`the wallet signed as ${s.account}, not ${who}`, `dompet menandatangani sebagai ${s.account}, bukan ${who}`));
+          const r = await fetch("/api/notify-topic", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ account: who, ts, pk: s.pk, sig: s.sig, nonce: s.nonce }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !/^koperasi-[0-9a-f]{20}$/.test(j.topic ?? "")) throw new Error(j.error ?? `HTTP ${r.status}`);
+          ntfyTopics.set(who, j.topic);
+          ntfyMsg = "";
+        } catch (e) {
+          ntfyMsg = `${t("No topic", "Tidak ada topik")}: ${String(e?.message ?? e).slice(0, 120)}`;
+        }
+        show();
+      };
+      return;
+    }
     const url = `https://ntfy.sh/${topic}`;
-    el2.innerHTML = `${t("Get push on your phone, even with this page closed", "Dapatkan push di ponsel, meski halaman ini tertutup")}:
+    el2.innerHTML = `${head}
       ${t("in the ntfy app", "di aplikasi ntfy")} (<a class="small-link" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" rel="noopener">Android</a>,
       <a class="small-link" href="https://apps.apple.com/app/ntfy/id1625396347" rel="noopener">iOS</a>) ${t("subscribe to", "langgani")}
       <code>${esc(topic)}</code>, ${t("or open", "atau buka")} <a class="small-link" href="${url}" rel="noopener">${esc(url)}</a>.
       ${t("Checked every 15 minutes.", "Diperiksa setiap 15 menit.")}
-      ${t("The topic is public (ntfy.sh has no sender check): trust a push only if it opens koperasi-kohl.vercel.app, and act only after the dashboard shows the same item.",
-    "Topik ini publik (ntfy.sh tidak memeriksa pengirim): percayai push hanya jika membuka koperasi-kohl.vercel.app, dan bertindak hanya setelah dashboard menampilkan hal yang sama.")}`;
-  }).catch(() => { /* no Web Crypto (http page): the RSS feed still works */ });
+      ${t("This topic is private to you (only the co-op's server can compute it): keep it to yourself. A push is still only a hint: act only after the dashboard shows the same item.",
+    "Topik ini pribadi untuk Anda (hanya server koperasi yang bisa menghitungnya): jangan bagikan. Push tetap hanya petunjuk: bertindak hanya setelah dasbor menampilkan hal yang sama.")}`;
+  };
+  show();
   $("notify-btn").onclick = async () => {
     if (timer) { stopPolling(); store(NOTIFY, null); notifyMsg = ""; notifyLine(); return; }
     if (!canNotify()) { notifyMsg = t("This browser has no notifications; use the RSS feed.", "Browser ini tidak punya notifikasi; pakai feed RSS."); notifyLine(); return; }

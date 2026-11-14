@@ -1,6 +1,7 @@
 // Push notifications while the dashboard is closed: for each member, what waits on them (the same list as /api/inbox and
 // the dashboard's "Needs you"), and anything not told before is posted to their ntfy.sh topic. A member subscribes to
-// the topic in the ntfy app or at https://ntfy.sh/<topic>; nobody needs an account, the co-op keeps no secret.
+// their private topic (an HMAC under NOTIFY_SECRET, api/notify-topic.mjs) in the ntfy app; nobody needs an account.
+// No NOTIFY_SECRET: nothing is posted and the state is left as it was (never a topic anyone could compute).
 // Run every 15 minutes by .github/workflows/notify.yml; what was told is kept in a small JSON file (the workflow's cache).
 //   node scripts/notify.mjs [state.json]   (KOP_NOTIFY_DRY=1: print, post nothing)
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -8,7 +9,7 @@ import { dirname } from "node:path";
 import dep from "../deployment.testnet.json" with { type: "json" };
 import { setTimeout as sleep } from "node:timers/promises";
 import { readInbox, readShared, view } from "../api/inbox.mjs";
-import { ntfyTopic } from "../web/share.js";
+import { ntfyTopic } from "../api/notify-topic.mjs";
 
 const PAGE = "https://koperasi-kohl.vercel.app";
 
@@ -22,6 +23,11 @@ async function post(topic, item) {
 }
 
 if (import.meta.main) {
+  const secret = process.env.NOTIFY_SECRET;
+  if (!secret) {
+    console.warn("NOTIFY_SECRET is not set: no push this run (set it as a GitHub Actions secret)");
+    process.exit(0);
+  }
   const file = process.argv[2] ?? ".notify/state.json";
   let state = null;
   try { state = JSON.parse(readFileSync(file, "utf8")); } catch { /* first run */ }
@@ -36,7 +42,7 @@ if (import.meta.main) {
       next[who] = items.map((i) => i.id);
       // the very first run only learns what is already waiting: it does not push a backlog to everyone
       const out = state ? fresh(items, state[who]) : [];
-      const topic = await ntfyTopic(dep.contract, who);
+      const topic = ntfyTopic(secret, dep.contract, who);
       for (const item of out) {
         if (process.env.KOP_NOTIFY_DRY) console.log(topic, item.title);
         else await post(topic, item);
