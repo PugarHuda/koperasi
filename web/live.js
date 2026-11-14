@@ -2,7 +2,7 @@
 // contract or the DAO; the NEAR RPC gives their logs; each event is checked against the contract's schema (share.js)
 // before it is shown. Polled every 30 s while the tab is visible; a new event refreshes the wallet panel at once.
 // ponytail: polling, because no indexer streams testnet NEP-297 events; switch to a websocket when one does.
-import { dep, testnet, txStatus, txUrl, $, esc } from "./near.js";
+import { dep, testnet, txStatus, txUrl, view, explorer, $, esc } from "./near.js";
 import { describeEvent, parseEvents, txList } from "./share.js";
 import { t } from "./lang.js";
 
@@ -54,7 +54,22 @@ let running = false;
 const run = () => {
   if (running) return;
   running = true;
-  poll().catch((e) => { state.textContent = t(`Could not read the indexer (${e.message}); retrying in 30 s.`, `Belum bisa membaca indexer (${e.message}); mencoba lagi dalam 30 detik.`); })
+  poll().catch(async (e) => {
+    state.textContent = t(`Could not read the indexer (${e.message}); retrying in 30 s. Meanwhile, the DAO's latest proposals, read from NEAR:`,
+      `Belum bisa membaca indexer (${e.message}); mencoba lagi dalam 30 detik. Sementara itu, usulan DAO terbaru, dibaca dari NEAR:`);
+    // no indexer: the DAO's own latest proposals straight from the RPC, so the section is never empty
+    if (shown || list.dataset.fallback) return;
+    try {
+      const last = await view(dep.dao, "get_last_proposal_id");
+      const ps = await view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 8), limit: 8 });
+      list.dataset.fallback = "1";
+      for (const p of ps) {
+        const li = document.createElement("li");
+        li.innerHTML = `<time>#${esc(p.id)}</time><span>${esc(String(p.description).slice(0, 160))} (${esc(p.status)})</span><a href="${esc(explorer(dep.dao))}">DAO</a>`;
+        list.prepend(li);
+      }
+    } catch { /* the RPC is down too: the message above stays */ }
+  })
     .finally(() => { running = false; });
 };
 // the page's own reads go first (public RPCs rate-limit bursts): start when the section comes near, or after 6 s
