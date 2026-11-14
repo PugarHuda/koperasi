@@ -26,6 +26,16 @@
         <tbody><tr><td colspan="7" class="muted">Reading NEAR…</td></tr></tbody>
       </table>
     </section>
+    <section class="block" id="credit">
+      <h2 id="credit-title">Credit between co-ops</h2>
+      <p class="sub" id="credit-sub">Read now from each co-op's own contract: the loans it gave sister co-ops, which went late, and the interest paid.</p>
+      <table class="grid" id="credit-table">
+        <caption>Federation credit score <span class="muted">(highest first)</span></caption>
+        <thead><tr><th scope="col">Co-op</th><th scope="col" class="num">Score</th><th scope="col" class="num">Loans received</th><th scope="col" class="num">Repaid on time</th>
+          <th scope="col" class="num">Late</th><th scope="col" class="num">Open</th><th scope="col" class="num">Late notes</th><th scope="col" class="num">Interest paid</th></tr></thead>
+        <tbody><tr><td colspan="8" class="muted">Reading NEAR…</td></tr></tbody>
+      </table>
+    </section>
     <section class="block" id="network">
       <h2>The co-ops' federation</h2>
       <p class="sub">A secondary co-op, as Indonesian co-op law allows (Law 25/1992 art. 15–16): an unmodified Sputnik DAO whose only members are
@@ -40,7 +50,7 @@
     </section>
   </main>
   <script type="module">
-    import { dep, view, query, explorer, esc } from "/near.js";
+    import { dep, view, query, explorer, esc, usdc } from "/near.js";
     import { t } from "/lang.js";
     // drawn from what was read, and again (no new reads) when the visitor switches language
     const live = (fn) => { fn(); addEventListener("koperasi:lang", () => fn()); };
@@ -65,6 +75,49 @@
             : `<span class="muted">${t(`${full} full-access key${full > 1 ? "s" : ""} (test co-op)`, `${full} kunci full-access (koperasi uji)`)}</span>`}</td></tr>`;
     const coops = await Promise.all(COOPS.map(read));
     live(() => { document.querySelector("#coops tbody").innerHTML = coops.map(row).join(""); });
+    // credit between co-ops (contract 0.3.6+): each co-op lists the loans it GAVE; turned around, what each co-op RECEIVED
+    // read alongside the federation below, not before it
+    (async () => {
+      const lenders = coops.filter((x) => !x.error);
+      const given = await Promise.all(lenders.map(async ({ c }) => {
+        const [loans, interest] = await Promise.all([view(c, "get_sister_loans").catch(() => null), view(c, "get_sister_interest").catch(() => [])]);
+        const paid = new Map((interest ?? []).map(([id, , p]) => [id, BigInt(p)]));
+        const valid = (loans ?? []).filter((l) => l.status !== "Failed");
+        const late = new Map(await Promise.all([...new Set(valid.map((l) => l.coop))].map((b) => view(c, "get_sister_late", { coop: b }).catch(() => 0).then((n) => [b, Number(n)]))));
+        return { c, loans: valid.map((l) => ({ ...l, interest: paid.get(l.id) ?? 0n })), late, sisters: loans !== null };
+      }));
+      const borrowers = [...new Set(given.flatMap((g) => g.loans.map((l) => l.coop)))];
+      // a co-op noted late by a sister: the note sits on each co-op that recognises it (solidarity get_late_elsewhere)
+      const notes = new Map(await Promise.all(borrowers.map(async (b) => [b, (await Promise.all(given.filter((g) => g.sisters)
+        .map((g) => view(g.c, "get_late_elsewhere", { account_id: b }).catch(() => [])))).flat()])));
+      const now = BigInt(Date.now()) * 1_000_000n;
+      const credit = lenders.map(({ c }) => {
+        const got = given.flatMap((g) => g.loans.filter((l) => l.coop === c));
+        const lateLoans = got.filter((l) => l.status === "Late" || l.was_late).length;
+        // a lender's count outlives the loans it trims from its list
+        const late = Math.max(lateLoans, given.reduce((n, g) => n + (g.late.get(c) ?? 0), 0));
+        const onTime = got.filter((l) => l.status === "Repaid" && !l.was_late).length;
+        const open = got.filter((l) => l.status === "Open" || l.status === "Late").length;
+        const overdue = got.filter((l) => l.status === "Open" && BigInt(l.due) < now).length;
+        const score = got.length || late ? Math.max(0, Math.min(100, 100 - 40 * late - 10 * overdue + 5 * onTime)) : null;
+        return { c, n: got.length, onTime, late, open, notes: new Set(notes.get(c) ?? []).size, interest: got.reduce((s, l) => s + l.interest, 0n), score };
+      }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+      live(() => {
+        document.getElementById("credit-title").textContent = t("Credit between co-ops", "Kredit antarkoperasi");
+        document.getElementById("credit-sub").textContent = t(
+          "Read live from each co-op's own contract (the loans it gave sister co-ops, get_sister_loans), turned around into what each co-op received. Score: start at 100, −40 for each loan that went late, −10 for each open loan past due, +5 for each loan repaid on time, at most 100; a co-op that never borrowed has no record. Failed transfers do not count.",
+          "Dibaca langsung dari kontrak setiap koperasi (pinjaman yang diberikannya ke koperasi saudara, get_sister_loans), dibalik menjadi apa yang diterima tiap koperasi. Skor: mulai 100, −40 untuk tiap pinjaman yang terlambat, −10 untuk tiap pinjaman terbuka yang lewat jatuh tempo, +5 untuk tiap pinjaman yang lunas tepat waktu, paling tinggi 100; koperasi yang belum pernah meminjam belum punya catatan. Transfer yang gagal tidak dihitung.");
+        const table = document.getElementById("credit-table");
+        table.caption.innerHTML = t("Federation credit score <span class=\"muted\">(highest first)</span>", "Skor kredit federasi <span class=\"muted\">(tertinggi dulu)</span>");
+        const heads = t(["Co-op", "Score", "Loans received", "Repaid on time", "Late", "Open", "Late notes", "Interest paid"],
+          ["Koperasi", "Skor", "Pinjaman diterima", "Lunas tepat waktu", "Terlambat", "Terbuka", "Catatan terlambat", "Bunga dibayar"]);
+        table.querySelectorAll("thead th").forEach((th, i) => { th.textContent = heads[i]; });
+        table.tBodies[0].innerHTML = credit.map((r) => `<tr><td><a href="${explorer(r.c)}">${esc(r.c)}</a></td>
+          <td class="num" data-label="${heads[1]}">${r.score === null ? `<span class="muted">${t("no record", "belum ada catatan")}</span>` : `<strong>${r.score}</strong>`}</td>
+          ${[r.n, r.onTime, r.late, r.open, r.notes].map((v, i) => `<td class="num" data-label="${heads[i + 2]}">${v}</td>`).join("")}
+          <td class="num" data-label="${heads[7]}">${usdc(r.interest)} USDC</td></tr>`).join("");
+      });
+    })().catch((e) => live(() => { document.querySelector("#credit-table tbody").innerHTML = `<tr><td colspan="8" class="muted">${esc(t(`Could not read the loans now (${e.message.slice(0, 80)}).`, `Belum bisa membaca pinjaman (${e.message.slice(0, 80)}).`))}</td></tr>`; }));
     // the federation (scripts/federation.mjs): its members, from its own policy, and its resolutions with each co-op's vote
     const f = dep.federation;
     if (!f) document.getElementById("network").hidden = true;

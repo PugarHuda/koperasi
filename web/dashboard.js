@@ -468,6 +468,17 @@ const qualityExample = (a) => {
 async function commons() {
   pane("c-cases", async () => {
     const [cases, byRep] = await Promise.all([all(C, "get_cases"), view(C, "get_jury_by_reputation").catch(() => null)]);
+    // a dismissed case may go on appeal to every member (contract 0.2.7): the outcome shown is the final one, as the landing shows it
+    const appeals = new Map(await Promise.all(cases.filter((c) => c.status === "Dismissed")
+      .map((c) => view(C, "get_appeal", { id: c.id }).catch(() => null).then((a) => [c.id, a]))));
+    const dao = (a) => (a.proposal !== null && a.proposal !== undefined ? ` (DAO #${esc(a.proposal)})` : "");
+    const outcome = (c) => {
+      const a = appeals.get(c.id);
+      if (a?.status === "Upheld") return t("overturned on appeal, refunded", "dibatalkan lewat banding, dana dikembalikan") + dao(a);
+      if (a?.status === "Dismissed") return t("dismissed; the appeal kept the ruling", "ditolak; banding mempertahankan putusan") + dao(a);
+      if (a) return t("dismissed, on appeal", "ditolak, sedang dibanding") + dao(a);
+      return OUT[c.status] ?? esc(c.status);
+    };
     const jury = byRep === null ? "" : `<p class="small" id="c-jury">${byRep
       ? t("Juries are drawn by reputation (square-root weighted, so no one member can capture a jury), by the members' choice.", "Juri diundi menurut reputasi (dibobot akar kuadrat, agar tak satu anggota pun bisa menguasai juri), atas pilihan anggota.")
       : t("Juries are drawn uniformly from the members in good standing.", "Juri diundi merata dari anggota berstatus baik.")}</p>`;
@@ -475,7 +486,7 @@ async function commons() {
     return jury + table([t("Case", "Perkara"), t("Refund", "Ganti rugi"), t("Jurors", "Juri"), t("Outcome", "Putusan")], [...cases].reverse().map((c) => `<tr><td><strong>#${esc(c.id)}</strong> ${t("job", "pekerjaan")} ${esc(c.job_id)}<span class="claim">“${esc(c.reason)}”, ${t("brought by", "diajukan oleh")} ${esc(c.claimant)}</span></td>
       <td class="num" data-label="${t("Refund", "Ganti rugi")}">${usdc(c.amount)} USDC</td>
       <td data-label="${t("Jurors", "Juri")}">${c.jurors.map((j) => { const v = c.votes.find(([x]) => x === j); return `${esc(j)}: ${v ? (v[1] ? t("uphold", "kabulkan") : t("reject", "tolak")) : "–"}`; }).join("<br>")}</td>
-      <td data-label="${t("Outcome", "Putusan")}">${OUT[c.status] ?? esc(c.status)}${c.refund_proposal !== null ? `; ${t("DAO proposal", "usulan DAO")} #${esc(c.refund_proposal)}` : ""}</td></tr>`));
+      <td data-label="${t("Outcome", "Putusan")}">${outcome(c)}${c.refund_proposal !== null ? `; ${t("DAO proposal", "usulan DAO")} #${esc(c.refund_proposal)}` : ""}</td></tr>`));
   });
   pane("c-pledges", async () => {
     const [pledges, claims] = await Promise.all([all(C, "get_pledges"), all(C, "get_pledge_claims")]);

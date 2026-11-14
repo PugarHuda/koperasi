@@ -36,6 +36,8 @@ test("the sidebar moves between views and marks the current one", async ({ page 
   await expect(page.locator("#m-periods")).toContainText(/Share \d+/);
   await go(page, "Commons");
   await expect(page.locator("#c-cases")).toContainText("upheld: refunded");
+  // case #2 was dismissed by its jury and overturned when the members voted the appeal
+  await expect(page.locator("#c-cases tbody tr").filter({ hasText: "#2 job" })).toContainText(/overturned on appeal, refunded \(DAO #\d+\)/);
   await go(page, "Federation");
   await expect(page.locator("#f-fed")).toContainText("kop-federation-");
   // the language switch turns the dashboard's own words
