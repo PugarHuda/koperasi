@@ -221,7 +221,7 @@ impl Koperasi {
                 // 0.3.5: and by their tasks: paid for them; handed back or vetoed against them
                 let (court_good, court_bad) = court_record(&cases, a);
                 let q: TaskQuality = load(&quality_key(a)).unwrap_or_default();
-                let good = court_good as u128 + q.paid as u128;
+                let good = court_good as u128 + q.paid.min(10) as u128; // ponytail: a cap, not weighting by amount or distinct posters
                 let bad = court_bad as u128 + q.handed_back as u128 + q.vetoed as u128;
                 out.push((a.clone(), w as u128 * 100 * (good + 2) / (bad + 2)));
             }
@@ -381,6 +381,9 @@ impl Koperasi {
     /// (base64) of `get_referral_message(...)`. Returns the referral's id.
     pub fn post_referral(&mut self, job_id: String, to_coop: AccountId, budget_usdc: U128, reason: String, signature: Option<String>) -> u32 {
         require!(!self.paused, "koperasi is paused");
+        // the same gates as the agent's receipts: not while the court has it suspended, nor a TEE-only agent unattested
+        require!(!crate::meeting::agent_suspended(), "the agent is suspended");
+        assert_tee_ok(&self.agent_id);
         let nonce: u32 = load(KEY_REFERRAL_NONCE).unwrap_or(0);
         crate::meeting::assert_agent_or_signed(&self.agent_id, signature.as_deref(),
             || referral_message(&env::current_account_id(), nonce, &job_id, &to_coop, budget_usdc.0, &reason));

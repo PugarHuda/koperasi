@@ -3027,6 +3027,9 @@ fn task_quality_counts_hand_backs_vetoes_and_paid_tasks() {
     let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
     as_(&acc("alice.testnet"), near(0));
     k.veto_task(id);
+    assert_eq!(k.get_task_quality(carol.clone()).vetoed, 0, "a veto counts only if the payout is then cancelled");
+    as_(&dao(), near(0));
+    k.cancel_task(id);
     assert_eq!(k.get_task_quality(carol.clone()), solidarity::TaskQuality { paid: 1, handed_back: 1, vetoed: 1 });
     assert_eq!(k.get_task_quality(acc("alice.testnet")), solidarity::TaskQuality::default(), "the vetoer is not counted");
     // as a member, her weight: 1 task done, good 1, bad 2 -> x (1+2)/(2+2)

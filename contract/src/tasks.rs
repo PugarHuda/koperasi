@@ -128,6 +128,17 @@ pub(crate) fn load<T: BorshDeserialize>(key: &[u8]) -> Option<T> {
 pub(crate) fn save<T: BorshSerialize>(key: &[u8], v: &T) {
     env::storage_write(key, &borsh::to_vec(v).unwrap());
 }
+fn vetoed_key(id: u32) -> Vec<u8> {
+    format!("vetoed_task:{id}").into_bytes()
+}
+/// A vetoed payout's end: cancelled, the veto counts against the contributor; paid, it does not.
+fn settle_veto(t: &Task, cancelled: bool) {
+    if env::storage_remove(&vetoed_key(t.id)) && cancelled {
+        if let Some(c) = &t.contributor {
+            crate::solidarity::note_task(c, |q| q.vetoed += 1);
+        }
+    }
+}
 fn task_key(id: u32) -> Vec<u8> {
     format!("task:{id}").into_bytes()
 }
@@ -335,7 +346,8 @@ impl Koperasi {
         env::storage_remove(&due_key(id));
         t.status = TaskStatus::NeedsApproval;
         save(&task_key(id), &t);
-        crate::solidarity::note_task(t.contributor.as_ref().unwrap(), |q| q.vetoed += 1);
+        // 0.3.5: counted against the contributor only if the payout is then cancelled (an approval after a veto is not)
+        save(&vetoed_key(id), &true);
         Event::TaskVetoed { id, by: who }.emit();
     }
 
@@ -395,6 +407,7 @@ impl Koperasi {
             return self.unpay(t, Cancelled);
         }
         t.status = Cancelled;
+        settle_veto(&t, true);
         save(&task_key(id), &t);
     }
 
@@ -499,6 +512,7 @@ impl Koperasi {
                 let contributor = t.contributor.clone().unwrap();
                 Event::TaskPaid { id, contributor: contributor.clone(), amount: t.amount, points }.emit();
                 crate::solidarity::note_task(&contributor, |q| q.paid += 1);
+                settle_veto(&t, false); // vetoed, then approved by another member and paid: not counted
                 self.credit(&contributor, format!("task:{id}"), t.amount.0, points);
             }
             // still open (e.g. the role is missing from the policy) or unreadable: the members can vote it by hand,
@@ -521,6 +535,9 @@ impl Koperasi {
 
     /// The payout did not happen: the money stays in the treasury and in the budget.
     fn unpay(&mut self, mut t: Task, status: TaskStatus) {
+        if status == TaskStatus::Cancelled {
+            settle_veto(&t, true);
+        }
         env::storage_remove(&inflight_key(t.id));
         env::storage_remove(&moved_key(t.id));
         write_u128(KEY_BUDGET, budget() + t.amount.0);
