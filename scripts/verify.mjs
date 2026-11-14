@@ -593,6 +593,21 @@ for (const t of d.federation?.trades ?? (d.federation?.trade ? [d.federation.tra
     `resolution #${t.resolution} ${res.status}; ${t.coop.split(".")[0]}'s receipt ${t.job.slice(0, 14)}… names ${pr.referred_by} (gate ${String(pr.gate?.tx).slice(0, 8)}…, ${pr.model}); its #${t.proposal} paid ${usd(t.share)} ${t.token} to this treasury: ${prop.status}`);
 }
 
+// 0.3.4, the Shade Agent: a worker in a Phala TDX VM, its key made in the TEE, attested on-chain by the registry the
+// members named (owned by their DAO, approving only the code and machine they voted), recorded a receipt the co-op
+// accepts from that agent only while the attestation holds
+if (d.tee?.receipt) {
+  const t = d.tee;
+  const [reg, info2, tee, who, approve, admit] = await Promise.all([view(t.registry, "get_agent", { account_id: t.worker }), view(t.registry, "get_contract_info"),
+    view(d.contract, "get_agent_tee", { account_id: t.worker }), view(d.contract, "get_receipt_agent", { job_id: t.receipt }),
+    view(d.dao, "get_proposal", { id: t.approve }), view(d.dao, "get_proposal", { id: t.admit })]);
+  const ok = reg?.compose_hash === t.compose_hash && reg.ppid === t.ppid && info2[0] === d.dao && info2[1] === d.contract
+    && info2[2].some((m) => m.app_compose_hash_payload === t.compose_hash) && tee[0] === true && tee[2] === t.registry
+    && who === t.worker && approve.status === "Approved" && admit.status === "Approved" && /^[0-9a-f]{64}$/.test(t.worker);
+  check(ok, "a Shade Agent: a worker whose key was made in an Intel TDX VM, attested on-chain against code and a machine the members approved, recorded a receipt the co-op accepts only from an attested TEE",
+    `${t.worker.slice(0, 12)}… (implicit) attested by ${t.registry} (owner ${info2[0]}): compose ${t.compose_hash.slice(0, 12)}…, PPID ${t.ppid}, valid until ${new Date(Number(BigInt(reg?.valid_until ?? 0) / 1_000_000n)).toISOString().slice(0, 10)}; approved by #${t.approve}, admitted TEE-only by #${t.admit}; receipt ${t.receipt.slice(0, 14)}… recorded by it`);
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {

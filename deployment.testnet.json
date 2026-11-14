@@ -930,7 +930,21 @@
   "tee": {
     "registry": "kop-tee-mwfb5bj2.testnet",
     "registryVote": 134,
-    "compose": "agent/phala-compose.yml"
+    "compose": "agent/phala-compose.yml",
+    "worker": "c4ebe4dbc1e09c961ac5ddaf74f6cfa65e169a1b9d8e118ae4d18dc9050d48e6",
+    "ppid": "3e306e133b7fdaa7bb79f67634cb520c",
+    "compose_hash": "000bd9f2d88edf737c5e2ab6bd132cb6e102c118bea836aa3fbab761696805ab",
+    "approve": 137,
+    "admit": 138,
+    "receipt": "demo-33693cb6-ee99-486b-8e37-05a9b3095601",
+    "gate": "GGPZN9BE7xvF1ffSRjk9r5TkHL5rHKqB7ZW2eLc4sQsm",
+    "cvm": {
+      "provider": "Phala Cloud",
+      "app_id": "74777de9351be09a23f8b30a23e5e7b476640491",
+      "instance": "tdx.small",
+      "dstack": "0.5.12"
+    },
+    "note": "stopped after its receipt, to save the Phala balance; the attestation and the receipt stay on-chain"
   },
   "v034": {
     "share": {

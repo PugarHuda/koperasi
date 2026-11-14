@@ -68,8 +68,9 @@ built on an unmodified Sputnik DAO (no new multisig):
   co-op whose voted price fit; that agent did it and paid the 30% the federation set (#27).
 - **Judged by others:** 3 jobs won on Taskbond, another team's testnet market, 95/100 each.
 - **Who can stop it:** the court suspended it after three upheld cases and the members reinstated it (#100).
-- **Shade Agent:** a TEE registry contract verifies a worker's Intel TDX attestation on-chain (dcap-qvl) against code
-  and machines the members approved, and the co-op accepts receipts from a TEE-only agent only while it holds.
+- **Shade Agent, live:** a worker in a Phala TDX VM, its key made in the TEE, had its attestation verified on-chain
+  (dcap-qvl) by a registry the co-op's DAO owns, against the code and machine the members approved (#137); admitted
+  TEE-only (#138), it passed the by-laws gate in an enclave and recorded its receipt from inside the TEE.
 
 **Honest limits.** The members and buyers are the builder's testnet accounts; Agent Market and NEAR Intents have no
 testnet (the Intents wallet runs on Tidepool's mirror); no loan has been late on testnet yet (the grace is 7 days), so

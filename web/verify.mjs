@@ -12824,6 +12824,23 @@ var init_verify = __esm({
         `resolution #${t2.resolution} ${res.status}; ${t2.coop.split(".")[0]}'s receipt ${t2.job.slice(0, 14)}\u2026 names ${pr.referred_by} (gate ${String(pr.gate?.tx).slice(0, 8)}\u2026, ${pr.model}); its #${t2.proposal} paid ${usd(t2.share)} ${t2.token} to this treasury: ${prop.status}`
       );
     }
+    if (d2.tee?.receipt) {
+      const t2 = d2.tee;
+      const [reg, info2, tee, who, approve, admit] = await Promise.all([
+        view2(t2.registry, "get_agent", { account_id: t2.worker }),
+        view2(t2.registry, "get_contract_info"),
+        view2(d2.contract, "get_agent_tee", { account_id: t2.worker }),
+        view2(d2.contract, "get_receipt_agent", { job_id: t2.receipt }),
+        view2(d2.dao, "get_proposal", { id: t2.approve }),
+        view2(d2.dao, "get_proposal", { id: t2.admit })
+      ]);
+      const ok = reg?.compose_hash === t2.compose_hash && reg.ppid === t2.ppid && info2[0] === d2.dao && info2[1] === d2.contract && info2[2].some((m2) => m2.app_compose_hash_payload === t2.compose_hash) && tee[0] === true && tee[2] === t2.registry && who === t2.worker && approve.status === "Approved" && admit.status === "Approved" && /^[0-9a-f]{64}$/.test(t2.worker);
+      check(
+        ok,
+        "a Shade Agent: a worker whose key was made in an Intel TDX VM, attested on-chain against code and a machine the members approved, recorded a receipt the co-op accepts only from an attested TEE",
+        `${t2.worker.slice(0, 12)}\u2026 (implicit) attested by ${t2.registry} (owner ${info2[0]}): compose ${t2.compose_hash.slice(0, 12)}\u2026, PPID ${t2.ppid}, valid until ${new Date(Number(BigInt(reg?.valid_until ?? 0) / 1000000n)).toISOString().slice(0, 10)}; approved by #${t2.approve}, admitted TEE-only by #${t2.admit}; receipt ${t2.receipt.slice(0, 14)}\u2026 recorded by it`
+      );
+    }
     if (d2.redteam?.length) {
       const res = await Promise.all(d2.redteam.map(async (r2) => {
         const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.tx, sender_account_id: r2.by, wait_until: "FINAL" });

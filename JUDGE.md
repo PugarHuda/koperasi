@@ -53,7 +53,7 @@ every day (`.github/workflows/tests.yml`).
 | 13r | Work passed between co-ops | `npm run verify` (the work-passes line) | the sister's receipt names the showcase as the co-op that brought the job; the sister's #21 paid 1.14 USDC to the showcase's treasury, as federation resolution #3 says |
 | 13s | The agent judges its own proposal | `/agent-proposals/v8.facts.json`; `npm run verify` | the facts the agent read, whose sha256 the record holds; its first answer: too few jobs under v7 to judge, so no change; after 3 more paid jobs, by-laws v8 (a 3 USDC minimum, a $5 daily cap), approved by #136 |
 | 13t | The agent routes work and weighs judgment (0.3.4) | `npm run verify`; `get_reputation_weights` | a second job passed to the sister co-op by the agent's own decision (budget below its price), paid by the sister's #27; weights after share #135 multiplied by each member's court record |
-| 13u | The Shade Agent registry | [`kop-tee-mwfb5bj2.testnet`](https://testnet.nearblocks.io/address/kop-tee-mwfb5bj2.testnet) `get_contract_info`; the co-op's `get_agent_tee` | the registry the members named (#134), owned by the co-op's DAO, with the code and machines they approved |
+| 13u | The Shade Agent registry | [`kop-tee-mwfb5bj2.testnet`](https://testnet.nearblocks.io/address/kop-tee-mwfb5bj2.testnet) `get_contract_info`; the co-op's `get_agent_tee` | the registry the members named (#134), owned by the co-op's DAO, with the code and machine they approved (#137); `get_agent("c4ebe4db…")` shows the worker attested until 21 Nov, admitted TEE-only by #138, and its receipt `demo-33693cb6…` recorded from inside the TDX VM |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
 ## From the source
