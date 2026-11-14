@@ -18,7 +18,7 @@ export function ntfyTopic(secret, contract, account) {
 /** Whether `pk` is an access key (full-access or function-call) of `account` now. */
 const isKey = (account, pk) => fetch(RPC, { method: "POST", signal: AbortSignal.timeout(10_000), headers: { "content-type": "application/json" },
   body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "query", params: { request_type: "view_access_key", finality: "final", account_id: account, public_key: pk } }) })
-  .then((r) => r.json()).then((j) => !!j.result?.permission); // an unknown key comes back as a result with an error field
+  .then((r) => r.json()).then((j) => j.result?.permission === "FullAccess"); // NEP-413 signs with a full-access key; an app's function-call key or an unknown key does not count
 
 /**
  * Why this request is refused, or null. Exported for the unit test.
