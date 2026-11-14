@@ -1,0 +1,25 @@
+# Push notifications while the dashboard is closed: every 15 minutes, what newly waits on each member (votes, juries,
+# pledges, dues, loans, shares) goes to their ntfy.sh topic (scripts/notify.mjs). No secret: ntfy topics take anonymous
+# posts and the inbox is public chain data. What was already told is kept in the Actions cache, not in the repo.
+name: notify
+on:
+  schedule: [{ cron: "*/15 * * * *" }]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: { group: notify, cancel-in-progress: false }
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      # a cache entry cannot be overwritten: each run saves a new one, the next run restores the newest
+      - uses: actions/cache@v4
+        with:
+          path: .notify
+          key: notify-${{ github.run_id }}
+          restore-keys: notify-
+      - run: node scripts/notify.mjs .notify/state.json

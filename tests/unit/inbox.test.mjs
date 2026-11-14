@@ -1,6 +1,7 @@
 // api/inbox.mjs: the member's feed lists only what waits on them, and nothing in it can break the XML.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createHash } from "node:crypto";
 import { inboxItems, rss } from "../../api/inbox.mjs";
 
 const NOW = Date.UTC(2026, 10, 13);
@@ -37,4 +38,20 @@ test("0.3.3: shares to claim, a loan due or late here or at a sister co-op, and 
   assert.match(items[2].text, /0\.306 NEAR/);
   assert.equal(inboxItems("a.testnet", { loan: loan("Late", NOW) }, NOW)[0].id, "loan-late");
   assert.deepEqual(inboxItems("a.testnet", { loan: loan("Repaid", NOW), claimable: "0" }, NOW), []);
+});
+
+test("push (scripts/notify.mjs): only items not told before, and a new due date counts as new", async () => {
+  const { fresh } = await import("../../scripts/notify.mjs");
+  const items = [{ id: "p5" }, { id: "c1" }, { id: "dues200" }];
+  assert.deepEqual(fresh(items, ["p5", "dues100"]).map((i) => i.id), ["c1", "dues200"]);
+  assert.deepEqual(fresh(items, ["p5", "c1", "dues200"]), []);
+  assert.deepEqual(fresh(items).map((i) => i.id), ["p5", "c1", "dues200"], "a member with nothing told yet gets all");
+});
+
+test("the ntfy topic: per co-op and member, not the bare account id, same in the browser and the script", async () => {
+  const { ntfyTopic } = await import("../../web/share.js");
+  const topic = await ntfyTopic("c.testnet", "a.testnet");
+  assert.equal(topic, `koperasi-${createHash("sha256").update("c.testnet:a.testnet").digest("hex").slice(0, 16)}`);
+  assert.notEqual(topic, await ntfyTopic("d.testnet", "a.testnet"));
+  assert.ok(!topic.includes("a.testnet"));
 });

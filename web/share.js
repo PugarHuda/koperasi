@@ -380,3 +380,12 @@ export function configVote(props, contract, hash) {
       try { return JSON.parse(atob(x.args)).hash === hash; } catch { return false; }
     }));
 }
+
+/**
+ * The member's push topic on ntfy.sh (scripts/notify.mjs posts to it every 15 minutes): no account, no secret.
+ * A hash of co-op and account, so the topic is not just the account id anyone could guess.
+ */
+export async function ntfyTopic(contract, account) {
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${contract}:${account}`)));
+  return `koperasi-${[...hash.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+}

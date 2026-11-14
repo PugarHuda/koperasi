@@ -579,7 +579,20 @@ function notifyLine() {
   el.innerHTML = `<button type="button" class="btn ghost small" id="notify-btn" aria-pressed="${on}">${on ? t("Notifications on: turn off", "Notifikasi aktif: matikan") : t("Notify me", "Beri tahu saya")}</button>
     <span class="small">${esc(notifyMsg || t("A browser notification, while this dashboard is open, when a vote, a jury, a pledge or dues need you.",
       "Notifikasi browser, selama dasbor ini terbuka, saat ada pemungutan suara, tugas juri, janji, atau simpanan wajib yang menunggu Anda."))}
-    ${t("Outside the page", "Di luar halaman")}:</span> <a class="small-link" href="/api/inbox?who=${encodeURIComponent(me)}">${t("your RSS feed", "feed RSS Anda")}</a>`;
+    ${t("Outside the page", "Di luar halaman")}:</span> <a class="small-link" href="/api/inbox?who=${encodeURIComponent(me)}">${t("your RSS feed", "feed RSS Anda")}</a>
+    <br><span class="small" id="ntfy"></span>`;
+  // push with the page closed: scripts/notify.mjs posts to this ntfy.sh topic every 15 minutes (no account, no secret)
+  const who = me;
+  import("./share.js").then(({ ntfyTopic }) => ntfyTopic(C, who)).then((topic) => {
+    const el2 = $("ntfy");
+    if (!el2 || who !== me) return;
+    const url = `https://ntfy.sh/${topic}`;
+    el2.innerHTML = `${t("Get push on your phone, even with this page closed", "Dapatkan push di ponsel, meski halaman ini tertutup")}:
+      ${t("in the ntfy app", "di aplikasi ntfy")} (<a class="small-link" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" rel="noopener">Android</a>,
+      <a class="small-link" href="https://apps.apple.com/app/ntfy/id1625396347" rel="noopener">iOS</a>) ${t("subscribe to", "langgani")}
+      <code>${esc(topic)}</code>, ${t("or open", "atau buka")} <a class="small-link" href="${url}" rel="noopener">${esc(url)}</a>.
+      ${t("Checked every 15 minutes.", "Diperiksa setiap 15 menit.")}`;
+  }).catch(() => { /* no Web Crypto (http page): the RSS feed still works */ });
   $("notify-btn").onclick = async () => {
     if (timer) { stopPolling(); store(NOTIFY, null); notifyMsg = ""; notifyLine(); return; }
     if (!canNotify()) { notifyMsg = t("This browser has no notifications; use the RSS feed.", "Browser ini tidak punya notifikasi; pakai feed RSS."); notifyLine(); return; }

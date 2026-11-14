@@ -107,6 +107,7 @@ test("My history shows a previewed member's votes, pledges and court record", as
   await expect(box.locator(".timeline li").first()).toContainText(/You voted|You pledged|Juror on case|You called in|You brought/);
   await expect(page.locator("#notify")).toContainText("Notify me");
   await expect(page.locator('#notify a[href^="/api/inbox?who="]')).toHaveAttribute("href", `/api/inbox?who=${encodeURIComponent(BOB)}`);
+  await expect(page.locator('#notify a[href^="https://ntfy.sh/"]')).toHaveAttribute("href", /^https:\/\/ntfy\.sh\/koperasi-[0-9a-f]{16}$/);
 });
 
 test("the dashboard's content turns Indonesian with the language button", async ({ page }) => {

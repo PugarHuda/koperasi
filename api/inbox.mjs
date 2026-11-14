@@ -11,7 +11,7 @@ import dep from "../deployment.testnet.json" with { type: "json" };
 
 const provider = new JsonRpcProvider({ url: "https://rpc.testnet.fastnear.com" });
 /** @returns {Promise<any>} */
-const view = (contractId, method, args = {}) => provider.callFunction({ contractId, method, args, blockQuery: { finality: "final" } });
+export const view = (contractId, method, args = {}) => provider.callFunction({ contractId, method, args, blockQuery: { finality: "final" } });
 const DAY_MS = 86_400_000;
 const ms = (ns) => Number(BigInt(ns) / 1_000_000n);
 const xml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]);
@@ -60,24 +60,41 @@ ${items.map((i) => `<item><title>${xml(i.title)}</title><description>${xml(i.tex
 `;
 }
 
+/** What is the same for every member: recent proposals, court cases, pledge claims. */
+export async function readShared() {
+  const last = Number(await view(dep.dao, "get_last_proposal_id"));
+  const [proposals, cases, claims] = await Promise.all([
+    view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 50), limit: 50 }),
+    view(dep.contract, "get_cases", { from: 0, limit: 200 }),
+    view(dep.contract, "get_pledge_claims", { from: 0, limit: 200 }),
+  ]);
+  return { proposals, cases, claims };
+}
+
+/**
+ * What waits on `who` now, read from the chain (scripts/notify.mjs passes `shared`, read once for all members).
+ * @param {string} who
+ * @param {{ proposals: any, cases: any, claims: any } | Promise<{ proposals: any, cases: any, claims: any }>} [shared]
+ */
+export async function readInbox(who, shared = readShared()) {
+  const [{ proposals, cases, claims }, dues, member, claimable, loan, lateElsewhere] = await Promise.all([
+    shared,
+    view(dep.contract, "get_dues_status", { account_id: who }).catch(() => null),
+    view(dep.contract, "get_member", { account_id: who }),
+    view(dep.contract, "get_claimable", { account_id: who }).catch(() => "0"),
+    view(dep.contract, "get_loan", { account_id: who }).catch(() => null),
+    view(dep.contract, "get_late_elsewhere", { account_id: who }).catch(() => []), // contract 0.3.3
+  ]);
+  return inboxItems(who, { proposals, cases, claims, dues, member: Boolean(member), claimable, loan, lateElsewhere });
+}
+
 export async function GET(request) {
   const who = new URL(request.url).searchParams.get("who") ?? "";
   if (!/^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/.test(who) || who.length < 2 || who.length > 64) {
     return new Response("who: a NEAR account id", { status: 400 });
   }
   try {
-    const last = Number(await view(dep.dao, "get_last_proposal_id"));
-    const [proposals, cases, claims, dues, member, claimable, loan, lateElsewhere] = await Promise.all([
-      view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 50), limit: 50 }),
-      view(dep.contract, "get_cases", { from: 0, limit: 200 }),
-      view(dep.contract, "get_pledge_claims", { from: 0, limit: 200 }),
-      view(dep.contract, "get_dues_status", { account_id: who }).catch(() => null),
-      view(dep.contract, "get_member", { account_id: who }),
-      view(dep.contract, "get_claimable", { account_id: who }).catch(() => "0"),
-      view(dep.contract, "get_loan", { account_id: who }).catch(() => null),
-      view(dep.contract, "get_late_elsewhere", { account_id: who }).catch(() => []), // contract 0.3.3
-    ]);
-    const items = inboxItems(who, { proposals, cases, claims, dues, member: Boolean(member), claimable, loan, lateElsewhere });
+    const items = await readInbox(who);
     return new Response(rss(who, items), { headers: { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=300" } });
   } catch (e) {
     return new Response(`could not read NEAR now: ${String(e?.message ?? e).slice(0, 120)}`, { status: 502 });
