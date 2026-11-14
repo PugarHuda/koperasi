@@ -4,7 +4,7 @@ Every number and transaction here can be checked on testnet; see [reports/03-con
 The video and the deck must be recorded and made by the builder, because they need a face, a voice and a screen. This
 file is the script.
 
-## Demo video script (the 2:03 cut; the full video is 4:27)
+## Demo video script (the 2:03 cut; the full video is 4:24)
 
 | Time | Screen | Narration |
 |---|---|---|
@@ -113,7 +113,7 @@ late loans told to sister co-ops are proven by contract tests.
 - [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `3fed3339…`, 0.3.5, proposal #143; CI rebuilds it weekly)
 - [x] CI: lint, typecheck, unit, contract, Playwright, npm audit, `npm run verify` (daily)
 - [x] Security rounds 1–14 ([05-security](reports/05-security.md)); 19 attacks refused on-chain, re-sent weekly in CI
-- [x] **Demo video**: `video/out/koperasi.mp4` (4:27) and the 30-second opening `video/out/intro30.mp4`; attach the 30-second one to the X post
+- [x] **Demo video**: `video/out/koperasi.mp4` (4:24) and the 30-second opening `video/out/intro30.mp4`; attach the 30-second one to the X post
 - [x] **Pitch deck**: 9 slides built from the outline above (shared by the builder as a link)
 - [x] **Repo public** (since 12 Nov)
 - [ ] **Submission form** before 14 Nov 23:59 UTC (06:59 WIB on 15 Nov)

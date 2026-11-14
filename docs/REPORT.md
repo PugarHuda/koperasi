@@ -106,7 +106,7 @@ whole life on chain with an agent whose wallet and cross-chain payments answer t
 | The DAO's Ethereum address | `0xb3dc0128b4a9804de94796480bef8ba014dfca7d` (Chain Signatures) |
 | The agent's Intents wallet | `agent_7faa1d7f6f2be9e778c9fd18` (Tidepool testnet), owner: the address above |
 | Every co-op from this repo | https://koperasi-kohl.vercel.app/coops.html |
-| Video | rendered: 4:27, and a 2:03 cut for X (`video/`); not posted yet |
+| Video | rendered: 4:24, and a 2:03 cut for X (`video/`); not posted yet |
 
 ## 9. Blockers (only what needs you)
 

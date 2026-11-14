@@ -48,6 +48,67 @@ Bitcoin goes with it (tracks NFTs That Do Something, Unstoppable DeFi, Open Inno
 | **What members owe each other: pledges, the co-op court, standing** | **A member's work record, read from the chain** |
 | [![Commons](docs/img/page-commons.png)](https://koperasi-kohl.vercel.app/#commons) | [`/cert.html?who=kop-alice-mw4i3w8f.testnet`](https://koperasi-kohl.vercel.app/cert.html?who=kop-alice-mw4i3w8f.testnet): pledges kept, jury duty, paid work, each traced to its transaction |
 
+## Try it in 60 seconds
+
+No wallet, no keys, no clone (Node 20+ for the last step).
+
+1. Bob's membership, read from the chain: <https://koperasi-kohl.vercel.app/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/membership>
+2. The agent's report card, judged as a member: <https://koperasi-kohl.vercel.app/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/report>
+3. Every claim in this README, checked from testnet:
+
+   ```sh
+   curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs
+   ```
+
+The longer walk-through is [For judges](#for-judges-60-seconds-no-wallet-no-keys) below and [`JUDGE.md`](JUDGE.md).
+
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph coop["The co-op (koperasi-mw4i2iwk)"]
+    M["Members<br/>NEAR wallets"] -->|"one member, one vote"| DAO["Sputnik DAO<br/>treasury in USDC"]
+    DAO -->|"FunctionCall proposals;<br/>upgrades only by vote"| C["Koperasi contract<br/>global contract, 0 full-access keys"]
+    C -->|"role tasks: file + approve<br/>Transfer proposals"| DAO
+    COURT["Co-op court<br/>random jury, appeal to all members,<br/>3 strikes suspend the agent"] --- C
+  end
+
+  subgraph agentside["The agent"]
+    A["Agent runtime<br/>function-call-only key"] -->|"record_receipt"| C
+    C -->|"voted by-laws hash"| A
+    A -->|"before every job"| OL["OutLayer, Intel TDX<br/>by-laws gate"]
+    A -->|"inference"| AI["NEAR AI Cloud, TEE<br/>proof on the receipt"]
+    A <-->|"bids and jobs"| MK["Markets<br/>Agent Market, Taskbond"]
+  end
+
+  subgraph shade["Shade Agent"]
+    W["Worker in a Phala TDX VM<br/>key made in the TEE"] -->|"quote"| TR["tee-registry<br/>dcap-qvl, owned by the DAO"]
+    TR -->|"TEE-only receipts"| C
+  end
+
+  subgraph fed["Federation"]
+    FD["Federation DAO<br/>members are co-ops' DAOs"] -->|"binding resolutions:<br/>loan ceiling"| C
+    C <-->|"referrals, passport, credit"| SIS["Sister co-op<br/>koperasi-mw80aczw"]
+    FD --> SIS
+  end
+```
+
+Account names and the rest of the flow: [How it works](#how-it-works) and [`docs/DETAILS.md`](docs/DETAILS.md).
+
+## What we do not claim
+
+- **No real Agent Market job yet.** The agent has bid on real Agent Market jobs; none was awarded (0). Its 5 paid jobs
+  from outside the co-op came from [Taskbond](https://github.com/demir-sama/taskbond), another team's testnet market,
+  and their posters are the builder's accounts too.
+- **Everything is on NEAR testnet.** The money is testnet USDC and testnet NEAR; Sepolia and Base Sepolia for the
+  payouts on other chains.
+- **The members are the builder's accounts.** 5 members in this co-op and 2 in the sister co-op, all made by the
+  builder. They show the mechanism works; they are not independent people.
+- **The Shade Agent worker ran once.** It registered, passed the gate and recorded one receipt from inside the TEE;
+  its VM was then stopped to save cost. The founding agent's runtime is not in a TEE.
+- **The audit is red on purpose.** The 7.60 USDC shortfall dates from before the steward's appointment, so it is not
+  slashable; it stays visible rather than being papered over.
+
 ## Every claim, its evidence, and the check that reads it
 
 Testnet. `npm run verify` (read-only, no keys) reads each row from the chain and prints PASS or FAIL; the last column
@@ -58,7 +119,7 @@ quotes its line.
 | The members own the co-op, one vote each | DAO [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet): role `member`, RoleWeight, threshold 1/2 | *every member in the contract holds role `member`*; *one member, one vote* |
 | No role can act alone | `member` votes, `tasks` only files and approves transfers, outsiders only file proposals (with a bond) | *no role can act alone* |
 | The agent runs only by-laws the members voted | v3 by proposal #7 (a member found v2's model was not served), v4 by #55 (the steward's handover), v5 by #96 (a third-party testnet market, and profit shares on a schedule), v6 by #97 (deepseek-v3.2: TDX and 8 GPUs attested, 13 s where the reasoning model timed out), v7 by #124 (a price the agent itself proposed, below), v8 by #136 (written by the agent with the voted model in a TEE), v9 by #139 (the agent's, on a wrong average, below), v10 by #140 (the members restoring v8); the agent runs only `bc829c10…` | *the agent's by-laws … are the ones the members voted* |
-| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys; upgrades only by vote, now #143 (0.3.5, a reproducible build) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
+| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys (the sister co-op too, since 14 Nov: tx `Doqa4tni…`); upgrades only by vote, now #143 (0.3.5, a reproducible build) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
 | The agent can only record receipts | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, `record_receipt` / `update_receipt` | *the agent account has only function-call keys …* |
 | Small payouts on earned trust, from the treasury itself | Task #2 needed another member (#30); #3 and #4 paid on trust, no vote (#31, #34); #5, #6 (#44, #45). Each a DAO `Transfer` the contract filed | *task #n was paid from the treasury by DAO proposal #m, filed by the contract*; *the trust tiers were voted* |
 | Any member can stop a no-vote payout before it leaves | A 10-minute veto window by vote #62. Task #7 waited it out and anyone released it (#64). Task #8 was vetoed by bob ([3oQ43dwi…](https://testnet.nearblocks.io/txns/3oQ43dwiSW48PjG983VRL92Hgw4PJF13hGC1Ntc6qWWT)), so it needed one other member, and the steward approved it (#63) | *a payout on trust waits out the veto window the members voted* |

@@ -674,6 +674,20 @@
       "status": "Paid",
       "receipt": "taskbond-16",
       "at": "2026-11-14T05:36:53.299Z"
+    },
+    {
+      "escrow": "escrow.tbnd246748.testnet",
+      "job": 17,
+      "poster": "kop-publisher-mw5tkpfo.testnet",
+      "agent_id": 41,
+      "owner": "kop-steward-mw4i2iwk.testnet",
+      "review": "Accepted",
+      "reason": "[NEAR AI] 85/100 · Accurately covers key restrictions and testnet sources, but relies on only one valid citation for a multi-part brief.",
+      "score": 85,
+      "winner": 41,
+      "status": "Paid",
+      "receipt": "taskbond-17",
+      "at": "2026-11-14T08:47:58.838Z"
     }
   ],
   "suspension": {
