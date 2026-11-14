@@ -4459,7 +4459,7 @@ fn a_failed_federation_dividend_goes_to_the_dao() {
     assert_eq!(ft_transfers(), vec![(dao().to_string(), 2_500)]);
 }
 
-// ---------- 0.3.10 (after the hackathon deadline): credit decides; NEAR Intents payouts; payout caps; the job market ----------
+// ---------- 0.3.10 (14 Nov, the last day of the hackathon): credit decides; NEAR Intents payouts; payout caps; the job market ----------
 
 /// Graduated sanctions on the agent's suggestion too: late but repaid, it may be suggested under its reduced cap; a
 /// co-op a sister notes late (in arrears) is refused; score 0 is refused.

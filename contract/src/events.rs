@@ -390,7 +390,7 @@ pub enum Event {
     #[event_version("1.0.0")]
     FederationDividendFailed { loan_id: u32, to: AccountId, amount: U128 },
 
-    // ---------- 0.3.10 (after the hackathon deadline): NEAR Intents payouts, payout caps, the co-op job market ----------
+    // ---------- 0.3.10 (14 Nov, the last day of the hackathon): NEAR Intents payouts, payout caps, the co-op job market ----------
     /// The members named (or, None, removed) the NEAR Intents verifier referral shares are paid through.
     #[event_version("1.0.0")]
     IntentsVerifierSet { verifier: Option<AccountId> },

@@ -1,4 +1,4 @@
-//! Contract 0.3.10 (after the hackathon deadline): the contract pays through NEAR Intents itself; per-destination caps.
+//! Contract 0.3.10 (14 Nov, the last day of the hackathon): the contract pays through NEAR Intents itself; per-destination caps.
 //!
 //! - **Through NEAR Intents** (`set_intents_verifier`, DAO only): when a verifier is set, a referral share is not sent
 //!   by `ft_transfer` but in two steps, chained by callbacks. (1) `ft_transfer_call` of the USDC to the verifier with

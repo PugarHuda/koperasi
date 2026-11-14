@@ -1,4 +1,4 @@
-//! Contract 0.3.10 (after the hackathon deadline): a job market between the co-ops' agents.
+//! Contract 0.3.10 (14 Nov, the last day of the hackathon): a job market between the co-ops' agents.
 //!
 //! - **Offering** (this co-op posts): its agent (directly, or anyone with its signature, own nonce) offers its sister
 //!   co-ops a job with a budget and a deadline (`post_coop_job`).

@@ -11,7 +11,7 @@
 //!   share goes to the referring co-op's treasury, once per job; the rest is booked as usual. A failed transfer goes to
 //!   the DAO's unforwarded balance, for the members to pay by vote as before.
 //!
-//! - 0.3.10 (after the hackathon deadline): the share is cut to the treasury's payout cap and, when the members named a
+//! - 0.3.10 (14 Nov, the last day of the hackathon): the share is cut to the treasury's payout cap and, when the members named a
 //!   NEAR Intents verifier, paid through it (payouts.rs).
 //!
 //! State lives under its own storage keys, so the upgrade needs no state migration.

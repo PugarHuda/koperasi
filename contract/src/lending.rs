@@ -586,7 +586,7 @@ impl Koperasi {
 impl Koperasi {
     /// DAO only: lend sister co-op `coop` `amount` USDC from the risk fund for `days` (1 to 365). At most half the risk
     /// fund x its federation credit score / 100 (score 0: refused); refused while it is in arrears: a loan to it is open,
-    /// or a sister co-op's late note on it still stands. 0.3.10 (after the hackathon deadline), graduated sanctions (Ostrom's
+    /// or a sister co-op's late note on it still stands. 0.3.10 (14 Nov, the last day of the hackathon), graduated sanctions (Ostrom's
     /// principle 5): a co-op whose loan here went late and was repaid may borrow again, less (-40 per late in the score).
     /// 0.3.7: `interest_bps` (0 to 2000, none = 0) is simple interest for the term, due on top of the amount.
     pub fn lend_to_sister(&mut self, coop: AccountId, paid_to: AccountId, amount: U128, days: u32, interest_bps: Option<u16>) -> Promise {
@@ -823,7 +823,7 @@ impl Koperasi {
 // A sister co-op's credit score, the rule web/coops.html shows: 100, -40 for each loan to it that went late (this
 // co-op's count, plus each sister's "late elsewhere" note), -10 for each open loan to it past due, +5 for each loan repaid
 // on time; between 0 and 100. `lend_to_sister` and the agent's suggestion lend at most half the risk fund x score/100.
-// 0.3.10 (after the hackathon deadline): the score decides past lateness (graduated sanctions); only current arrears (an
+// 0.3.10 (14 Nov, the last day of the hackathon): the score decides past lateness (graduated sanctions); only current arrears (an
 // open loan, a standing late note from a sister co-op) still refuse.
 //
 // The federation dividend: the members vote a share (`set_federation_dividend`, bps) of each sister loan's interest
