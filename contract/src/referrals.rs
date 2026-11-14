@@ -87,6 +87,8 @@ impl Koperasi {
         require!(!self.paused, "koperasi is paused");
         require!(!env::storage_has_key(&from_key(&from_coop, referral_id)), "this referral is already accepted");
         require!(!env::storage_has_key(&job_key(&r.job_id)), "this job is already accepted");
+        // a receipt here already names this job: a referral accepted now would link work it did not bring
+        require!(!self.receipt_index.contains_key(&r.job_id), "this job already has a receipt here");
         let id: u32 = load(KEY_ACCEPTED_COUNT).unwrap_or(0);
         save(KEY_ACCEPTED_COUNT, &(id + 1));
         if id >= MAX_REFERRALS {
