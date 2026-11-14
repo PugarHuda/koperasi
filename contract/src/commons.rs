@@ -326,7 +326,8 @@ impl Koperasi {
         if load::<bool>(KEY_JURY_BY_REPUTATION).unwrap_or(false) {
             // 0.3.7: drawn in proportion to reputation weight (at least the floor), without replacement
             let rep: std::collections::HashMap<AccountId, u128> = self.reputation_weights(false).into_iter().collect();
-            let mut w: Vec<u128> = pool.iter().map(|m| rep.get(m).copied().unwrap_or(0).max(JURY_WEIGHT_FLOOR)).collect();
+            // the square root flattens the weights: a heavier record draws more often, but no one member's weight can capture the jury
+        let mut w: Vec<u128> = pool.iter().map(|m| isqrt(rep.get(m).copied().unwrap_or(0).max(JURY_WEIGHT_FLOOR))).collect();
             for k in 0..JURORS {
                 let mut x = u64::from_le_bytes(seed[8 * k..8 * k + 8].try_into().unwrap()) as u128 % w.iter().sum::<u128>();
                 let i = w.iter().position(|v| if x < *v { true } else { x -= *v; false }).unwrap();
@@ -610,4 +611,18 @@ impl Koperasi {
         self.replace_steward(None);
         Event::StewardTermEnded { steward: old }.emit();
     }
+}
+
+/// Integer square root (floor), for flattening jury weights.
+fn isqrt(n: u128) -> u128 {
+    if n < 2 {
+        return n;
+    }
+    let mut x = n;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    x
 }

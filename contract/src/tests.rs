@@ -3434,7 +3434,7 @@ fn sister_setup() -> (Koperasi, AccountId) {
 
 fn lend(k: &mut Koperasi, coop: &AccountId, amount: u128, days: u32) {
     at(&dao(), DAY);
-    let _ = k.lend_to_sister(coop.clone(), acc("sister-dao.testnet"), U128(amount), days);
+    let _ = k.lend_to_sister(coop.clone(), acc("sister-dao.testnet"), U128(amount), days, None);
 }
 
 fn repay(k: &mut Koperasi, msg: &str, amount: u128) -> u128 {
@@ -3446,7 +3446,7 @@ fn repay(k: &mut Koperasi, msg: &str, amount: u128) -> u128 {
 #[test]
 fn the_dao_lends_a_sister_coop_from_the_risk_fund_and_it_repays() {
     let (mut k, sister) = sister_setup();
-    assert!(fails(|| { at(&acc("alice.testnet"), DAY); let _ = k.lend_to_sister(sister.clone(), acc("sister-dao.testnet"), U128(100), 30); }), "only the DAO");
+    assert!(fails(|| { at(&acc("alice.testnet"), DAY); let _ = k.lend_to_sister(sister.clone(), acc("sister-dao.testnet"), U128(100), 30, None); }), "only the DAO");
     assert!(fails(|| lend(&mut k, &acc("stranger.testnet"), 100, 30)), "not a sister");
     assert!(fails(|| lend(&mut k, &sister, 500_001, 30)), "more than half the risk fund");
     assert!(fails(|| lend(&mut k, &sister, 0, 30)), "nothing");
@@ -3741,4 +3741,216 @@ fn a_jury_by_reputation_draws_members_with_no_reputation_at_the_floor() {
     let mut j: Vec<String> = k.get_cases(None, None)[0].jurors.iter().map(|a| a.to_string()).collect();
     j.sort();
     assert_eq!(j, ["carol.testnet", "dave.testnet", "erin.testnet"]);
+}
+
+// ---------- 0.3.7 part B: interest on sister loans; the agent asks for one ----------
+
+fn lend_at(k: &mut Koperasi, coop: &AccountId, amount: u128, days: u32, bps: Option<u16>) {
+    at(&dao(), DAY);
+    let _ = k.lend_to_sister(coop.clone(), acc("sister-dao.testnet"), U128(amount), days, bps);
+}
+
+fn interest_of(k: &Koperasi, id: u32) -> (u128, u128) {
+    k.get_sister_interest().iter().find(|(i, _, _)| *i == id).map_or((0, 0), |(_, d, p)| (d.0, p.0))
+}
+
+/// Interest: principal first into the risk fund, then interest to the DAO (the surplus); Repaid only when both are paid;
+/// a payment that does not cover the interest leaves the loan open; the excess is returned.
+#[test]
+fn a_sister_loan_with_interest_repays_principal_to_the_risk_fund_and_interest_to_the_surplus() {
+    let (mut k, sister) = sister_setup();
+    assert!(fails(|| lend_at(&mut k, &sister, 400_000, 30, Some(2001))), "at most 2000 bps");
+    lend_at(&mut k, &sister, 400_000, 30, Some(1000));
+    at(&me(), DAY);
+    k.on_sister_lent(0, U128(400_000), Ok(()));
+    assert_eq!(interest_of(&k, 0), (40_000, 0), "10% of the amount, for the term");
+    // the principal alone: back in the risk fund, still open for the interest
+    assert_eq!(repay(&mut k, "sister_repay:0", 400_000), 0);
+    assert_eq!(k.get_risk_fund().0 .0, 1_000_000);
+    assert!(logs_have("\"outstanding\":\"40000\"") && !logs_have("\"sister_interest\""));
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Open);
+    // part of the interest: forwarded to the DAO, not enough to settle
+    assert_eq!(repay(&mut k, "sister_repay:0", 10_000), 0);
+    assert!(logs_have("\"sister_interest\"") && logs_have("\"amount\":\"10000\"") && logs_have("\"outstanding\":\"30000\""));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 10_000, "the interest is in flight to the DAO");
+    assert_eq!(k.get_risk_fund().0 .0, 1_000_000, "interest never goes into the risk fund");
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Open);
+    assert_eq!(interest_of(&k, 0), (40_000, 10_000));
+    // the forward fails: kept for flush_to_dao
+    at(&me(), DAY);
+    k.on_forwarded(U128(10_000), Err(PromiseError::Failed));
+    assert_eq!(k.get_info().unforwarded.0, 10_000);
+    // overpaid: what is not owed comes back
+    assert_eq!(repay(&mut k, "sister_repay:0", 50_000), 20_000);
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Repaid);
+    assert_eq!(interest_of(&k, 0), (40_000, 40_000));
+    assert_eq!(repay(&mut k, "sister_repay:0", 5), 5, "settled: nothing more taken");
+}
+
+/// One payment covering the principal and part of the interest; no interest by default; late shows interest owed.
+#[test]
+fn one_payment_splits_between_principal_and_interest_and_late_counts_interest() {
+    let (mut k, sister) = sister_setup();
+    lend_at(&mut k, &sister, 200_000, 10, Some(500)); // 10_000 interest
+    assert_eq!(repay(&mut k, "sister_repay:0", 205_000), 0);
+    assert_eq!(k.get_risk_fund().0 .0, 1_000_000);
+    assert_eq!(interest_of(&k, 0), (10_000, 5_000));
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Open, "the interest is not covered yet");
+    at(&acc("anyone.testnet"), 12 * DAY);
+    k.mark_sister_late(0);
+    assert!(logs_have("\"outstanding\":\"5000\""));
+    assert_eq!(repay(&mut k, "sister_repay:0", 5_000), 0);
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Repaid);
+    // without interest_bps: no interest, settled with the principal
+    let third = acc("koperasi-three.testnet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone(), third.clone()]);
+    lend_at(&mut k, &third, 100, 30, None);
+    assert_eq!(interest_of(&k, 1), (0, 0));
+    assert_eq!(repay(&mut k, "sister_repay:1", 150), 50);
+    assert_eq!(k.get_sister_loans()[1].status, lending::SisterLoanStatus::Repaid);
+    assert!(!logs_have("\"sister_interest\""));
+}
+
+/// A failed transfer voids the loan: no interest stays due.
+#[test]
+fn a_failed_sister_loan_owes_no_interest() {
+    let (mut k, sister) = sister_setup();
+    lend_at(&mut k, &sister, 400_000, 30, Some(2000));
+    assert_eq!(interest_of(&k, 0), (80_000, 0));
+    at(&me(), DAY);
+    k.on_sister_lent(0, U128(400_000), Err(PromiseError::Failed));
+    assert_eq!(interest_of(&k, 0), (0, 0));
+    assert_eq!(repay(&mut k, "sister_repay:0", 80_000), 80_000);
+}
+
+fn agent_suggests(k: &mut Koperasi, who: &AccountId, ns: u64, coop: &AccountId, amount: u128, days: u32, bps: u16, why: &str, sig: Option<String>) {
+    at_paying(who, ns, tasks::PAYOUT_BOND);
+    let _ = k.agent_suggest_sister_loan(coop.clone(), acc("sister-dao.testnet"), U128(amount), days, bps, why.into(), sig);
+}
+
+/// The proposal the contract filed: (bond attached, the lend_to_sister args it carries).
+fn filed_loan() -> (u128, Value) {
+    near_sdk::test_utils::get_created_receipts().iter().flat_map(|r| r.actions.clone()).find_map(|a| match a {
+        near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, attached_deposit, .. } if method_name == b"add_proposal" => {
+            let p: Value = near_sdk::serde_json::from_slice(&args).unwrap();
+            let a = &p["proposal"]["kind"]["FunctionCall"]["actions"][0];
+            assert_eq!(a["method_name"], "lend_to_sister");
+            let inner = near_sdk::base64::Engine::decode(&near_sdk::base64::engine::general_purpose::STANDARD, a["args"].as_str().unwrap()).unwrap();
+            Some((attached_deposit.as_yoctonear(), near_sdk::serde_json::from_slice(&inner).unwrap()))
+        }
+        _ => None,
+    }).expect("an add_proposal")
+}
+
+/// The agent asks the members for a loan to a sister co-op: the contract files the DAO proposal (bond attached by the
+/// caller); one open suggestion per sister until a loan is made or 7 days pass; every refusal.
+#[test]
+fn the_agent_asks_the_members_for_a_loan_to_a_sister_coop() {
+    let (mut k, sister) = sister_setup();
+    let why = "kop-two lost a client; it repaid on time before";
+    let stranger = acc("stranger.testnet");
+    assert!(fails(|| agent_suggests(&mut k, &stranger, DAY, &sister, 100_000, 30, 500, why, None)), "not the agent");
+    assert!(fails(|| { at(&agent(), DAY); let _ = k.agent_suggest_sister_loan(sister.clone(), acc("sister-dao.testnet"), U128(100_000), 30, 500, why.into(), None); }), "no bond");
+    assert!(fails(|| agent_suggests(&mut k, &agent(), DAY, &acc("stranger-coop.testnet"), 100_000, 30, 500, why, None)), "not a sister");
+    assert!(fails(|| agent_suggests(&mut k, &agent(), DAY, &sister, 500_001, 30, 500, why, None)), "over half the risk fund");
+    assert!(fails(|| agent_suggests(&mut k, &agent(), DAY, &sister, 0, 30, 500, why, None)), "nothing");
+    assert!(fails(|| agent_suggests(&mut k, &agent(), DAY, &sister, 100_000, 0, 500, why, None)), "0 days");
+    assert!(fails(|| agent_suggests(&mut k, &agent(), DAY, &sister, 100_000, 30, 2001, why, None)), "over 2000 bps");
+    assert!(fails(|| agent_suggests(&mut k, &agent(), DAY, &sister, 100_000, 30, 500, " ", None)), "no reason");
+    assert!(fails(|| agent_suggests(&mut k, &agent(), DAY, &sister, 100_000, 30, 500, &"x".repeat(281), None)), "reason over 280");
+    assert!(fails(|| { at_paying(&agent(), DAY, tasks::PAYOUT_BOND); let _ = k.agent_suggest_sister_loan(sister.clone(), sister.clone(), U128(100_000), 30, 500, why.into(), None); }), "paid to the sister's contract");
+
+    agent_suggests(&mut k, &agent(), DAY, &sister, 100_000, 30, 500, why, None);
+    let (bond, args) = filed_loan();
+    assert_eq!(bond, tasks::PAYOUT_BOND.as_yoctonear());
+    assert_eq!(args, json!({ "coop": sister, "paid_to": "sister-dao.testnet", "amount": "100000", "days": 30, "interest_bps": 500 }));
+    let s = k.get_loan_suggestion(sister.clone()).unwrap();
+    assert_eq!((s.amount.0, s.days, s.interest_bps, s.proposal, s.by.clone()), (100_000, 30, 500, None, agent()));
+    at(&me(), DAY);
+    k.on_loan_suggested(sister.clone(), U128(100_000), agent(), Ok(7));
+    assert!(logs_have("\"loan_suggested\"") && logs_have("\"proposal\":7"));
+    assert_eq!(k.get_loan_suggestion(sister.clone()).unwrap().proposal, Some(7));
+    assert!(fails(|| agent_suggests(&mut k, &agent(), 2 * DAY, &sister, 100_000, 30, 500, why, None)), "one open per sister");
+    // the members vote it: the DAO executes lend_to_sister with those args; the suggestion is settled
+    lend_at(&mut k, &sister, 100_000, 30, Some(500));
+    assert!(k.get_loan_suggestion(sister.clone()).is_none());
+    assert_eq!(interest_of(&k, 0), (5_000, 0));
+    assert!(fails(|| agent_suggests(&mut k, &agent(), 2 * DAY, &sister, 100_000, 30, 500, why, None)), "a loan to it is open");
+}
+
+/// Not filed: the suggestion is forgotten and the bond refunded; after 7 days a new one may be filed; the gates.
+#[test]
+fn a_loan_suggestion_not_filed_is_forgotten_and_the_gates_hold() {
+    let (mut k, sister) = sister_setup();
+    let why = "steady repayer";
+    agent_suggests(&mut k, &agent(), DAY, &sister, 100_000, 30, 0, why, None);
+    at(&me(), DAY);
+    k.on_loan_suggested(sister.clone(), U128(100_000), agent(), Err(PromiseError::Failed));
+    assert!(k.get_loan_suggestion(sister.clone()).is_none());
+    assert!(near_sdk::test_utils::get_created_receipts().iter().any(|r| r.receiver_id == agent()
+        && r.actions.iter().any(|a| matches!(a, near_sdk::mock::MockAction::Transfer { deposit, .. } if *deposit == tasks::PAYOUT_BOND))), "bond refunded");
+    agent_suggests(&mut k, &agent(), DAY, &sister, 100_000, 30, 0, why, None);
+    at(&me(), DAY);
+    k.on_loan_suggested(sister.clone(), U128(100_000), agent(), Ok(1));
+    // 7 days on, no loan made: open again
+    assert!(fails(|| agent_suggests(&mut k, &agent(), 8 * DAY - 1, &sister, 100_000, 30, 0, why, None)));
+    agent_suggests(&mut k, &agent(), 8 * DAY, &sister, 100_000, 30, 0, why, None);
+    // a TEE-only agent unattested; a suspended agent; paused
+    as_(&dao(), near(0));
+    k.set_agent_tee(agent(), true);
+    assert!(fails(|| agent_suggests(&mut k, &agent(), 20 * DAY, &sister, 100_000, 30, 0, why, None)), "TEE-only, unattested");
+    as_(&dao(), near(0));
+    k.set_agent_tee(agent(), false);
+    agent_suggests(&mut k, &agent(), 20 * DAY, &sister, 100_000, 30, 0, why, None);
+    at(&me(), 30 * DAY);
+    for c in 0..3 {
+        meeting::strike(c);
+    }
+    assert!(fails(|| agent_suggests(&mut k, &agent(), 30 * DAY, &sister, 100_000, 30, 0, why, None)), "suspended");
+    at(&dao(), 31 * DAY);
+    k.reinstate_agent();
+    agent_suggests(&mut k, &agent(), 31 * DAY, &acc("koperasi-two.testnet"), 100_000, 30, 0, why, None); // reinstated: allowed
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| agent_suggests(&mut k, &agent(), 40 * DAY, &sister, 100_000, 30, 0, why, None)), "paused");
+    // a co-op that went late here is not suggested
+    as_(&dao(), near(0));
+    k.unpause();
+    let third = acc("koperasi-three.testnet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone(), third.clone()]);
+    lend_at(&mut k, &third, 1_000, 1, None);
+    at(&acc("anyone.testnet"), 3 * DAY);
+    k.mark_sister_late(0);
+    assert!(fails(|| agent_suggests(&mut k, &agent(), 40 * DAY, &third, 100, 30, 0, why, None)), "late before");
+}
+
+/// The signed path: anyone submits the agent's signature, once; every term is signed.
+#[test]
+fn anyone_may_submit_the_agents_signed_loan_suggestion_once() {
+    use ed25519_dalek::{Signer, SigningKey};
+    let (mut k, sister) = sister_setup();
+    let relayer = acc("relayer.testnet");
+    let why = "kop-two needs a bridge loan";
+    let sk = SigningKey::from_bytes(&[5; 32]);
+    let pk: Vec<u8> = [vec![0u8], sk.verifying_key().to_bytes().to_vec()].concat();
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(agent()).signer_account_id(agent())
+        .signer_account_pk(pk.try_into().unwrap()).block_timestamp(DAY);
+    testing_env!(b.build());
+    k.record_receipt("j-pk".into(), U128(1), U128(0), H1.into(), "00".into(), None);
+    let msg = k.get_loan_suggestion_message(sister.clone(), acc("sister-dao.testnet"), U128(100_000), 30, 300, why.into());
+    assert_eq!(msg, lending::agent_loan_message(&me(), 0, &sister, &acc("sister-dao.testnet"), 100_000, 30, 300, why));
+    assert!(msg.starts_with("koperasi-agent-loan/1 koperasi.testnet #0 "));
+    let sig = near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, sk.sign(msg.as_bytes()).to_bytes());
+    assert!(fails(|| agent_suggests(&mut k, &relayer, DAY, &sister, 200_000, 30, 300, why, Some(sig.clone()))), "the amount is signed");
+    assert!(fails(|| agent_suggests(&mut k, &relayer, DAY, &sister, 100_000, 30, 900, why, Some(sig.clone()))), "the interest is signed");
+    assert!(fails(|| agent_suggests(&mut k, &relayer, DAY, &sister, 100_000, 30, 300, "other", Some(sig.clone()))), "the reason is signed");
+    assert!(fails(|| agent_suggests(&mut k, &relayer, DAY, &sister, 100_000, 30, 300, why, None)), "no signature");
+    agent_suggests(&mut k, &relayer, DAY, &sister, 100_000, 30, 300, why, Some(sig.clone()));
+    assert_eq!(k.get_loan_suggestion(sister.clone()).unwrap().by, relayer);
+    at(&me(), DAY);
+    k.on_loan_suggested(sister.clone(), U128(100_000), relayer.clone(), Err(PromiseError::Failed));
+    assert!(fails(|| agent_suggests(&mut k, &relayer, DAY, &sister, 100_000, 30, 300, why, Some(sig.clone()))), "replayed: nonce 0 was used");
 }
