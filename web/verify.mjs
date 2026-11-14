@@ -12874,6 +12874,33 @@ var init_verify = __esm({
         `${q2.account} handed back task #${q2.task}: quality ${JSON.stringify(now)}; weight ${q2.before.w} \u2192 ${q2.after.w}`
       );
     }
+    if (d2.v036?.accept) {
+      const a = d2.v036.accept;
+      const [got, board2] = await Promise.all([view2(a.coop, "get_referral_for_job", { job_id: a.job }), view2(d2.contract, "get_referrals", {})]);
+      const sent = board2.find((x2) => x2.id === a.referral);
+      check(
+        got?.referral_id === a.referral && got.from_coop === d2.contract && sent?.to_coop === a.coop && sent.job_id === a.job,
+        "a referral closes the loop: the sister co-op read this co-op's board itself and accepted the job it was sent",
+        `referral #${a.referral} (${a.job}) posted here, accepted by ${a.coop} (tx ${a.tx.slice(0, 10)}\u2026)`
+      );
+    }
+    if (d2.v036?.poll) {
+      const p2 = await view2(d2.contract, "get_poll", { id: d2.v036.poll.id });
+      const w2 = await view2(d2.contract, "get_reputation_weights");
+      check(
+        p2?.kind === "Technical" && p2.mode === "reputation" && await view2(d2.contract, "get_technical_vote_mode") === "reputation" && p2.voters.length >= 2 && p2.tallies.reduce((s, x2) => s + BigInt(x2), 0n) > BigInt(p2.voters.length),
+        "technical questions are weighed by reputation, by the members' own choice; general ones stay one member one vote",
+        `poll #${p2?.id} "${p2?.question}": tallies ${JSON.stringify(p2?.tallies)} from ${p2?.voters.length} voters${p2?.closed ? `, result option ${p2.result}` : ", still open"}; weights now ${w2.map(([a, x2]) => `${a.split(".")[0]} ${x2}`).join(", ")}`
+      );
+    }
+    if (d2.v036?.loan) {
+      const l2 = (await view2(d2.contract, "get_sister_loans")).find((x2) => x2.id === d2.v036.loan.id);
+      check(
+        l2 && ["Open", "Repaid"].includes(l2.status) && l2.paid_to !== l2.coop && (await view2(d2.contract, "get_sister_coops")).includes(l2.coop),
+        "co-ops lend to each other: the members lent a sister co-op from the risk fund, paid to its DAO treasury",
+        `loan #${l2?.id}: ${Number(l2?.amount) / 1e6} USDC to ${l2?.coop} (paid to ${l2?.paid_to}), ${l2?.status}, due ${new Date(Number(BigInt(l2?.due ?? 0) / 1000000n)).toISOString().slice(0, 10)}; DAO #${d2.v036.loan.proposal}`
+      );
+    }
     if (d2.redteam?.length) {
       const res = await Promise.all(d2.redteam.map(async (r2) => {
         const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.tx, sender_account_id: r2.by, wait_until: "FINAL" });

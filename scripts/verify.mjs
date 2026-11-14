@@ -635,6 +635,30 @@ if (d.v035?.quality) {
     `${q.account} handed back task #${q.task}: quality ${JSON.stringify(now)}; weight ${q.before.w} → ${q.after.w}`);
 }
 
+// contract 0.3.6 (scripts/v036.mjs): a referral accepted by the sister co-op, polls weighed by reputation, a loan to a sister co-op
+if (d.v036?.accept) {
+  const a = d.v036.accept;
+  const [got, board] = await Promise.all([view(a.coop, "get_referral_for_job", { job_id: a.job }), view(d.contract, "get_referrals", {})]);
+  const sent = board.find((x) => x.id === a.referral);
+  check(got?.referral_id === a.referral && got.from_coop === d.contract && sent?.to_coop === a.coop && sent.job_id === a.job,
+    "a referral closes the loop: the sister co-op read this co-op's board itself and accepted the job it was sent",
+    `referral #${a.referral} (${a.job}) posted here, accepted by ${a.coop} (tx ${a.tx.slice(0, 10)}…)`);
+}
+if (d.v036?.poll) {
+  const p = await view(d.contract, "get_poll", { id: d.v036.poll.id });
+  const w = await view(d.contract, "get_reputation_weights");
+  check(p?.kind === "Technical" && p.mode === "reputation" && (await view(d.contract, "get_technical_vote_mode")) === "reputation" && p.voters.length >= 2
+    && p.tallies.reduce((s, x) => s + BigInt(x), 0n) > BigInt(p.voters.length),
+    "technical questions are weighed by reputation, by the members' own choice; general ones stay one member one vote",
+    `poll #${p?.id} "${p?.question}": tallies ${JSON.stringify(p?.tallies)} from ${p?.voters.length} voters${p?.closed ? `, result option ${p.result}` : ", still open"}; weights now ${w.map(([a, x]) => `${a.split(".")[0]} ${x}`).join(", ")}`);
+}
+if (d.v036?.loan) {
+  const l = (await view(d.contract, "get_sister_loans")).find((x) => x.id === d.v036.loan.id);
+  check(l && ["Open", "Repaid"].includes(l.status) && l.paid_to !== l.coop && (await view(d.contract, "get_sister_coops")).includes(l.coop),
+    "co-ops lend to each other: the members lent a sister co-op from the risk fund, paid to its DAO treasury",
+    `loan #${l?.id}: ${Number(l?.amount) / 1e6} USDC to ${l?.coop} (paid to ${l?.paid_to}), ${l?.status}, due ${new Date(Number(BigInt(l?.due ?? 0) / 1_000_000n)).toISOString().slice(0, 10)}; DAO #${d.v036.loan.proposal}`);
+}
+
 // attacks sent as real transactions (scripts/redteam.mjs): each one failed on-chain with the refusal it was saved with
 if (d.redteam?.length) {
   const res = await Promise.all(d.redteam.map(async (r) => {

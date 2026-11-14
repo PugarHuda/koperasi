@@ -52,7 +52,7 @@ built on an unmodified Sputnik DAO (no new multisig):
   and a social fund, mandatory dues, members standing surety for each other, savings and loans with credit from the
   record, an annual members' meeting whose report the agent writes in a TEE, pledges of work, and a court drawn at
   random with evidence from both sides and appeal to every member.
-- **Proof:** contract 0.3.5 upgraded only by vote (#143), 0 full-access keys, rebuilt byte for byte from source; 167
+- **Proof:** contract 0.3.6 upgraded only by vote (#144), 0 full-access keys, rebuilt byte for byte from source; 176
   contract tests; 19 attacks sent to the live co-op, all refused on-chain; `verify` checks 83 claims.
 
 **Autonomous Business / Agent Economy.** The DAO owns the agent, and the agent is a member that answers for itself:
@@ -110,7 +110,7 @@ late loans told to sister co-ops are proven by contract tests.
 
 - [x] Repo with README: one-liner and positioning at the top, live demo link, per-track evidence, contract addresses, setup and tests
 - [x] Live page: https://koperasi-kohl.vercel.app
-- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `3fed3339…`, 0.3.5, proposal #143; CI rebuilds it weekly)
+- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `98c1e7fd…`, 0.3.6, proposal #144; CI rebuilds it weekly)
 - [x] CI: lint, typecheck, unit, contract, Playwright, npm audit, `npm run verify` (daily)
 - [x] Security rounds 1–14 ([05-security](reports/05-security.md)); 19 attacks refused on-chain, re-sent weekly in CI
 - [x] **Demo video**: `video/out/koperasi.mp4` (4:24) and the 30-second opening `video/out/intro30.mp4`; attach the 30-second one to the X post

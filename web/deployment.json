@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "bc829c101675b0893de63ae063819d3e00a0be5713b329d47dc26ccfda3b991f",
   "configUri": "config/config.v10.yaml",
-  "codeSha256": "3fed3339c74976131e82908b3eab5259bf50e41f58d0167442f538590e052d49",
+  "codeSha256": "98c1e7fdce3d9d4c100edce98bd1839519d309e14447b2a2d178af6cf5969d8c",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -1034,6 +1034,67 @@
         },
         "w": "220"
       }
+    }
+  },
+  "v036": {
+    "accept": {
+      "coop": "koperasi-mw80aczw.testnet",
+      "from": "koperasi-mw4i2iwk.testnet",
+      "referral": 2,
+      "posted_tx": "C1rXSt84HbFH9WHuEr2GukwNzsZeqEPieoVzRTNjPtao",
+      "tx": "3KguXhJxUUijdN5ZsaXtBgSe8nhTALKszGU4FswqmuSQ",
+      "job": "demo-referral-mwg7spzp"
+    },
+    "mode": {
+      "proposal": 145
+    },
+    "poll": {
+      "id": 0,
+      "open_tx": "HWVy3Qn5CKMWyJarp9Pk7buSp8xdSppZ9ewRH7Ppd68F",
+      "votes": [
+        {
+          "by": "kop-alice-mw4i3w8f.testnet",
+          "option": 1,
+          "weight": "280",
+          "tx": "EHFXzGdba9gfrrBWhVu5NFktbSoiXiU7G8y7rGgjfaWp"
+        },
+        {
+          "by": "kop-bob-mw4i3w8f.testnet",
+          "option": 0,
+          "weight": "220",
+          "tx": "FXihkpyJMHnnhA58nFNWuqZENcjZwhhyELi1zfWeZykA"
+        },
+        {
+          "by": "kop-steward-mw4i2iwk.testnet",
+          "option": 1,
+          "weight": "0",
+          "tx": "9aUzrs5vLkC6qDb4hEqyGYH1Uh75RypfcCppPSPg1w3V"
+        }
+      ]
+    },
+    "loan": {
+      "proposal": 147,
+      "id": 1,
+      "coop": "koperasi-mw80aczw.testnet",
+      "paid_to": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "amount": "1000000",
+      "repaid": "0",
+      "lent_at": "1794649509850515516",
+      "due": "1797241509850515516",
+      "status": "Open",
+      "was_late": false
+    },
+    "loan_failed": {
+      "proposal": 146,
+      "id": 0,
+      "coop": "koperasi-mw80aczw.testnet",
+      "paid_to": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "amount": "1000000",
+      "repaid": "0",
+      "lent_at": "1794649413287997058",
+      "due": "1797241413287997058",
+      "status": "Failed",
+      "was_late": false
     }
   }
 }

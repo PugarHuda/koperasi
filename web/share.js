@@ -76,7 +76,7 @@ export const EVENTS = ["join_requested", "join_cancelled", "member_added", "memb
   "earnings_deposited", "share_distributed", "reserve_floor_set", "share_refused", "forward_failed", "share_claimed", "claim_rolled_back", "trust_rule_set",
   "task_budget_set", "task_posted", "task_claimed", "task_given_up", "task_submitted", "task_accepted", "veto_window_set", "task_held", "task_vetoed", "task_approved",
   "task_cancelled", "payout_filed", "task_paid", "task_unpaid", "record_credited",
-  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "agent_saves_set", "agent_saved", "reputation_share_set", "reputation_dividend", "agent_proposed", "agent_share_set", "agent_share", "federation_set", "federation_rules_set", "late_elsewhere", "agent_propose_every_set", "tee_registry_set", "agent_tee_set", "agent_attested", "job_referred", "refund_from_risk_fund", "risk_refund_failed", "agent_config_set", "agents_set", "share_funds_set", "fund_paid", "guaranteed", "guarantee_withdrawn", "guarantee_called", "guarantee_cleared", "loan_rule_set", "loan_requested", "loan_filed", "loan_repaid", "loan_late", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
+  "pledge_made", "pledge_redeemed", "pledge_settled", "case_opened", "case_voted", "case_closed", "refund_filed", "case_appealed", "appeal_settled", "payout_route_set", "evidence_filed", "sister_coops_set", "passport_stamped", "agent_saves_set", "agent_saved", "reputation_share_set", "reputation_dividend", "agent_proposed", "agent_share_set", "agent_share", "federation_set", "federation_rules_set", "late_elsewhere", "agent_propose_every_set", "tee_registry_set", "agent_tee_set", "agent_attested", "job_referred", "referral_accepted", "recovery_proposed", "recovery_approved", "recovery_days_set", "technical_vote_set", "poll_opened", "poll_voted", "poll_closed", "sister_loan", "sister_loan_failed", "sister_repaid", "sister_late", "refund_from_risk_fund", "risk_refund_failed", "agent_config_set", "agents_set", "share_funds_set", "fund_paid", "guaranteed", "guarantee_withdrawn", "guarantee_called", "guarantee_cleared", "loan_rule_set", "loan_requested", "loan_filed", "loan_repaid", "loan_late", "dues_set", "dues_paid", "agenda_proposed", "annual_meeting_held", "agent_struck", "agent_reinstated", "steward_term_set", "steward_term_ended"];
 const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
 /**
@@ -152,6 +152,18 @@ export function describeEvent({ event: e, data: d }) {
     tee_registry_set: () => (d.registry ? `The members named the TEE registry ${short(d.registry)}: its attestations count here` : "The members dropped the TEE registry"),
     agent_tee_set: () => `The members said ${short(d.account_id)} ${d.required ? "may record work only while attested in a TEE" : "no longer needs a TEE attestation"}`,
     agent_attested: () => `${short(d.account_id)}'s Intel TDX attestation was verified on-chain (code ${String(d.compose_hash).slice(0, 10)}…)`,
+    referral_accepted: () => `This co-op took job ${String(d.job_id).slice(0, 24)} referred by ${short(d.from_coop)} (its referral #${d.referral_id}, read from its board)`,
+    recovery_proposed: () => `A recovery plan for the suspended agent was filed (sha256 ${String(d.plan_sha256).slice(0, 10)}…)`,
+    recovery_approved: () => `The members approved the agent's recovery plan: it works again, its share climbing back over ${d.ramp_days} days`,
+    recovery_days_set: () => `The members set the agent's recovery ramp to ${d.days} days`,
+    technical_vote_set: () => `The members set technical polls to ${d.mode === "reputation" ? "weigh reputation" : "one member, one vote"}`,
+    poll_opened: () => `${short(d.by)} opened poll #${d.id} (${d.kind}, ${d.mode === "reputation" ? "weighed by reputation" : "one member one vote"})`,
+    poll_voted: () => `${short(d.by)} voted in poll #${d.id} (weight ${d.weight})`,
+    poll_closed: () => `Poll #${d.id} closed: ${d.result === null || d.result === undefined ? "no winner" : `option ${Number(d.result) + 1} won`}`,
+    sister_loan: () => `The members lent ${short(d.coop)} ${usdcOf(d.amount)} from the risk fund (loan #${d.id}, paid to ${short(d.paid_to)})`,
+    sister_loan_failed: () => `Loan #${d.id} to ${short(d.coop)} did not go through: ${usdcOf(d.amount)} back in the risk fund`,
+    sister_repaid: () => `${short(d.coop)} repaid ${usdcOf(d.amount)} of loan #${d.id}`,
+    sister_late: () => `Loan #${d.id} to ${short(d.coop)} is late: the sister co-ops were told`,
     job_referred: () => `The co-op's agent passed job ${String(d.job_id).slice(0, 24)} to ${short(d.to_coop)} (referral #${d.id}, budget ${usdcOf(d.budget_usdc)})`,
     agent_proposed: () => `The agent put by-laws v${d.version} to the members: DAO proposal #${d.proposal_id}`,
     refund_from_risk_fund: () => `Court case #${d.id}: the buyer was refunded ${usdcOf(d.amount)} from the risk fund at once`,
