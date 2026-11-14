@@ -1542,6 +1542,18 @@
           }
         ]
       }
+    },
+    "award": {
+      "contract": "koperasi-mw4i2iwk.testnet",
+      "job_id": "fedjob-1794693752013",
+      "caller": "kop-relayer-mw4i2iwk.testnet",
+      "tx": "BiCxiMQh1oAJGksUyfdPfvniYXUWrJKPFm9g2gt86pwQ",
+      "winner": "koperasi-mw80aczw.testnet",
+      "price": "2500000",
+      "sisters_read": [
+        "koperasi-mw80aczw.testnet",
+        "koperasi-mw7zrvx4.testnet"
+      ]
     }
   }
 }
