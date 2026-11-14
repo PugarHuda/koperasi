@@ -7,8 +7,11 @@ const BOB = "kop-bob-mw4i3w8f.testnet";
 // on a narrow screen the sidebar is a menu: open it first
 async function go(page, name) {
   const menu = page.locator("#menu-btn");
-  if (await menu.isVisible()) await menu.click();
+  const mobile = await menu.isVisible();
+  if (mobile) await menu.click();
   await page.locator("#side-nav a", { hasText: name }).click();
+  // on a phone the menu closes after the view changes: wait for it, or a check right after sees it still open
+  if (mobile) await expect(menu).toHaveAttribute("aria-expanded", "false");
 }
 
 test("the landing page opens the app", async ({ page }) => {

@@ -12855,6 +12855,25 @@ var init_verify = __esm({
         `#${a.proposal} ${ok.status} (report ${sha2562(report).slice(0, 12)}\u2026, facts ${sha2562(facts).slice(0, 12)}\u2026); #${a.rejected.proposal} ${no.status}: ${a.rejected.why}`
       );
     }
+    if (d2.v035?.referral) {
+      const r2 = d2.v035.referral;
+      const [list, sisters] = await Promise.all([view2(d2.contract, "get_referrals", {}), view2(d2.contract, "get_sister_coops")]);
+      const on = list.find((x2) => x2.id === r2.id);
+      check(
+        on?.job_id === r2.job && on.to_coop === r2.to_coop && sisters.includes(r2.to_coop),
+        "the agent's referral of a job to a sister co-op is on the co-op's board, signed by the agent and checked by the contract",
+        `referral #${r2.id}: ${r2.job.slice(0, 14)}\u2026 to ${r2.to_coop}, submitted by ${r2.relayer} (tx ${r2.tx.slice(0, 10)}\u2026)`
+      );
+    }
+    if (d2.v035?.quality) {
+      const q2 = d2.v035.quality;
+      const now = await view2(d2.contract, "get_task_quality", { account_id: q2.account });
+      check(
+        now.handed_back >= 1 && Number(q2.after.w) < Number(q2.before.w),
+        "task quality counts in the reputation weight: a member who handed back a task he took weighs less",
+        `${q2.account} handed back task #${q2.task}: quality ${JSON.stringify(now)}; weight ${q2.before.w} \u2192 ${q2.after.w}`
+      );
+    }
     if (d2.redteam?.length) {
       const res = await Promise.all(d2.redteam.map(async (r2) => {
         const t2 = await rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.tx, sender_account_id: r2.by, wait_until: "FINAL" });
