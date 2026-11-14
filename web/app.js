@@ -425,8 +425,11 @@ cargo near build reproducible-wasm
     const STATUS = { Open: "Open", Claimed: "Taken", Submitted: "Delivered, waiting for the poster", NeedsApproval: "Waiting for one member",
       Held: "Accepted on trust, held for a member's veto", Paying: "Paying", Paid: "Paid", Cancelled: "Cancelled" };
     const work = (d) => (/^https:\/\/\S+$/.test(d) ? `<a href="${esc(d)}" rel="noopener">${esc(d)}</a>` : esc(d));
+    // scripts/scenarios.mjs ran twice, so tasks #16–#22 repeat #9–#15 (each a real task in its own state): say so
+    const firstWith = new Map();
+    for (const t of tasks) if (!firstWith.has(t.description)) firstWith.set(t.description, t.id);
     rows($("tasks").tBodies[0], tasks.map((t, i) => [t, i]).reverse().map(([t, i]) => `<tr id="task-${t.id}">
-      <td><strong>#${t.id}</strong> ${esc(t.description)}<span class="claim">posted by ${esc(t.poster)}${t.deliverable ? `; delivered: ${work(t.deliverable)}` : ""}</span></td>
+      <td><strong>#${t.id}</strong> ${esc(t.description)}${firstWith.get(t.description) !== t.id ? ` <span class="tag-repeat">repeat of #${esc(firstWith.get(t.description))}</span>` : ""}<span class="claim">posted by ${esc(t.poster)}${t.deliverable ? `; delivered: ${work(t.deliverable)}` : ""}</span></td>
       <td class="num" data-label="Pays">${nearAmt(t.amount)} NEAR</td>
       <td data-label="Status">${STATUS[t.status] ?? esc(t.status)}</td>
       <td data-label="Contributor">${t.contributor ? `<a href="${explorer(t.contributor)}">${esc(t.contributor)}</a>` : "–"}</td>
@@ -573,9 +576,8 @@ Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_d
   view(dep.contract, "get_share_funds").catch(() => []), view(dep.contract, "get_loan_rule").catch(() => null),
   // 0.3.2 and 0.3.3 (older contracts: nothing shown)
   view(dep.contract, "get_agent_member").catch(() => null), view(dep.contract, "get_risk_fund").catch(() => null),
-  view(dep.contract, "get_reputation_share").catch(() => 0), view(dep.contract, "get_agent_proposals").catch(() => []),
-  view(dep.contract, "get_federation").catch(() => null)])
-  .then(([agent, dues, agenda, funds, loans, member, risk, repBps, proposals, fed]) => {
+  view(dep.contract, "get_reputation_share").catch(() => 0)])
+  .then(([agent, dues, agenda, funds, loans, member, risk, repBps]) => {
     const parts = [`<b>The agent answers to the court.</b> ${agent.strikes.length
       ? `${agent.strikes.length} case(s) upheld against its jobs in 90 days (${agent.strikes.map(([id]) => `#${esc(id)}`).join(", ")}): its daily inference budget is divided by ${2 ** agent.strikes.length}`
       : "No case upheld against its jobs in 90 days"}${agent.suspended ? "; <strong>suspended</strong> until the members reinstate it" : "; at 3 the contract suspends it"}.`];
@@ -585,11 +587,7 @@ Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_d
     if (loans) parts.push(`<b>Savings and loans:</b> a member in good standing with a guarantor borrows up to ${nearAmt(loans[0].max_loan)} NEAR for ${esc(loans[0].term_days)} days at ${loans[0].rate_bps / 100}% flat; the fund can lend ${nearAmt(loans[1])} NEAR now. A late loan costs the borrower and their guarantors good standing.`);
     if (member && (member.share_bps || risk)) parts.push(`<b>The agent is a member too.</b> It gets ${member.share_bps / 100}% of every profit share, scaled by its standing (now ${member.standing_bps / 100}%: halved for each upheld case), into the risk fund that refunds its mistakes at once: ${risk ? `${usdc(risk[0])} USDC there now, it saves ${risk[1] / 100}% of its earnings` : ""}; ${usdc(member.shu_total)} USDC from its shares so far.`);
     if (repBps) parts.push(`<b>Reputation dividend:</b> ${repBps / 100}% of every profit share is split among members in good standing by their work since the last one (finished tasks, pledges kept, juries served), plus half their last weight.`);
-    if (proposals.length) {
-      const last = proposals.at(-1);
-      parts.push(`<b>The agent proposes, the members decide:</b> ${proposals.length} proposal(s) by the agent, the last for by-laws v${esc(last.version)} (<a href="${explorer(dep.dao)}">DAO proposal #${esc(last.proposal)}</a>): “${esc(last.reason.slice(0, 220))}”`);
-    }
-    if (fed) parts.push(`<b>Bound by the federation</b> <a href="/coops.html">${esc(fed[0].split(".")[0])}</a>: ${fed[1] ? `loans at most ${fed[1].max_rate_bps / 100}% for ${esc(fed[1].max_term_days)} days, set by a resolution both co-ops voted; the contract refuses a loan rule above it` : "no ceiling set yet"}. A loan called late here is told to the sister co-ops.`);
+    // the agent's proposals and the federation's ceiling have their own cards below (#card-proposal, #card-credit)
     if (agenda.length) parts.push(`<b>This year's agenda:</b> ${agenda.map(([by, item]) => `“${esc(item)}” (${esc(by.split(".")[0])})`).join("; ")}.`);
     $("duties").hidden = false;
     $("duties").innerHTML = parts.join("<br>");
@@ -631,7 +629,8 @@ view(dep.contract, "get_agent_proposals").then(async (list) => {
   let p = null, file = null;
   for (const q of [...list].reverse()) if ((file = await loadJson(`agent-proposals/v${Number(q.version)}.json`))) { p = q; break; }
   if (!p || !file) return;
-  const [facts, dao] = await Promise.all([loadJson(`agent-proposals/v${Number(p.version)}.facts.json`), view(dep.dao, "get_proposal", { id: Number(p.proposal) })]);
+  const [facts, dao, cfg] = await Promise.all([loadJson(`agent-proposals/v${Number(p.version)}.facts.json`), view(dep.dao, "get_proposal", { id: Number(p.proposal) }),
+    view(dep.contract, "get_config")]);
   // the facts file lists the by-laws in force, partly flattened (bid.price_usdc is read as price_usdc)
   const old = (key) => key.split(".").reduce((o, k) => o?.[k], facts?.by_laws) ?? facts?.by_laws?.[key.split(".").at(-1)];
   const val = (x) => esc(Array.isArray(x) ? x.join(", ") : x);
@@ -642,6 +641,7 @@ view(dep.contract, "get_agent_proposals").then(async (list) => {
     ${diff ? `<ul>${diff}</ul>` : ""}
     <p><a href="${explorer(dep.dao)}">DAO proposal #${esc(p.proposal)}</a>: ${esc(dao.status)}.
     ${file.factsSha ? `The facts it read: <a href="agent-proposals/v${Number(p.version)}.facts.json">sha256 ${esc(file.factsSha.slice(0, 12))}…</a>.` : ""}</p>
+    ${cfg.version > p.version ? `<p class="note">Since then the members voted by-laws v${esc(cfg.version)}${cfg.contributor && cfg.contributor !== dep.agent ? `, proposed by ${esc(cfg.contributor)}` : ""}: that is what the agent runs now.${p.version === 9 && cfg.version === 10 ? " v9 had cut the price from an average that counted a Taskbond job, paid in testnet NEAR, as a 0 USDC sale; v10 restored v8." : ""}</p>` : ""}
     ${list.length > 1 ? `<p class="muted">${list.length - 1} earlier proposal(s) by the agent, each put to a members' vote.</p>` : ""}`);
 }).catch(() => {});
 
