@@ -994,10 +994,10 @@
   },
   "v035": {
     "referral": {
-      "id": 0,
+      "id": 1,
       "job": "demo-c7a66c9f-f86c-42a0-a523-bad931297a23",
       "to_coop": "koperasi-mw80aczw.testnet",
-      "tx": "DFat36nmPeo23uqDJFU3mso3hPtZtZhAvLyJpd7wA4kg",
+      "tx": "7oBAVZgnEoGP81A6XYTV6G1emicSYKXuFNsVhmdKkhSb",
       "relayer": "kop-relayer-mw4i2iwk.testnet"
     },
     "quality": {

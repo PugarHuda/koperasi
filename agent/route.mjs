@@ -52,6 +52,10 @@ export async function passOn(dep, job, to, log) {
       const args = { job_id: String(job.jobId).slice(0, 128), to_coop: to.coop, budget_usdc: String(Math.round(Number(job.budgetAmount) * 1e6)),
         reason: `Budget ${job.budgetAmount} USDC is below our voted price; ${to.coop}'s voted by-laws take it at ${to.price}`.slice(0, 280) };
       const msg = await view(dep.contract, "get_referral_message", args);
+      // sign only a referral: an RPC could hand back another message (a by-laws proposal) for the agent key to sign
+      const nonce = msg.match(/^koperasi-agent-referral\/1 \S+ #(\d+) /)?.[1];
+      if (msg !== `koperasi-agent-referral/1 ${dep.contract} #${nonce} ${args.job_id} ${args.to_coop} ${args.budget_usdc}
+${args.reason}`) throw new Error("the referral message from RPC is not the one built here: not signed");
       const { private_key } = JSON.parse(fs.readFileSync(path.join(ROOT, ".keys", `${dep.agent}.json`), "utf8"));
       const signature = Buffer.from(KeyPair.fromString(private_key).sign(Buffer.from(msg)).signature).toString("base64");
       await call(account(relayer), dep.contract, "post_referral", { ...args, signature }, { tgas: 50 });

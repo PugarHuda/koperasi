@@ -27,6 +27,10 @@ if (run("refer")) {
   const args = { job_id: trade.job, to_coop: trade.coop, budget_usdc: "4500000",
     reason: "Budget 4.5 USDC is below our voted price (5); the sister co-op's voted by-laws take localization at 4" };
   const msg = await view(K, "get_referral_message", args);
+  // sign only a referral: an RPC could hand back another message (a by-laws proposal) for the agent key to sign
+  const nonce = msg.match(/^koperasi-agent-referral\/1 \S+ #(\d+) /)?.[1];
+  if (msg !== `koperasi-agent-referral/1 ${K} #${nonce} ${args.job_id} ${args.to_coop} ${args.budget_usdc}
+${args.reason}`) throw new Error("the referral message from RPC is not the one built here: not signed");
   const { private_key } = JSON.parse(fs.readFileSync(path.join(ROOT, ".keys", `${dep.agent}.json`), "utf8"));
   const signature = Buffer.from(KeyPair.fromString(private_key).sign(Buffer.from(msg)).signature).toString("base64");
   const r = await callRaw(account(RELAYER), K, "post_referral", { ...args, signature }, { tgas: 50 });
