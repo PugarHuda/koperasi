@@ -19,7 +19,8 @@ const table = (head, rows) => (rows.length
 // the chain's status words, in Indonesian when the page is
 const STATUS = { Paid: "Dibayar", Submitted: "Diserahkan", Disputed: "Disengketakan", Refunded: "Dikembalikan", Approved: "Disetujui", Rejected: "Ditolak",
   InProgress: "Berjalan", Expired: "Kedaluwarsa", Removed: "Dihapus", Failed: "Gagal", Moved: "Dipindah", Upheld: "Dikabulkan", Dismissed: "Ditolak",
-  Open: "Terbuka", Accepted: "Diterima", Honored: "Ditepati", Broken: "Diingkari", Repaid: "Lunas", Late: "Terlambat", Active: "Berjalan", Approve: "setuju", Reject: "tolak", Remove: "hapus" };
+  Open: "Terbuka", Accepted: "Diterima", Honored: "Ditepati", Broken: "Diingkari", Repaid: "Lunas", Late: "Terlambat", Active: "Berjalan", Approve: "setuju", Reject: "tolak", Remove: "hapus",
+  Technical: "Teknis", General: "Umum" };
 const word = (s) => t(String(s), STATUS[s] ?? String(s));
 const plural = (n, en, id) => `${n} ${t(n === 1 ? en : `${en}s`, id)}`;
 
@@ -366,6 +367,26 @@ async function report() {
           <a href="#/agent">${t("Its attestation", "Atestasinya")}</a>.</p>`;
     });
   } else $("r-tee").hidden = true;
+  // 0.3.6: from strike to recovery. A suspended agent files a plan; once the members approve it, its standing climbs
+  // linearly from 25% back to all of it over ramp_days
+  pane("r-recovery", async () => {
+    const [[r, bps], days] = await Promise.all([view(C, "get_recovery"), view(C, "get_recovery_days")]);
+    const rule = t(`If the court suspends the agent, it (or the steward) files a recovery plan; when the members approve it by a DAO vote, the agent is reinstated and its share climbs from 25% back to all of it over ${esc(days)} days (the members' setting).`,
+      `Jika pengadilan menskors agen, ia (atau pengurus) mengajukan rencana pemulihan; saat anggota menyetujuinya lewat pemungutan suara DAO, agen dipulihkan dan bagiannya naik dari 25% kembali ke penuh selama ${esc(days)} hari (pengaturan anggota).`);
+    if (!r) return verdict(t(`Recovery: no recovery on record; its share is not ramped (${bps / 100}%).`, `Pemulihan: tidak ada pemulihan tercatat; bagiannya tidak dibatasi (${bps / 100}%).`)) + `<p class="small">${rule}</p>`;
+    const link = /^https?:\/\//.test(r.plan_uri) ? esc(r.plan_uri) : byLawsPath(r.plan_uri) ? esc(RAW + r.plan_uri) : null;
+    const plan = link ? `<a href="${link}">${esc(r.plan_uri)}</a>` : `<code>${esc(r.plan_uri)}</code>`;
+    const state = r.cancelled_at ? t(`approved ${date(r.approved_at)}, then cut short by a new suspension on ${date(r.cancelled_at)}`, `disetujui ${date(r.approved_at)}, lalu dihentikan oleh skors baru pada ${date(r.cancelled_at)}`)
+      : r.approved_at ? t(`approved by the members on ${date(r.approved_at)}; ramp over ${esc(r.ramp_days)} days`, `disetujui anggota pada ${date(r.approved_at)}; naik selama ${esc(r.ramp_days)} hari`)
+        : t("waiting for the members' vote", "menunggu pemungutan suara anggota");
+    return verdict(t(`Recovery: a plan on record, ${state}; its share now counts at <strong>${bps / 100}%</strong>.`, `Pemulihan: ada rencana tercatat, ${state}; bagiannya sekarang dihitung <strong>${bps / 100}%</strong>.`))
+      + `<dl class="terms dark">
+        <div class="wide"><dt>${t("Plan", "Rencana")}</dt><dd>${plan}</dd></div>
+        <div class="wide"><dt>SHA-256</dt><dd><code>${esc(r.plan_sha256)}</code></dd></div>
+        <div><dt>${t("Filed by", "Diajukan oleh")}</dt><dd>${esc(r.proposed_by)}, ${date(r.proposed_at)}</dd></div>
+        <div><dt>${t("Share now", "Bagian sekarang")}</dt><dd>${bps / 100}%</dd></div></dl>
+      <p class="small">${rule}</p>`;
+  });
 }
 
 async function money() {
@@ -471,6 +492,29 @@ async function commons() {
         }))}
       <p class="small">${t("The weights' part of each share", "Bagian bobot dari setiap SHU")}: <a href="#/money">${t("Money", "Uang")}</a>.</p>`;
   });
+  // 0.3.6 polls: a non-binding vote of the members; technical questions weigh reputation if the members chose so (DAO #145)
+  pane("c-polls", async () => {
+    const [polls, mode] = await Promise.all([view(C, "get_polls", {}), view(C, "get_technical_vote_mode")]);
+    const rep = mode === "reputation";
+    const modeProp = dep.v036?.mode?.proposal;
+    const weighs = (m) => (m === "reputation" ? t("by reputation weight", "menurut bobot reputasi") : t("one member, one vote", "satu anggota satu suara"));
+    const now = BigInt(Date.now()) * 1_000_000n;
+    const state = (p) => {
+      if (p.closed) return p.result === null ? t("closed: no winner (no votes, or a tie)", "ditutup: tidak ada pemenang (tanpa suara, atau seri)")
+        : t(`closed: <strong>${esc(p.options[p.result])}</strong>`, `ditutup: <strong>${esc(p.options[p.result])}</strong>`);
+      return BigInt(p.closes_at) > now ? t(`open until ${date(p.closes_at)}`, `terbuka sampai ${date(p.closes_at)}`)
+        : t(`voting ended ${date(p.closes_at)}; not counted yet (anyone may close it)`, `pemungutan berakhir ${date(p.closes_at)}; belum dihitung (siapa pun boleh menutupnya)`);
+    };
+    return `<p class="small">${rep ? t(`Technical questions weigh each vote by the member's reputation weight, by the members' own choice${modeProp !== undefined ? ` (DAO proposal #${esc(modeProp)})` : ""}; general ones count one member, one vote.`,
+      `Pertanyaan teknis menimbang setiap suara menurut bobot reputasi anggota, atas pilihan anggota sendiri${modeProp !== undefined ? ` (usulan DAO #${esc(modeProp)})` : ""}; pertanyaan umum dihitung satu anggota satu suara.`)
+      : t("Every poll counts one member, one vote: the members have not chosen to weigh technical questions by reputation.", "Setiap jajak pendapat dihitung satu anggota satu suara: anggota belum memilih menimbang pertanyaan teknis menurut reputasi.")}
+      ${t("The weights are the ones in the task-quality table above. A poll binds nothing; the DAO may pass its result as a proposal.", "Bobotnya adalah yang ada di tabel kualitas tugas di atas. Jajak pendapat tidak mengikat; DAO boleh meloloskan hasilnya sebagai usulan.")}</p>
+      ${table([t("Poll", "Jajak pendapat"), t("Options and tallies", "Pilihan dan hitungan"), t("Counted", "Dihitung"), "Status"], [...polls].reverse().map((p) => `<tr>
+        <td><strong>#${esc(p.id)}</strong> ${esc(p.question)}<span class="claim">${esc(word(p.kind))}, ${t("opened by", "dibuka oleh")} ${esc(p.by)}</span></td>
+        <td data-label="${t("Options and tallies", "Pilihan dan hitungan")}">${p.options.map((o, i) => `${esc(o)}: <strong>${esc(p.tallies[i])}</strong>`).join("<br>")}</td>
+        <td data-label="${t("Counted", "Dihitung")}">${weighs(p.mode)}; ${plural(p.voters.length, "voter", "pemilih")}</td>
+        <td data-label="Status">${state(p)}</td></tr>`))}`;
+  });
   pane("c-standing", async () => {
     const members = await view(C, "get_members", { from: 0, limit: 200 });
     const standing = await Promise.all(members.map(([a]) => view(C, "get_standing", { account_id: a })));
@@ -509,6 +553,40 @@ async function federation() {
         <td data-label="${t("To co-op", "Ke koperasi")}"><a href="${explorer(r.to_coop)}">${esc(r.to_coop)}</a></td>
         <td class="num" data-label="${t("Budget", "Anggaran")}">${usdc(r.budget_usdc)} USDC</td>
         <td data-label="${t("Why", "Alasan")}">${esc(oneLine(r.reason, 220))}</td></tr>`))}`;
+  });
+  // 0.3.6: the other side of the board, read on the sister's own contract: the referrals it accepted from this co-op
+  const acc = dep.v036?.accept;
+  if (acc) {
+    pane("f-accepted", async () => {
+      const list = (await view(acc.coop, "get_accepted_referrals", {})).filter((x) => x.from_coop === C);
+      return `<p class="small">${t(`Read on the sister co-op's own contract, <a href="${explorer(acc.coop)}">${esc(acc.coop)}</a> (<code>get_accepted_referrals</code>): the jobs from this co-op's board it took on.`,
+        `Dibaca di kontrak koperasi saudara sendiri, <a href="${explorer(acc.coop)}">${esc(acc.coop)}</a> (<code>get_accepted_referrals</code>): pekerjaan dari papan koperasi ini yang diambilnya.`)}</p>
+        ${table([t("Referral", "Rujukan"), t("Job", "Pekerjaan"), t("Budget", "Anggaran"), t("Accepted", "Diterima")], [...list].reverse().map((x) => `<tr>
+          <td>${t(`The sister accepted referral <strong>#${esc(x.referral_id)}</strong>`, `Koperasi saudara menerima rujukan <strong>#${esc(x.referral_id)}</strong>`)}</td>
+          <td data-label="${t("Job", "Pekerjaan")}"><code>${esc(short(x.job_id))}</code></td>
+          <td class="num" data-label="${t("Budget", "Anggaran")}">${usdc(x.budget_usdc)} USDC</td>
+          <td data-label="${t("Accepted", "Diterima")}">${date(x.accepted_at)}${Number(x.referral_id) === Number(acc.referral) ? ` <a href="${txUrl(acc.tx)}">tx</a>` : ""}</td></tr>`))}`;
+    });
+  } else $("f-accepted").hidden = true;
+  // 0.3.6: loans to a sister co-op, paid to the treasury its members name (its DAO), never to its contract
+  pane("f-loans", async () => {
+    const loans = await view(C, "get_sister_loans");
+    const ok = dep.v036?.loan;
+    const failed = dep.v036?.loan_failed;
+    const why = (l) => {
+      if (failed && Number(failed.id) === Number(l.id)) return t(`The transfer bounced: rolled back to the risk fund (DAO proposal #${esc(failed.proposal)}).`, `Transfernya terpental: dikembalikan ke dana risiko (usulan DAO #${esc(failed.proposal)}).`);
+      if (ok && Number(ok.id) === Number(l.id)) return t(`Voted by DAO proposal #${esc(ok.proposal)}.`, `Diputuskan lewat usulan DAO #${esc(ok.proposal)}.`);
+      return "";
+    };
+    return `<p class="small">${t("The members lend USDC from the risk fund to a sister co-op by a DAO vote; the money goes to the treasury the sister's members name (its DAO), which can spend it and pay it back.",
+      "Anggota meminjamkan USDC dari dana risiko ke koperasi saudara lewat pemungutan suara DAO; uangnya masuk ke kas yang ditunjuk anggota koperasi saudara (DAO-nya), yang bisa membelanjakan dan mengembalikannya.")}</p>
+      ${table(["#", t("Sister co-op", "Koperasi saudara"), t("Paid to", "Dibayar ke"), t("Amount / repaid", "Jumlah / dibayar kembali"), t("Due", "Jatuh tempo"), "Status"], [...loans].reverse().map((l) => `<tr>
+        <td><strong>#${esc(l.id)}</strong> <span class="muted">${date(l.lent_at)}</span></td>
+        <td data-label="${t("Sister co-op", "Koperasi saudara")}"><a href="${explorer(l.coop)}">${esc(l.coop)}</a></td>
+        <td data-label="${t("Paid to", "Dibayar ke")}"><a href="${explorer(l.paid_to)}">${esc(l.paid_to)}</a> <span class="muted">(${t("its DAO treasury", "kas DAO-nya")})</span></td>
+        <td class="num" data-label="${t("Amount / repaid", "Jumlah / dibayar kembali")}">${usdc(l.amount)} / ${usdc(l.repaid)} USDC</td>
+        <td data-label="${t("Due", "Jatuh tempo")}">${date(l.due)}</td>
+        <td data-label="Status"><span class="badge ${esc(l.status)}">${esc(word(l.status))}</span>${l.was_late && l.status !== "Late" ? ` <span class="muted">(${t("was late", "pernah terlambat")})</span>` : ""}${why(l) && `<span class="claim">${why(l)}</span>`}</td></tr>`))}`;
   });
   pane("f-trades", async () => {
     const trades = dep.federation?.trades ?? [];
