@@ -343,4 +343,12 @@ pub enum Event {
     /// A sister loan was called late after its due date; told to every sister co-op.
     #[event_version("1.0.0")]
     SisterLate { id: u32, coop: AccountId, outstanding: U128 },
+
+    // ---------- 0.3.7 (part A): poll results to the DAO, juries by reputation ----------
+    /// A closed technical poll's winning by-laws were filed as DAO proposal `proposal` (set_config).
+    #[event_version("1.0.0")]
+    PollProposed { id: u32, proposal: u64 },
+    /// The members voted how jurors are drawn: by reputation weight, or uniformly.
+    #[event_version("1.0.0")]
+    JuryModeSet { by_reputation: bool },
 }

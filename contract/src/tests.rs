@@ -3291,7 +3291,7 @@ const HOUR: u64 = 3_600_000_000_000;
 
 fn open_p(k: &mut Koperasi, who: &str, kind: polls::PollKind, ns: u64) -> u32 {
     at_paying(&acc(who), ns, NearToken::from_millinear(10));
-    k.open_poll("Which embedding model?".into(), vec!["a".into(), "b".into()], kind, 24)
+    k.open_poll("Which embedding model?".into(), vec!["a".into(), "b".into()], kind, 24, None)
 }
 
 fn vote(k: &mut Koperasi, who: &str, id: u32, option: u32, ns: u64) -> u128 {
@@ -3307,7 +3307,7 @@ fn a_general_poll_counts_one_member_one_vote_and_refuses_what_it_should() {
     use polls::PollKind::General;
     let try_open = |k: &mut Koperasi, who: &str, fee: u128, q: String, opts: Vec<String>, hours: u32| {
         at_paying(&acc(who), DAY, NearToken::from_millinear(fee));
-        k.open_poll(q, opts, General, hours)
+        k.open_poll(q, opts, General, hours, None)
     };
     let two = || vec!["yes".to_string(), "no".to_string()];
     assert!(fails(|| { try_open(&mut k, "mallory.testnet", 10, "q".into(), two(), 24); }), "only a member");
@@ -3537,4 +3537,208 @@ fn a_late_sister_loan_is_recorded_and_told_and_blocks_further_loans() {
     as_(&sister, near(0));
     k.note_late_elsewhere(third.clone(), false);
     lend(&mut k, &third, 100, 30);
+}
+
+// ---------- 0.3.7 part A: a technical poll's result becomes a DAO proposal ----------
+
+fn bl(version: u32, hash: &str) -> Option<polls::BylawsRef> {
+    Some(polls::BylawsRef { version, hash: hash.into(), uri: format!("config/config.v{version}.yaml") })
+}
+
+/// The DAO proposal `poll_to_proposal` filed: its description and the decoded `set_config` args.
+fn filed_proposal() -> Option<(String, Value)> {
+    near_sdk::test_utils::get_created_receipts().iter().flat_map(|r| r.actions.clone()).find_map(|a| match a {
+        near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, .. } if method_name == b"add_proposal" => {
+            let v: Value = near_sdk::serde_json::from_slice(&args).unwrap();
+            let p = &v["proposal"];
+            let call = &p["kind"]["FunctionCall"];
+            assert_eq!(call["actions"][0]["method_name"], "set_config");
+            assert_eq!(call["receiver_id"], me().to_string());
+            let b64 = call["actions"][0]["args"].as_str().unwrap();
+            let raw = near_sdk::base64::Engine::decode(&near_sdk::base64::engine::general_purpose::STANDARD, b64).unwrap();
+            Some((p["description"].as_str().unwrap().to_string(), near_sdk::serde_json::from_slice(&raw).unwrap()))
+        }
+        _ => None,
+    })
+}
+
+/// Every refusal of a by-laws reference on opening; the deposit grows with each reference; the view adds the keys.
+#[test]
+fn a_poll_carries_by_laws_only_when_well_formed_and_paid_for() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    use polls::PollKind::{General, Technical};
+    let try_open = |k: &mut Koperasi, fee: u128, kind: polls::PollKind, b: Vec<Option<polls::BylawsRef>>| {
+        at_paying(&acc("alice.testnet"), DAY, NearToken::from_millinear(fee));
+        k.open_poll("Which embedding model?".into(), vec!["a".into(), "b".into()], kind, 24, Some(b))
+    };
+    assert!(fails(|| { try_open(&mut k, 30, General, vec![bl(2, H2), None]); }), "only a technical poll");
+    assert!(fails(|| { try_open(&mut k, 30, Technical, vec![bl(2, H2)]); }), "one entry per option");
+    assert!(fails(|| { try_open(&mut k, 30, Technical, vec![None, None]); }), "at least one reference");
+    assert!(fails(|| { try_open(&mut k, 30, Technical, vec![bl(1, H2), None]); }), "a version above the current one");
+    assert!(fails(|| { try_open(&mut k, 30, Technical, vec![bl(2, "abc"), None]); }), "a sha256 hash");
+    assert!(fails(|| { try_open(&mut k, 30, Technical, vec![bl(2, &"A".repeat(64)), None]); }), "lowercase hex");
+    let bad_uri = |u: &str| vec![Some(polls::BylawsRef { version: 2, hash: H2.into(), uri: u.into() }), None];
+    assert!(fails(|| { try_open(&mut k, 30, Technical, bad_uri("")); }), "empty uri");
+    assert!(fails(|| { try_open(&mut k, 30, Technical, bad_uri("a b")); }), "uri with a space");
+    assert!(fails(|| { try_open(&mut k, 30, Technical, bad_uri(&"u".repeat(201))); }), "uri too long");
+    assert!(fails(|| { try_open(&mut k, 29, Technical, vec![bl(2, H2), bl(3, H1)]); }), "0.01 NEAR per reference");
+    assert!(fails(|| { as_(&acc("mallory.testnet"), NearToken::from_millinear(30)); k.open_poll("q".into(), vec!["a".into(), "b".into()], Technical, 24, Some(vec![bl(2, H2), None])); }), "only a member");
+    assert_eq!(k.get_polls(None, None).len(), 0, "nothing was kept by a refused poll");
+    let id = try_open(&mut k, 20, Technical, vec![bl(2, H2), None]);
+    let p = k.get_poll(id).unwrap();
+    assert_eq!(p.bylaws, Some(vec![bl(2, H2), None]));
+    assert_eq!(p.proposal, None);
+    // the JSON view keeps every key it had and adds the new ones
+    let j = near_sdk::serde_json::to_value(&p).unwrap();
+    assert_eq!(j["question"], "Which embedding model?");
+    assert_eq!(j["mode"], "one_member");
+    assert_eq!(j["bylaws"][0]["hash"], H2);
+    assert!(j["bylaws"][1].is_null() && j["proposal"].is_null());
+    // the old call (no by-laws) still works and shows none
+    let plain = open_p(&mut k, "alice.testnet", Technical, DAY);
+    assert_eq!(k.get_poll(plain).unwrap().bylaws, None);
+}
+
+/// A closed poll's winning by-laws are filed once as a DAO proposal calling set_config; every refusal; a failed filing
+/// returns the bond and may be tried again.
+#[test]
+fn a_closed_polls_winning_by_laws_become_a_dao_proposal_once() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet", "carol.testnet"]);
+    use polls::PollKind::Technical;
+    let open_b = |k: &mut Koperasi, b: Vec<Option<polls::BylawsRef>>| {
+        at_paying(&acc("alice.testnet"), DAY, NearToken::from_millinear(30));
+        k.open_poll("Switch the embedding model?".into(), vec!["bge-m3".into(), "keep".into()], Technical, 24, Some(b))
+    };
+    let propose = |k: &mut Koperasi, who: &str, id: u32, fee: u128, ns: u64| {
+        at_paying(&acc(who), ns, NearToken::from_millinear(fee));
+        let _ = k.poll_to_proposal(id);
+    };
+    let id = open_b(&mut k, vec![bl(2, H2), None]);
+    let lost = open_b(&mut k, vec![bl(2, H2), None]); // "keep" wins: it carries no by-laws
+    let tie = open_b(&mut k, vec![bl(2, H2), bl(3, H1)]);
+    let plain = open_p(&mut k, "alice.testnet", Technical, DAY);
+    vote(&mut k, "alice.testnet", id, 0, DAY + 1);
+    vote(&mut k, "bob.testnet", id, 0, DAY + 1);
+    vote(&mut k, "carol.testnet", id, 1, DAY + 1);
+    vote(&mut k, "alice.testnet", lost, 1, DAY + 1);
+    vote(&mut k, "alice.testnet", tie, 0, DAY + 1);
+    vote(&mut k, "bob.testnet", tie, 1, DAY + 1);
+    vote(&mut k, "alice.testnet", plain, 0, DAY + 1);
+    assert!(fails(|| propose(&mut k, "anyone.testnet", id, 100, DAY + 2)), "close the poll first");
+    at(&acc("anyone.testnet"), 2 * DAY);
+    for p in [id, lost, tie, plain] {
+        k.close_poll(p);
+    }
+    assert!(fails(|| propose(&mut k, "anyone.testnet", tie, 100, 2 * DAY)), "no result");
+    assert!(fails(|| propose(&mut k, "anyone.testnet", lost, 100, 2 * DAY)), "the winner carries no by-laws");
+    assert!(fails(|| propose(&mut k, "anyone.testnet", plain, 100, 2 * DAY)), "a poll with no by-laws");
+    assert!(fails(|| propose(&mut k, "anyone.testnet", 9, 100, 2 * DAY)), "no such poll");
+    assert!(fails(|| propose(&mut k, "anyone.testnet", id, 99, 2 * DAY)), "the bond");
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| propose(&mut k, "anyone.testnet", id, 100, 2 * DAY)), "paused");
+    as_(&dao(), near(0));
+    k.unpause();
+
+    // anyone files it; the description and the set_config call are the poll's
+    propose(&mut k, "anyone.testnet", id, 100, 2 * DAY);
+    let (desc, args) = filed_proposal().expect("an add_proposal call");
+    assert_eq!(desc, format!("Poll #{id} (one_member): Switch the embedding model? \u{2192} bge-m3; by-laws v2 {H2}"));
+    assert_eq!((args["version"].as_u64(), args["hash"].as_str(), args["points"].as_u64()), (Some(2), Some(H2), Some(0)));
+    assert_eq!(args["uri"], "config/config.v2.yaml");
+    assert!(args["contributor"].is_null());
+    assert!(fails(|| propose(&mut k, "bob.testnet", id, 100, 2 * DAY)), "in flight: once");
+    // the filing failed: the bond goes back and the poll may be filed again
+    at(&me(), 2 * DAY);
+    k.on_poll_proposed(id, acc("anyone.testnet"), Err(PromiseError::Failed));
+    assert!(logs_have("bond returned"));
+    assert_eq!(k.get_poll(id).unwrap().proposal, None);
+    propose(&mut k, "bob.testnet", id, 150, 2 * DAY); // the 0.05 NEAR over the bond goes back at once
+    at(&me(), 2 * DAY);
+    k.on_poll_proposed(id, acc("bob.testnet"), Ok(42));
+    assert!(logs_have("\"poll_proposed\"") && logs_have("\"proposal\":42"));
+    assert_eq!(k.get_poll(id).unwrap().proposal, Some(42));
+    assert!(fails(|| propose(&mut k, "carol.testnet", id, 100, 3 * DAY)), "once per poll");
+}
+
+/// By-laws overtaken while the poll ran (the DAO set that version meanwhile) are not filed.
+#[test]
+fn a_poll_whose_by_laws_were_overtaken_is_not_filed() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    at_paying(&acc("alice.testnet"), DAY, NearToken::from_millinear(20));
+    let id = k.open_poll("q".into(), vec!["v2".into(), "keep".into()], polls::PollKind::Technical, 24, Some(vec![bl(2, H2), None]));
+    vote(&mut k, "alice.testnet", id, 0, DAY + 1);
+    as_(&dao(), near(0));
+    k.set_config(2, H1.into(), "other".into(), None, 0);
+    at(&acc("anyone.testnet"), 2 * DAY);
+    k.close_poll(id);
+    at_paying(&acc("anyone.testnet"), 2 * DAY, NearToken::from_millinear(100));
+    assert!(fails(|| { let _ = k.poll_to_proposal(id); }), "no longer newer");
+}
+
+/// A dropped poll takes its by-laws and its proposal link with it.
+#[test]
+fn a_dropped_poll_drops_its_by_laws_and_link() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet"]);
+    at_paying(&acc("alice.testnet"), DAY, NearToken::from_millinear(20));
+    k.open_poll("q".into(), vec!["v2".into(), "keep".into()], polls::PollKind::Technical, 1, Some(vec![bl(2, H2), None]));
+    at(&me(), DAY);
+    k.on_poll_proposed(0, acc("alice.testnet"), Ok(5));
+    assert_eq!(k.get_poll(0).unwrap().proposal, Some(5));
+    for _ in 0..100 {
+        open_p(&mut k, "alice.testnet", polls::PollKind::General, 2 * DAY);
+    }
+    assert!(k.get_poll(0).is_none());
+    assert!(env::storage_read(b"poll_bylaws:0").is_none() && env::storage_read(b"poll_proposal:0").is_none());
+}
+
+// ---------- 0.3.7 part A: juries drawn by reputation ----------
+
+#[test]
+fn only_the_dao_draws_juries_by_reputation() {
+    let mut k = setup();
+    assert!(!k.get_jury_by_reputation(), "off by default");
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_jury_by_reputation(true); }), "only the DAO");
+    as_(&dao(), near(0));
+    k.set_jury_by_reputation(true);
+    assert!(logs_have("\"jury_mode_set\"") && logs_have("\"by_reputation\":true"));
+    assert!(k.get_jury_by_reputation());
+    k.set_jury_by_reputation(false);
+    assert!(logs_have("\"by_reputation\":false"));
+    assert!(!k.get_jury_by_reputation());
+}
+
+/// With the mode on, three weighty members are drawn over two with no reputation (who weigh the floor: 20 in 3,000,020).
+#[test]
+fn a_jury_by_reputation_favours_the_weighty() {
+    let heavy = ["bob.testnet", "dave.testnet", "erin.testnet"];
+    let mut k = court();
+    for h in heavy {
+        commons::mark(&acc(h), |s| s.pledges_honored += 10_000); // weight 1,000,000 each; alice and carol 0
+    }
+    as_(&dao(), near(0));
+    k.set_jury_by_reputation(true);
+    open(&mut k, "frank.testnet", 2 * DAY);
+    let mut j: Vec<String> = k.get_cases(None, None)[0].jurors.iter().map(|a| a.to_string()).collect();
+    j.sort();
+    assert_eq!(j, heavy);
+}
+
+/// Nobody is excluded: with no reputation at all, everyone weighs the floor and a jury is still drawn; members out of
+/// good standing are still never drawn.
+#[test]
+fn a_jury_by_reputation_draws_members_with_no_reputation_at_the_floor() {
+    let mut k = court();
+    as_(&dao(), near(0));
+    k.set_jury_by_reputation(true);
+    commons::mark(&acc("alice.testnet"), |s| s.pledges_broken += 1);
+    commons::mark(&acc("bob.testnet"), |s| s.slashed += 1);
+    open(&mut k, "frank.testnet", 2 * DAY);
+    let mut j: Vec<String> = k.get_cases(None, None)[0].jurors.iter().map(|a| a.to_string()).collect();
+    j.sort();
+    assert_eq!(j, ["carol.testnet", "dave.testnet", "erin.testnet"]);
 }
