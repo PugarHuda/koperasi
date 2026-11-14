@@ -343,4 +343,12 @@ pub enum Event {
     /// A sister loan was called late after its due date; told to every sister co-op.
     #[event_version("1.0.0")]
     SisterLate { id: u32, coop: AccountId, outstanding: U128 },
+
+    // ---------- 0.3.7 (part B): interest on sister loans; the agent asks for one ----------
+    /// Interest paid on a sister loan, forwarded to the DAO treasury: surplus for the next profit share.
+    #[event_version("1.0.0")]
+    SisterInterest { id: u32, coop: AccountId, amount: U128 },
+    /// The agent asked the members to lend a sister co-op: the DAO proposal that calls `lend_to_sister`.
+    #[event_version("1.0.0")]
+    LoanSuggested { coop: AccountId, amount: U128, proposal: u64 },
 }

@@ -490,7 +490,7 @@ impl Koperasi {
 // ---------- 0.3.6: loans to sister co-ops from the risk fund ----------
 //
 // The members (DAO only) lend a sister co-op USDC from the risk fund (`lend_to_sister`): at most half of it, one loan
-// open per co-op, and never to a co-op whose loan from here went late or that a sister co-op noted late. No interest.
+// open per co-op, and never to a co-op whose loan from here went late or that a sister co-op noted late. Interest since 0.3.7 (below).
 // The borrower (or anyone) repays with ft_transfer_call msg "sister_repay:<id>", into the risk fund. A loan unpaid after
 // its due date can be called late by anyone (`mark_sister_late`): recorded here and told to every sister co-op.
 
@@ -551,10 +551,19 @@ impl Koperasi {
         if !matches!(l.status, SisterLoanStatus::Open | SisterLoanStatus::Late) {
             return amount;
         }
-        let take = amount.min(l.amount.0 - l.repaid.0);
+        // 0.3.7: the principal first, back into the risk fund; then the interest, to the DAO treasury (the surplus)
+        let left = l.amount.0 - l.repaid.0;
+        let take = amount.min(left);
         l.repaid.0 += take;
         add_risk(take);
-        let outstanding = l.amount.0 - l.repaid.0;
+        let (due, paid) = sister_interest(id);
+        let interest = (amount - take).min(due - paid);
+        if interest > 0 {
+            save(&sister_interest_key(id), &(U128(due), U128(paid + interest)));
+            self.forward_to_dao(interest);
+            Event::SisterInterest { id, coop: l.coop.clone(), amount: U128(interest) }.emit();
+        }
+        let outstanding = left - take + due - paid - interest;
         if outstanding == 0 {
             if l.status == SisterLoanStatus::Late {
                 crate::solidarity::tell_sisters(&l.coop, false); // settled: the sister co-ops lift their note
@@ -563,7 +572,7 @@ impl Koperasi {
         }
         Event::SisterRepaid { id, coop: l.coop.clone(), amount: U128(take), outstanding: U128(outstanding) }.emit();
         save(KEY_SISTER_LOANS, &all);
-        amount - take
+        amount - take - interest
     }
 }
 
@@ -571,8 +580,11 @@ impl Koperasi {
 impl Koperasi {
     /// DAO only: lend sister co-op `coop` `amount` USDC from the risk fund for `days` (1 to 365). At most half the risk
     /// fund; refused while a loan to it is open, if a loan to it ever went late here, or a sister co-op noted it late.
-    pub fn lend_to_sister(&mut self, coop: AccountId, paid_to: AccountId, amount: U128, days: u32) -> Promise {
+    /// 0.3.7: `interest_bps` (0 to 2000, none = 0) is simple interest for the term, due on top of the amount.
+    pub fn lend_to_sister(&mut self, coop: AccountId, paid_to: AccountId, amount: U128, days: u32, interest_bps: Option<u16>) -> Promise {
         self.assert_dao();
+        let bps = interest_bps.unwrap_or(0);
+        require!(bps <= MAX_SISTER_INTEREST_BPS, "interest at most 2000 bps");
         require!(!self.paused, "koperasi is paused");
         require!(self.get_sister_coops().contains(&coop), "not a sister co-op the members recognise");
         require!((1..=365).contains(&days), "term 1 to 365 days");
@@ -586,11 +598,17 @@ impl Koperasi {
             "a loan to this co-op is still open");
         let id: u32 = load(KEY_SISTER_LOAN_COUNT).unwrap_or(0);
         save(KEY_SISTER_LOAN_COUNT, &(id + 1));
+        let due_interest = amount.0 * bps as u128 / 10_000;
+        if due_interest > 0 {
+            save(&sister_interest_key(id), &(U128(due_interest), U128(0)));
+        }
+        env::storage_remove(&suggestion_key(&coop)); // the agent's suggestion for this co-op is settled
         let now = env::block_timestamp();
         let due = U64(now + days as u64 * DAY_NS);
         all.push(SisterLoan { id, coop: coop.clone(), paid_to: paid_to.clone(), amount, repaid: U128(0), lent_at: U64(now), due, status: SisterLoanStatus::Open, was_late: false });
         if all.len() > MAX_SISTER_LOANS {
             if let Some(i) = all.iter().position(|l| matches!(l.status, SisterLoanStatus::Repaid | SisterLoanStatus::Failed)) {
+                env::storage_remove(&sister_interest_key(all[i].id));
                 all.remove(i);
             }
         }
@@ -615,6 +633,7 @@ impl Koperasi {
         let mut all = sister_loans();
         if let Some(l) = all.iter_mut().find(|l| l.id == id) {
             l.status = SisterLoanStatus::Failed;
+            env::storage_remove(&sister_interest_key(id)); // nothing lent, nothing due
             Event::SisterLoanFailed { id, coop: l.coop.clone(), amount }.emit();
         }
         add_risk(amount.0);
@@ -631,7 +650,8 @@ impl Koperasi {
         l.was_late = true;
         save(&sister_late_key(&l.coop), &(sister_late_count(&l.coop) + 1));
         crate::solidarity::tell_sisters(&l.coop, true);
-        Event::SisterLate { id, coop: l.coop.clone(), outstanding: U128(l.amount.0 - l.repaid.0) }.emit();
+        let (due, paid) = sister_interest(id);
+        Event::SisterLate { id, coop: l.coop.clone(), outstanding: U128(l.amount.0 - l.repaid.0 + due - paid) }.emit();
         save(KEY_SISTER_LOANS, &all);
     }
 
@@ -643,5 +663,145 @@ impl Koperasi {
     /// How many loans to `coop` went late here (a co-op with any is never lent to again by `lend_to_sister`).
     pub fn get_sister_late(&self, coop: AccountId) -> u32 {
         sister_late_count(&coop)
+    }
+}
+
+// ---------- 0.3.7: interest on loans to sister co-ops; the agent asks for one ----------
+//
+// The members may lend a sister co-op at simple interest for the term (`interest_bps`, at most 20%). Repayment covers
+// the principal first, back into the risk fund, then the interest, forwarded to the DAO treasury: the surplus the next
+// profit share splits (the same transfer, with the same rollback, as the agent's earnings). The loan is Repaid only once
+// both are paid. Kept under `sister_interest:<id>`, so `SisterLoan` keeps its layout.
+//
+// The founding agent may ask the members to lend a sister co-op (`agent_suggest_sister_loan`), directly or by its
+// signature: the contract files a DAO proposal that calls `lend_to_sister` with those terms, the caller attaching the
+// bond. The members still decide by vote. One suggestion open per sister co-op: until a loan to it is made, or 7 days.
+
+const MAX_SISTER_INTEREST_BPS: u16 = 2_000;
+/// The agent's loan suggestions signed so far: only ever goes up (its own nonce, apart from by-laws and referrals).
+const KEY_AGENT_LOAN_NONCE: &[u8] = b"agent_loan_nonce";
+/// A suggestion stays open this long (Sputnik's default proposal period), or until a loan to that co-op is made.
+pub const SUGGESTION_OPEN_DAYS: u64 = 7;
+const MAX_LOAN_REASON: usize = 280;
+const GAS_LOAN_SUGGESTED: Gas = Gas::from_tgas(10);
+/// Gas the DAO gives `lend_to_sister` when the proposal is executed (its transfer and callback included).
+const GAS_LEND_ACTION: &str = "50000000000000";
+
+fn sister_interest_key(id: u32) -> Vec<u8> {
+    format!("sister_interest:{id}").into_bytes()
+}
+fn suggestion_key(coop: &AccountId) -> Vec<u8> {
+    format!("loan_suggestion:{coop}").into_bytes()
+}
+
+/// (interest due, interest paid) on sister loan `id`; (0, 0) for a loan without interest.
+pub(crate) fn sister_interest(id: u32) -> (u128, u128) {
+    load::<(U128, U128)>(&sister_interest_key(id)).map_or((0, 0), |(d, p)| (d.0, p.0))
+}
+
+/// What the agent signs to ask the members for a loan to a sister co-op (bound to this contract and to the nonce).
+pub fn agent_loan_message(contract: &AccountId, nonce: u32, coop: &AccountId, paid_to: &AccountId, amount: u128, days: u32, interest_bps: u16, reason: &str) -> String {
+    format!("koperasi-agent-loan/1 {contract} #{nonce} {coop} {paid_to} {amount} {days} {interest_bps}
+{reason}")
+}
+
+/// A loan the agent asked the members for; `proposal` is the DAO proposal once filed.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct LoanSuggestion {
+    pub coop: AccountId,
+    pub paid_to: AccountId,
+    pub amount: U128,
+    pub days: u32,
+    pub interest_bps: u16,
+    pub reason: String,
+    /// who attached the bond (refunded if the DAO files nothing)
+    pub by: AccountId,
+    pub proposal: Option<u64>,
+    pub at: U64,
+}
+
+#[near]
+impl Koperasi {
+    /// The founding agent asks the members to lend sister co-op `coop` (paid to its treasury `paid_to`) `amount` USDC
+    /// from the risk fund for `days` at `interest_bps`: directly, or anyone submitting its ed25519 signature (base64) of
+    /// `get_loan_suggestion_message(...)`. Attach the DAO proposal bond (0.1 NEAR). Files a DAO proposal calling
+    /// `lend_to_sister`; the members vote.
+    #[payable]
+    pub fn agent_suggest_sister_loan(&mut self, coop: AccountId, paid_to: AccountId, amount: U128, days: u32, interest_bps: u16,
+        reason: String, signature: Option<String>) -> Promise {
+        require!(!self.paused, "koperasi is paused");
+        require!(!crate::meeting::agent_suspended(), "the agent is suspended");
+        crate::solidarity::assert_tee_ok(&self.agent_id);
+        let nonce: u32 = load(KEY_AGENT_LOAN_NONCE).unwrap_or(0);
+        crate::meeting::assert_agent_or_signed(&self.agent_id, signature.as_deref(),
+            || agent_loan_message(&env::current_account_id(), nonce, &coop, &paid_to, amount.0, days, interest_bps, &reason));
+        save(KEY_AGENT_LOAN_NONCE, &(nonce + 1)); // a signature counts once
+        require!(!reason.trim().is_empty() && reason.len() <= MAX_LOAN_REASON, "reason: 1 to 280 characters");
+        // the terms `lend_to_sister` checks again when the members' vote executes it
+        require!(self.get_sister_coops().contains(&coop), "not a sister co-op the members recognise");
+        require!(paid_to != coop && paid_to != env::current_account_id(), "pay the sister's treasury (its DAO), not a contract");
+        require!((1..=365).contains(&days), "term 1 to 365 days");
+        require!(interest_bps <= MAX_SISTER_INTEREST_BPS, "interest at most 2000 bps");
+        require!(amount.0 > 0 && amount.0 <= risk_fund() * SISTER_CAP_BPS / 10_000, "at most half the risk fund");
+        require!(sister_late_count(&coop) == 0 && crate::solidarity::late_elsewhere(&coop).is_none(), "this co-op was late on a loan");
+        require!(!sister_loans().iter().any(|l| l.coop == coop && matches!(l.status, SisterLoanStatus::Open | SisterLoanStatus::Late)),
+            "a loan to this co-op is still open");
+        let now = env::block_timestamp();
+        require!(load::<LoanSuggestion>(&suggestion_key(&coop)).is_none_or(|s| now >= s.at.0 + SUGGESTION_OPEN_DAYS * DAY_NS),
+            "a suggestion for this co-op is still open");
+        require!(env::attached_deposit() == PAYOUT_BOND, "attach the DAO proposal bond: 0.1 NEAR");
+        let by = env::predecessor_account_id();
+        save(&suggestion_key(&coop), &LoanSuggestion { coop: coop.clone(), paid_to: paid_to.clone(), amount, days, interest_bps,
+            reason: reason.clone(), by: by.clone(), proposal: None, at: U64(now) });
+        let args = near_sdk::serde_json::json!({ "coop": coop, "paid_to": paid_to, "amount": amount, "days": days,
+            "interest_bps": interest_bps }).to_string();
+        let kind = near_sdk::serde_json::json!({ "FunctionCall": { "receiver_id": env::current_account_id(), "actions": [{
+            "method_name": "lend_to_sister", "args": near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, args),
+            "deposit": "0", "gas": GAS_LEND_ACTION }] } });
+        let description = format!("Loan to sister co-op {coop}: {} USDC to {paid_to} for {days} days at {interest_bps} bps, asked by the co-op's agent: {reason}",
+            amount.0 as f64 / 1e6);
+        ext_dao_proposals::ext(self.dao_id.clone())
+            .with_attached_deposit(PAYOUT_BOND)
+            .with_static_gas(GAS_PROPOSE)
+            .add_proposal(near_sdk::serde_json::json!({ "description": description, "kind": kind }))
+            .then(Self::ext(env::current_account_id()).with_static_gas(GAS_LOAN_SUGGESTED).on_loan_suggested(coop, amount, by))
+    }
+
+    /// Callback: the DAO filed the suggestion (its proposal id kept). Nothing filed: the suggestion is forgotten and the
+    /// bond goes back to whoever attached it.
+    #[private]
+    pub fn on_loan_suggested(&mut self, coop: AccountId, amount: U128, by: AccountId, #[callback_result] pid: Result<u64, PromiseError>) {
+        let s = load::<LoanSuggestion>(&suggestion_key(&coop));
+        match pid {
+            Ok(id) => {
+                if let Some(mut s) = s {
+                    s.proposal = Some(id);
+                    save(&suggestion_key(&coop), &s);
+                }
+                Event::LoanSuggested { coop, amount, proposal: id }.emit();
+            }
+            Err(_) => {
+                if s.is_some_and(|s| s.proposal.is_none()) {
+                    env::storage_remove(&suggestion_key(&coop));
+                }
+                let _ = Promise::new(by).transfer(PAYOUT_BOND);
+            }
+        }
+    }
+
+    /// The exact text the agent signs for its next `agent_suggest_sister_loan`.
+    pub fn get_loan_suggestion_message(&self, coop: AccountId, paid_to: AccountId, amount: U128, days: u32, interest_bps: u16, reason: String) -> String {
+        agent_loan_message(&env::current_account_id(), load(KEY_AGENT_LOAN_NONCE).unwrap_or(0), &coop, &paid_to, amount.0, days, interest_bps, &reason)
+    }
+
+    /// The agent's last loan suggestion for `coop` (open while younger than 7 days and no loan to it was made since).
+    pub fn get_loan_suggestion(&self, coop: AccountId) -> Option<LoanSuggestion> {
+        load(&suggestion_key(&coop))
+    }
+
+    /// (loan id, interest due, interest paid) for every sister loan still kept.
+    pub fn get_sister_interest(&self) -> Vec<(u32, U128, U128)> {
+        sister_loans().iter().map(|l| { let (d, p) = sister_interest(l.id); (l.id, U128(d), U128(p)) }).collect()
     }
 }
