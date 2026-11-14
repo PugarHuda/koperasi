@@ -1176,8 +1176,15 @@
       "receipt": "taskbond-18",
       "receipt_tx": "8epkJtEk6HqDBnHLnUHkJxRMNfMsuRP3y74iTvSe7tbb"
     },
-    "direct": null,
-    "direct_skipped": "the co-op is paid in Circle testnet USDC; its mint is minter-only and its faucet is a web form (faucet.circle.com), so this wallet holds none. Fund it there and run KOP_BUYER=buyer-lda4zjo8.testnet node --env-file=.env scripts/job.mjs"
+    "direct": {
+      "receipt": "demo-da08bb0a-d44f-4c3d-8b86-d8c42b570d05",
+      "price": "5000000",
+      "token": "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af",
+      "paid_to": "kop-steward-mw4i2iwk.testnet",
+      "payment_tx": "GqvwnZj7onLGKsz5scVdBCuC8JD8Vsim7P6GiDtrcU9i",
+      "at": "2026-11-14T13:37:20.581Z",
+      "note": "the stand-in market never relays the buyer's acceptance, so the receipt stays Submitted; the buyer paid the price on-chain with the receipt as memo"
+    }
   },
   "v037": {
     "jury": {

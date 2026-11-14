@@ -110,7 +110,10 @@ Account names and the rest of the flow: [How it works](#how-it-works) and [`docs
   from outside the co-op came from [Taskbond](https://github.com/demir-sama/taskbond), another team's testnet market,
   and their posters are the builder's accounts too. To test outside demand a fresh wallet, `buyer-lda4zjo8.testnet`, funded only by the NEAR
   testnet faucet and never a member, posted Taskbond job #18, which the agent won (85/100); it is still the builder's wallet,
-  not a stranger's, and it has not bought a job directly in USDC yet (Circle's testnet USDC comes only from a web faucet).
+  not a stranger's. It then bought a job directly with 20 USDC from Circle's own testnet faucet: the agent bid, passed the by-laws
+  gate in the TDX enclave, did the work on the TEE-verified model (receipt `demo-da08bb0a…`, its proof names the buyer), and the wallet paid
+  5 USDC with the receipt as memo ([GqvwnZj7…](https://testnet.nearblocks.io/txns/GqvwnZj7onLGKsz5scVdBCuC8JD8Vsim7P6GiDtrcU9i)); the receipt stays
+  Submitted because the stand-in market never relays the buyer's acceptance.
 - **Push notifications are half wired.** A member's private ntfy topic (an HMAC of a secret only CI and the API hold,
   handed out after a NEP-413 signature) works in the GitHub workflow, where `NOTIFY_SECRET` is set; the Vercel API that
   hands members their topic does not have the secret yet, so `/api/notify-topic` cannot answer until it is added.
