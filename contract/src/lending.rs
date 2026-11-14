@@ -522,6 +522,8 @@ pub enum SisterLoanStatus {
 pub struct SisterLoan {
     pub id: u32,
     pub coop: AccountId,
+    /// where the money went: the sister's treasury (its DAO) the members named, never its contract (which cannot spend it)
+    pub paid_to: AccountId,
     pub amount: U128,
     pub repaid: U128,
     pub lent_at: U64,
@@ -569,11 +571,13 @@ impl Koperasi {
 impl Koperasi {
     /// DAO only: lend sister co-op `coop` `amount` USDC from the risk fund for `days` (1 to 365). At most half the risk
     /// fund; refused while a loan to it is open, if a loan to it ever went late here, or a sister co-op noted it late.
-    pub fn lend_to_sister(&mut self, coop: AccountId, amount: U128, days: u32) -> Promise {
+    pub fn lend_to_sister(&mut self, coop: AccountId, paid_to: AccountId, amount: U128, days: u32) -> Promise {
         self.assert_dao();
         require!(!self.paused, "koperasi is paused");
         require!(self.get_sister_coops().contains(&coop), "not a sister co-op the members recognise");
         require!((1..=365).contains(&days), "term 1 to 365 days");
+        // the sister's contract cannot spend or return USDC: the loan goes to the treasury the members name (its DAO)
+        require!(paid_to != coop && paid_to != env::current_account_id(), "pay the sister's treasury (its DAO), not a contract");
         require!(amount.0 > 0 && amount.0 <= risk_fund() * SISTER_CAP_BPS / 10_000, "at most half the risk fund");
         require!(sister_late_count(&coop) == 0, "a loan to this co-op went late");
         require!(crate::solidarity::late_elsewhere(&coop).is_none(), "a sister co-op noted this co-op late");
@@ -584,7 +588,7 @@ impl Koperasi {
         save(KEY_SISTER_LOAN_COUNT, &(id + 1));
         let now = env::block_timestamp();
         let due = U64(now + days as u64 * DAY_NS);
-        all.push(SisterLoan { id, coop: coop.clone(), amount, repaid: U128(0), lent_at: U64(now), due, status: SisterLoanStatus::Open, was_late: false });
+        all.push(SisterLoan { id, coop: coop.clone(), paid_to: paid_to.clone(), amount, repaid: U128(0), lent_at: U64(now), due, status: SisterLoanStatus::Open, was_late: false });
         if all.len() > MAX_SISTER_LOANS {
             if let Some(i) = all.iter().position(|l| matches!(l.status, SisterLoanStatus::Repaid | SisterLoanStatus::Failed)) {
                 all.remove(i);
@@ -593,11 +597,11 @@ impl Koperasi {
         save(KEY_SISTER_LOANS, &all);
         take_risk(amount.0);
         crate::bump(crate::KEY_IN_FLIGHT, amount.0, false);
-        Event::SisterLoan { id, coop: coop.clone(), amount, due }.emit();
+        Event::SisterLoan { id, coop: coop.clone(), paid_to: paid_to.clone(), amount, due }.emit();
         ext_ft::ext(self.usdc_id.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(crate::GAS_FT_TRANSFER)
-            .ft_transfer(coop, amount, Some(format!("Koperasi sister loan #{id}: repay with ft_transfer_call msg {SISTER_REPAY_PREFIX}{id}")))
+            .ft_transfer(paid_to, amount, Some(format!("Koperasi sister loan #{id}: repay with ft_transfer_call msg {SISTER_REPAY_PREFIX}{id}")))
             .then(Self::ext(env::current_account_id()).with_static_gas(GAS_SISTER_LENT).on_sister_lent(id, amount))
     }
 

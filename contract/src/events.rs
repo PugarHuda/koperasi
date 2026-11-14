@@ -333,7 +333,7 @@ pub enum Event {
     PollClosed { id: u32, result: Option<u32>, mode: String, tallies: Vec<U128> },
     /// The members lent a sister co-op USDC from the risk fund.
     #[event_version("1.0.0")]
-    SisterLoan { id: u32, coop: AccountId, amount: U128, due: U64 },
+    SisterLoan { id: u32, coop: AccountId, paid_to: AccountId, amount: U128, due: U64 },
     /// A sister loan's transfer failed; the amount went back to the risk fund.
     #[event_version("1.0.0")]
     SisterLoanFailed { id: u32, coop: AccountId, amount: U128 },

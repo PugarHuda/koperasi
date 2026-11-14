@@ -3434,7 +3434,7 @@ fn sister_setup() -> (Koperasi, AccountId) {
 
 fn lend(k: &mut Koperasi, coop: &AccountId, amount: u128, days: u32) {
     at(&dao(), DAY);
-    let _ = k.lend_to_sister(coop.clone(), U128(amount), days);
+    let _ = k.lend_to_sister(coop.clone(), acc("sister-dao.testnet"), U128(amount), days);
 }
 
 fn repay(k: &mut Koperasi, msg: &str, amount: u128) -> u128 {
@@ -3446,7 +3446,7 @@ fn repay(k: &mut Koperasi, msg: &str, amount: u128) -> u128 {
 #[test]
 fn the_dao_lends_a_sister_coop_from_the_risk_fund_and_it_repays() {
     let (mut k, sister) = sister_setup();
-    assert!(fails(|| { at(&acc("alice.testnet"), DAY); let _ = k.lend_to_sister(sister.clone(), U128(100), 30); }), "only the DAO");
+    assert!(fails(|| { at(&acc("alice.testnet"), DAY); let _ = k.lend_to_sister(sister.clone(), acc("sister-dao.testnet"), U128(100), 30); }), "only the DAO");
     assert!(fails(|| lend(&mut k, &acc("stranger.testnet"), 100, 30)), "not a sister");
     assert!(fails(|| lend(&mut k, &sister, 500_001, 30)), "more than half the risk fund");
     assert!(fails(|| lend(&mut k, &sister, 0, 30)), "nothing");
