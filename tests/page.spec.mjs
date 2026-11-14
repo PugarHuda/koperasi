@@ -304,8 +304,9 @@ test("the co-ops page scores credit between co-ops from each co-op's loans", asy
   // koperasi-mw4i2iwk lent the sister two loans, both repaid on time (#0 failed and does not count)
   const row = page.locator("#credit-table tbody tr").filter({ hasText: "koperasi-mw80aczw.testnet" });
   await expect(row.locator("td").nth(1)).toHaveText(/^\d+$/);
-  await expect(row.locator("td").nth(2)).toHaveText("2");
-  await expect(row).toContainText("0.05 USDC");
+  // the counts grow as the co-ops lend: at least the two loans of 14 Nov, and some interest paid
+  await expect(row.locator("td").nth(2)).toHaveText(/^([2-9]|\d{2,})$/);
+  await expect(row).toContainText(/0\.\d\d USDC/);
   await expect(page.locator("#credit-table tbody")).toContainText("no record");
   await page.getByRole("button", { name: /Bahasa Indonesia/ }).click();
   await expect(page.locator("#credit-title")).toHaveText("Kredit antarkoperasi");

@@ -32,7 +32,7 @@ test("the credit bureau card shows the federation's ceiling, the refused vote an
   await expect(c).toBeVisible({ timeout: 30_000 });
   await expect(c).toContainText(/caps loans at\s+2% for 30 days/);
   await expect(c).toContainText(/voted 4% loans \(DAO proposal #130\);\s+the contract refused it, and the loan rule is still 2%/);
-  await expect(c).toContainText(/1 sister co-op/);
+  await expect(c).toContainText(/\d+ sister co-ops?/);
   await expect(c).toContainText(/kop-carol-mw80aczw\.testnet has credit score 2 here\s+from a stamp by koperasi-mw80aczw\.testnet/);
   await expect(c).toContainText("credit is 0");
 });

@@ -67,3 +67,7 @@ html[lang="id"] body [lang="en"], html:not([lang="id"]) body [lang="id"] { displ
   .flow-wrap { grid-template-columns: minmax(0, 1fr); }
   .flow { max-width: 22rem; margin: 0 auto; }
 }
+
+/* long commands and hashes wrap instead of widening the page by a pixel on another OS's fonts (CI on Linux) */
+.docs pre, .docs code, main pre, main code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
+main, main > * { min-width: 0; }

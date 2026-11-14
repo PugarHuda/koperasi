@@ -189,7 +189,7 @@ test("0.3.7: polls' by-laws and DAO proposals, and how juries are drawn, in Comm
   await expect(polls.locator("tbody tr").first()).toBeVisible();
   for (const row of await polls.locator("tbody tr").all()) {
     const text = await row.innerText();
-    if (text.includes("by-laws v")) expect(text).toMatch(/by-laws v\d+, [0-9a-f]{10}…/);
+    if (text.includes("(by-laws v")) expect(text).toMatch(/\(by-laws v\d+, [0-9a-f]{10}…/); // a reference, not a question that names the by-laws
     if (text.includes("became DAO proposal")) expect(text).toMatch(/Its winning by-laws became DAO proposal #\d+( \(\w+\))?\./);
   }
 });
