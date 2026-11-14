@@ -490,7 +490,8 @@ impl Koperasi {
 // ---------- 0.3.6: loans to sister co-ops from the risk fund ----------
 //
 // The members (DAO only) lend a sister co-op USDC from the risk fund (`lend_to_sister`): at most half of it, one loan
-// open per co-op, and never to a co-op whose loan from here went late or that a sister co-op noted late. Interest since 0.3.7 (below).
+// open per co-op, and never to a co-op a sister co-op notes late (0.3.10: a late loan repaid here only lowers its score,
+// see `lend_to_sister`). Interest since 0.3.7 (below).
 // The borrower (or anyone) repays with ft_transfer_call msg "sister_repay:<id>", into the risk fund. A loan unpaid after
 // its due date can be called late by anyone (`mark_sister_late`): recorded here and told to every sister co-op.
 
@@ -584,7 +585,9 @@ impl Koperasi {
 #[near]
 impl Koperasi {
     /// DAO only: lend sister co-op `coop` `amount` USDC from the risk fund for `days` (1 to 365). At most half the risk
-    /// fund; refused while a loan to it is open, if a loan to it ever went late here, or a sister co-op noted it late.
+    /// fund x its federation credit score / 100 (score 0: refused); refused while it is in arrears: a loan to it is open,
+    /// or a sister co-op's late note on it still stands. 0.3.10 (after the hackathon deadline), graduated sanctions (Ostrom's
+    /// principle 5): a co-op whose loan here went late and was repaid may borrow again, less (-40 per late in the score).
     /// 0.3.7: `interest_bps` (0 to 2000, none = 0) is simple interest for the term, due on top of the amount.
     pub fn lend_to_sister(&mut self, coop: AccountId, paid_to: AccountId, amount: U128, days: u32, interest_bps: Option<u16>) -> Promise {
         self.assert_dao();
@@ -597,7 +600,7 @@ impl Koperasi {
         require!(paid_to != coop && paid_to != env::current_account_id(), "pay the sister's treasury (its DAO), not a contract");
         require!(amount.0 > 0 && amount.0 <= risk_fund() * SISTER_CAP_BPS / 10_000, "at most half the risk fund");
         let (score, cap) = self.assert_credit_cap(&coop, amount.0); // 0.3.9
-        require!(sister_late_count(&coop) == 0, "a loan to this co-op went late");
+        // 0.3.10 graduated sanctions: lateness repaid here only lowers the score (and so the cap); arrears still refuse
         require!(crate::solidarity::late_elsewhere(&coop).is_none(), "a sister co-op noted this co-op late");
         let mut all = sister_loans();
         require!(!all.iter().any(|l| l.coop == coop && matches!(l.status, SisterLoanStatus::Open | SisterLoanStatus::Late)),
@@ -668,7 +671,7 @@ impl Koperasi {
         sister_loans()
     }
 
-    /// How many loans to `coop` went late here (a co-op with any is never lent to again by `lend_to_sister`).
+    /// How many loans to `coop` went late here (each takes 40 off its federation credit score, so off its cap).
     pub fn get_sister_late(&self, coop: AccountId) -> u32 {
         sister_late_count(&coop)
     }
@@ -753,7 +756,7 @@ impl Koperasi {
         require!(interest_bps <= MAX_SISTER_INTEREST_BPS, "interest at most 2000 bps");
         require!(amount.0 > 0 && amount.0 <= risk_fund() * SISTER_CAP_BPS / 10_000, "at most half the risk fund");
         self.assert_credit_cap(&coop, amount.0); // 0.3.9
-        require!(sister_late_count(&coop) == 0 &&crate::solidarity::late_elsewhere(&coop).is_none(), "this co-op was late on a loan");
+        require!(crate::solidarity::late_elsewhere(&coop).is_none(), "a sister co-op noted this co-op late"); // 0.3.10
         require!(!sister_loans().iter().any(|l| l.coop == coop && matches!(l.status, SisterLoanStatus::Open | SisterLoanStatus::Late)),
             "a loan to this co-op is still open");
         let now = env::block_timestamp();
@@ -820,7 +823,8 @@ impl Koperasi {
 // A sister co-op's credit score, the rule web/coops.html shows: 100, -40 for each loan to it that went late (this
 // co-op's count, plus each sister's "late elsewhere" note), -10 for each open loan to it past due, +5 for each loan repaid
 // on time; between 0 and 100. `lend_to_sister` and the agent's suggestion lend at most half the risk fund x score/100.
-// The late and open-loan refusals of 0.3.6 still stand after it.
+// 0.3.10 (after the hackathon deadline): the score decides past lateness (graduated sanctions); only current arrears (an
+// open loan, a standing late note from a sister co-op) still refuse.
 //
 // The federation dividend: the members vote a share (`set_federation_dividend`, bps) of each sister loan's interest
 // that is split equally among the treasuries (`set_coop_treasury`) of the other sister co-ops; the rest goes to the DAO

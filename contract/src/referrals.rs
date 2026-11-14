@@ -11,6 +11,9 @@
 //!   share goes to the referring co-op's treasury, once per job; the rest is booked as usual. A failed transfer goes to
 //!   the DAO's unforwarded balance, for the members to pay by vote as before.
 //!
+//! - 0.3.10 (after the hackathon deadline): the share is cut to the treasury's payout cap and, when the members named a
+//!   NEAR Intents verifier, paid through it (payouts.rs).
+//!
 //! State lives under its own storage keys, so the upgrade needs no state migration.
 
 use crate::solidarity::{Referral, MAX_REFERRALS};
@@ -24,7 +27,7 @@ fn treasury_key(coop: &AccountId) -> Vec<u8> {
     format!("coop_treasury:{coop}").into_bytes()
 }
 /// job_id -> the referral share paid for it: once per job.
-fn share_paid_key(job_id: &str) -> Vec<u8> {
+pub(crate) fn share_paid_key(job_id: &str) -> Vec<u8> {
     format!("referral_share_paid:{job_id}").into_bytes()
 }
 
@@ -58,7 +61,8 @@ impl Koperasi {
         let Some(i) = self.receipt_index.get(&job_id.to_string()) else { return 0 };
         let price = self.receipts.get(*i).map_or(0, |x| x.price.0);
         let base = amount.min(price).min(r.budget_usdc.0);
-        let share = base * bps / BPS;
+        // 0.3.10: never more than the members' cap for that treasury; the rest stays with the DAO
+        let share = crate::payouts::capped(&to, base * bps / BPS);
         if share == 0 {
             return 0;
         }
@@ -66,6 +70,11 @@ impl Koperasi {
             failed: false, at: U64(env::block_timestamp()) });
         bump(KEY_IN_FLIGHT, share, false);
         Event::ReferralSharePaid { job_id: job_id.into(), from_coop: r.from_coop, to: to.clone(), amount: U128(share) }.emit();
+        // 0.3.10: through NEAR Intents when the members named a verifier
+        if let Some(v) = crate::payouts::intents_verifier() {
+            self.pay_via_intents(job_id, v, to, share);
+            return share;
+        }
         let _ = ext_ft::ext(self.usdc_id.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(GAS_FT_TRANSFER)
