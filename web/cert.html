@@ -69,7 +69,7 @@
         $("cert-sum").innerHTML = [
           ["Member", member ? `yes, since ${new Date(Number(BigInt(member.joined_at) / 1_000_000n)).toLocaleDateString("en-GB")}` : "no"],
           ["Paid work", rec ? `${rec.done} finished, ${nearAmt(rec.earned)} NEAR` : "none yet"],
-          ["Standing", st ? `${good ? "good" : "not good"}: ${st.pledges_honored} pledge(s) kept, ${st.pledges_broken} broken, ${st.juries_served} jury ruling(s), ${st.juries_missed} missed${st.slashed ? `, slashed ${st.slashed}×` : ""}` : "not on this contract version"],
+          ["Standing", !member && st && !(st.pledges_honored + st.pledges_broken + st.juries_served + st.juries_missed + (st.slashed ?? 0)) ? "no record (not a member)" : st ? `${good ? "good" : "not good"}: ${st.pledges_honored} pledge(s) kept, ${st.pledges_broken} broken, ${st.juries_served} jury ruling(s), ${st.juries_missed} missed${st.slashed ? `, slashed ${st.slashed}×` : ""}` : "not on this contract version"],
           // contract 0.2.7: the record as a non-transferable NEP-171 token, its image drawn by the contract from the record
           ["Token", token === UNREAD ? READ_LATER : token === undefined ? "not on this contract version" : token
             ? `a NEP-171 token on <code>${esc(dep.contract)}</code> (id ${esc(who)}), read live from the record, never transferable: any NEAR wallet or explorer that reads NFTs shows it.${

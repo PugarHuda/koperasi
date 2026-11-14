@@ -531,6 +531,11 @@ cargo near build reproducible-wasm
   for (const id of ["ck-bylaws", "ck-code", "ck-money"]) verdict(id, null, "Could not reach NEAR right now. Reload in a moment.");
   rows($("passbook").tBodies[0], `<tr><td colspan="3">Could not read ${esc(dep.contract)} on ${esc(dep.network)}. Check your connection and reload.</td></tr>`);
   $("p-voters").innerHTML = `<li class="no">Could not reach NEAR right now. Reload in a moment.</li>`;
+  const no = "not read: NEAR could not be reached; reload in a moment";
+  for (const id of ["codegov", "trust-rule", "pb-id", "p-agent"]) if ($(id)) $(id).textContent = no;
+  document.querySelectorAll("#status dd, #counts dd, #counts strong").forEach((el) => { if (el.textContent.trim() === "…") el.textContent = "–"; });
+  const tee = $("ck-tee-run");
+  if (tee?.disabled) tee.textContent = "Needs the by-laws from NEAR: reload in a moment";
 }
 
 // The visitor verifies the TEE themselves: fresh nonce, Intel's collateral, checked in this browser

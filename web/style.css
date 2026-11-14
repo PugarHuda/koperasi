@@ -304,7 +304,8 @@ h2 .dim { color: var(--grey); }
 .me-card span { display: block; font-size: .74rem; color: rgba(255,255,255,.6); }
 .me-card strong { font: 700 1.5rem/1.1 var(--display); }
 .jh { font: 700 1.3rem var(--display); text-transform: uppercase; margin: 1.4rem 0 .6rem; }
-.props { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.props { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; }
+.props li > * { min-width: 0; overflow-wrap: anywhere; }
 .props li { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; padding: .6rem .8rem; background: rgba(255,255,255,.05); font-size: .86rem; }
 .props em { font-style: normal; color: #7fe0a6; font-size: .8rem; background: #071233; padding: .1rem .45rem; } /* its own ground: a long row can wrap it over a light area */
 .props .btn.ghost { background: #071233; } /* same reason: Reject and Give up are white text, transparent by default */
@@ -484,6 +485,12 @@ h2 .dim { color: var(--grey); }
 @media (max-width: 700px) {
   #open-app .long { display: none; }
   #open-app { text-transform: capitalize; padding: .55rem .9rem; }
+}
+@media (max-width: 380px) {
+  #open-app { padding: .45rem .6rem; font-size: .85rem; }
+  .top-actions { gap: .5rem; min-width: 0; }
+  .top .brand, .top > a:first-child { min-width: 0; }
+  .top .lang-btn { font-size: .72rem; }
   .top .lang-btn { font-size: .8rem; }
   .top { gap: 1rem; }
 }
