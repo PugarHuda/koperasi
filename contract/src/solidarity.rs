@@ -247,7 +247,8 @@ impl Koperasi {
         let suspended = crate::meeting::agent_suspended();
         AgentMember {
             share_bps: load(KEY_AGENT_SHARE).unwrap_or(0),
-            standing_bps: if suspended { 0 } else { (10_000u32 >> strikes.min(14)) as u16 },
+            // 0.3.6: and by the recovery ramp after an approved plan (25% back up to 100%)
+            standing_bps: if suspended { 0 } else { ((10_000u64 >> strikes.min(14)) * crate::recovery::ramp_bps() / 10_000) as u16 },
             strikes,
             suspended,
             shu_total: load(KEY_AGENT_SHU).unwrap_or(U128(0)),

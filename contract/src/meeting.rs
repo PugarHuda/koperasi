@@ -147,7 +147,15 @@ pub(crate) fn strike(case: u32) {
     }
     all.push((case, U64(env::block_timestamp())));
     save(KEY_STRIKES, &all);
+    if agent_suspended() {
+        crate::recovery::cancel_ramp(); // 0.3.6: suspended again during a recovery ramp
+    }
     Event::AgentStruck { case, strikes: live_strikes().len() as u32, suspended: agent_suspended() }.emit();
+}
+
+/// The members reinstate the agent now: strikes before now no longer count.
+pub(crate) fn reinstate_now() {
+    save(KEY_REINSTATED, &U64(env::block_timestamp()));
 }
 
 /// Paid until: the latest of what the member paid, when the members voted these dues, and when they joined. A record
@@ -257,7 +265,7 @@ impl Koperasi {
     /// DAO only: the members reinstate a suspended agent; strikes before now no longer count.
     pub fn reinstate_agent(&mut self) {
         self.assert_dao();
-        save(KEY_REINSTATED, &U64(env::block_timestamp()));
+        reinstate_now();
         Event::AgentReinstated {}.emit();
     }
 

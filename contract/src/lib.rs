@@ -996,5 +996,7 @@ mod reach;
 mod meeting;
 mod lending;
 mod solidarity;
+mod referrals;
+mod recovery;
 pub use commons::*;
 pub use tasks::*;

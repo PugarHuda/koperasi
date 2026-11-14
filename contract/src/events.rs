@@ -305,4 +305,16 @@ pub enum Event {
     /// The co-op's agent passed a job to a sister co-op (the referral board).
     #[event_version("1.0.0")]
     JobReferred { id: u32, job_id: String, to_coop: AccountId, budget_usdc: U128 },
+    /// The co-op's agent accepted a job a sister co-op referred to it, read from the sister's board (0.3.6).
+    #[event_version("1.0.0")]
+    ReferralAccepted { id: u32, job_id: String, from_coop: AccountId, referral_id: u32, budget_usdc: U128 },
+    /// The suspended agent (or the steward for it) filed a recovery plan (0.3.6).
+    #[event_version("1.0.0")]
+    RecoveryProposed { plan_uri: String, plan_sha256: String, by: AccountId },
+    /// The members approved the recovery plan: the agent is reinstated, its standing ramps back over `ramp_days`.
+    #[event_version("1.0.0")]
+    RecoveryApproved { plan_sha256: String, ramp_days: u32 },
+    /// How many days the agent's standing ramps back after an approved recovery plan.
+    #[event_version("1.0.0")]
+    RecoveryDaysSet { days: u32 },
 }

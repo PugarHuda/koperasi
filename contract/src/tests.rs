@@ -3103,3 +3103,184 @@ fn the_agent_refers_jobs_to_sister_coops() {
     k.pause();
     assert!(fails(|| { at(&agent(), DAY); refer(&mut k, &sister, None); }), "paused");
 }
+
+// ---------- 0.3.6 part A ----------
+
+fn ref_board(id: u32, job: &str, to: &AccountId) -> Vec<solidarity::Referral> {
+    vec![solidarity::Referral { id, job_id: job.into(), to_coop: to.clone(), budget_usdc: U128(5_000_000), reason: "r".into(), at: U64(DAY) }]
+}
+
+/// 0.3.6: the agent accepts a sister co-op's referral, read from the sister's own board; once; bounded; linked to the receipt.
+#[test]
+fn the_agent_accepts_a_sister_coops_referral_read_from_its_board() {
+    use ed25519_dalek::{Signer, SigningKey};
+    let mut k = setup();
+    let sister = acc("kop-two.testnet");
+    let relayer = acc("relayer.testnet");
+    assert!(fails(|| { at(&agent(), DAY); let _ = k.accept_referral(sister.clone(), 0, None); }), "not a sister yet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone()]);
+    assert!(fails(|| { at(&relayer, DAY); let _ = k.accept_referral(sister.clone(), 0, None); }), "not the agent");
+    at(&agent(), DAY);
+    let _ = k.accept_referral(sister.clone(), 0, None);
+    assert_eq!(k.get_accept_message(sister.clone(), 0), referrals::accept_message(&me(), 1, &sister, 0), "the direct call used nonce 0");
+    // the callback: only the contract itself, and only what the sister's board holds for this co-op
+    assert!(fails(|| { at(&me(), DAY); k.on_referral_read(sister.clone(), 0, Err(PromiseError::Failed)); }), "board unreadable");
+    assert!(fails(|| { at(&me(), DAY); k.on_referral_read(sister.clone(), 0, Ok(vec![])); }), "no such referral");
+    assert!(fails(|| { at(&me(), DAY); k.on_referral_read(sister.clone(), 0, Ok(ref_board(3, "j-1", &me()))); }), "the board's oldest, not this id");
+    assert!(fails(|| { at(&me(), DAY); k.on_referral_read(sister.clone(), 0, Ok(ref_board(0, "j-1", &acc("kop-three.testnet")))); }), "for another co-op");
+    assert!(fails(|| { at(&me(), DAY); k.on_referral_read(sister.clone(), 0, Ok(ref_board(0, &"x".repeat(129), &me()))); }), "bad job_id");
+    at(&me(), DAY);
+    assert_eq!(k.on_referral_read(sister.clone(), 0, Ok(ref_board(0, "j-1", &me()))), 0);
+    assert!(logs_have("referral_accepted") && logs_have("\"from_coop\":\"kop-two.testnet\""));
+    let a = k.get_referral_for_job("j-1".into()).unwrap();
+    assert_eq!((a.from_coop.clone(), a.referral_id, a.budget_usdc.0), (sister.clone(), 0, 5_000_000));
+    // refused twice: the same referral (at the call and in the callback), or the same job from another referral
+    assert!(fails(|| { at(&agent(), DAY); let _ = k.accept_referral(sister.clone(), 0, None); }), "already accepted");
+    assert!(fails(|| { at(&me(), DAY); k.on_referral_read(sister.clone(), 0, Ok(ref_board(0, "j-1", &me()))); }), "already accepted (callback)");
+    assert!(fails(|| { at(&me(), DAY); k.on_referral_read(sister.clone(), 1, Ok(ref_board(1, "j-1", &me()))); }), "the same job twice");
+    // a receipt for that job shows where it came from
+    assert!(k.get_receipt_with_referral("j-1".into()).is_none(), "no receipt yet");
+    receipt(&mut k, "j-1", 5_000_000, H1);
+    let (r, link) = k.get_receipt_with_referral("j-1".into()).unwrap();
+    assert_eq!((r.job_id.as_str(), link.unwrap().referral_id), ("j-1", 0));
+    receipt(&mut k, "j-own", 1, H1);
+    assert!(k.get_receipt_with_referral("j-own".into()).unwrap().1.is_none(), "its own job: no referral");
+    // the signed path, once
+    let sk = SigningKey::from_bytes(&[7; 32]);
+    let pk: Vec<u8> = [vec![0u8], sk.verifying_key().to_bytes().to_vec()].concat();
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(agent()).signer_account_id(agent())
+        .signer_account_pk(pk.try_into().unwrap()).block_timestamp(DAY);
+    testing_env!(b.build());
+    k.record_receipt("j-pk".into(), U128(1), U128(0), H1.into(), "00".into(), None);
+    let sign = |m: &str| near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, sk.sign(m.as_bytes()).to_bytes());
+    let msg = k.get_accept_message(sister.clone(), 1);
+    assert!(fails(|| { at(&relayer, DAY); let _ = k.accept_referral(sister.clone(), 2, Some(sign(&msg))); }), "the id is signed");
+    at(&relayer, DAY);
+    let _ = k.accept_referral(sister.clone(), 1, Some(sign(&msg)));
+    assert!(fails(|| { at(&relayer, DAY); let _ = k.accept_referral(sister.clone(), 1, Some(sign(&msg))); }), "replayed");
+    // suspended or paused: refused
+    meeting::strike(1);
+    meeting::strike(2);
+    meeting::strike(3);
+    assert!(fails(|| { at(&agent(), DAY); let _ = k.accept_referral(sister.clone(), 5, None); }), "suspended");
+    at(&dao(), DAY);
+    k.reinstate_agent();
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| { at(&agent(), DAY); let _ = k.accept_referral(sister.clone(), 5, None); }), "paused");
+    assert!(fails(|| { at(&me(), DAY); k.on_referral_read(sister.clone(), 5, Ok(ref_board(5, "j-5", &me()))); }), "paused (callback)");
+    as_(&dao(), near(0));
+    k.unpause();
+    // bounded: the last 200 kept, the oldest's links go with it
+    for i in 1..=200u32 {
+        at(&me(), DAY);
+        k.on_referral_read(sister.clone(), i, Ok(ref_board(i, &format!("j-b{i}"), &me())));
+    }
+    let all = k.get_accepted_referrals(None, Some(500));
+    assert_eq!((all.len(), all[0].id, all[199].id), (200, 1, 200));
+    assert!(k.get_referral_for_job("j-1".into()).is_none(), "the oldest left, with its job link");
+    assert!(k.get_referral_for_job("j-b200".into()).is_some());
+    assert_eq!(k.get_accepted_referrals(Some(150), Some(10)).len(), 10);
+}
+
+/// 0.3.6: a suspended agent files a recovery plan; the members approve it; its standing ramps from 25% back.
+#[test]
+fn an_approved_recovery_plan_reinstates_the_agent_and_its_standing_ramps_back() {
+    let mut k = setup();
+    let h = "ab".repeat(32);
+    assert!(fails(|| { at(&agent(), DAY); k.propose_recovery("ipfs://plan".into(), h.clone()); }), "not suspended");
+    assert!(fails(|| { at(&dao(), DAY); k.approve_recovery(h.clone()); }), "no plan on file");
+    at(&agent(), DAY);
+    meeting::strike(1);
+    meeting::strike(2);
+    meeting::strike(3);
+    assert_eq!(k.get_agent_member().standing_bps, 0);
+    assert!(fails(|| { at(&acc("alice.testnet"), DAY); k.propose_recovery("ipfs://plan".into(), h.clone()); }), "only the agent or steward");
+    assert!(fails(|| { at(&agent(), DAY); k.propose_recovery("ipfs://plan".into(), "AB".repeat(32)); }), "lowercase hex");
+    assert!(fails(|| { at(&agent(), DAY); k.propose_recovery("ipfs://a plan".into(), h.clone()); }), "uri without spaces");
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| { at(&agent(), DAY); k.propose_recovery("ipfs://plan".into(), h.clone()); }), "paused");
+    as_(&dao(), near(0));
+    k.unpause();
+    // the steward files for the agent (its key may only record receipts); a later filing replaces one not yet approved
+    as_(&dao(), near(0));
+    k.set_steward(Some(steward()));
+    at(&steward(), DAY);
+    k.propose_recovery("ipfs://plan-1".into(), "cd".repeat(32));
+    at(&agent(), DAY);
+    k.propose_recovery("ipfs://plan".into(), h.clone());
+    assert!(logs_have("recovery_proposed"));
+    assert_eq!(k.get_recovery().0.unwrap().proposed_by, agent());
+    assert!(fails(|| { at(&acc("alice.testnet"), 2 * DAY); k.approve_recovery(h.clone()); }), "only the DAO");
+    assert!(fails(|| { at(&dao(), 2 * DAY); k.approve_recovery("cd".repeat(32)); }), "a vote on another plan");
+    assert!(fails(|| { at(&acc("alice.testnet"), DAY); k.set_recovery_days(10); }), "only the DAO");
+    assert!(fails(|| { at(&dao(), DAY); k.set_recovery_days(366); }), "at most a year");
+    assert_eq!(k.get_recovery_days(), 30);
+    at(&dao(), 2 * DAY);
+    k.approve_recovery(h.clone());
+    assert!(logs_have("recovery_approved") && logs_have("agent_reinstated"));
+    assert!(fails(|| { at(&dao(), 2 * DAY); k.approve_recovery(h.clone()); }), "once");
+    assert!(!k.get_agent_standing().suspended);
+    receipt(&mut k, "j-back", 1, H1); // it works again
+    // the ramp: 25% at once, halfway at 15 days, all of it at 30
+    at(&agent(), 2 * DAY);
+    assert_eq!(k.get_agent_member().standing_bps, 2_500);
+    at(&agent(), 17 * DAY);
+    assert_eq!(k.get_agent_member().standing_bps, 6_250);
+    assert_eq!(k.get_recovery().1, 6_250);
+    meeting::strike(4); // a strike during the ramp halves the ramped value
+    assert_eq!(k.get_agent_member().standing_bps, 3_125);
+    // the share paid uses it
+    with_members(&mut k, &["alice.testnet"]);
+    as_(&dao(), near(0));
+    k.set_agent_share(1000);
+    let mut c = VMContextBuilder::new();
+    c.current_account_id(me()).predecessor_account_id(usdc()).block_timestamp(17 * DAY);
+    testing_env!(c.build());
+    let _ = k.ft_on_transfer(dao(), U128(4_000_000), "share".into());
+    assert_eq!(k.get_agent_member().shu_total.0, 400_000 * 3_125 / 10_000);
+    at(&agent(), 32 * DAY);
+    assert_eq!(k.get_agent_member().standing_bps, 5_000, "ramp done: the strike-scaled value");
+}
+
+/// 0.3.6: a new suspension during the ramp cancels it; the old reinstatement still works without a plan.
+#[test]
+fn a_suspension_during_the_ramp_cancels_it_and_plain_reinstatement_still_works() {
+    let mut k = setup();
+    let h = "ab".repeat(32);
+    at(&dao(), DAY);
+    k.set_recovery_days(10);
+    at(&agent(), DAY / 2); // the vote comes later than the strikes
+    for c in 1..=3 { meeting::strike(c); }
+    k.propose_recovery("ipfs://plan".into(), h.clone());
+    at(&dao(), DAY);
+    k.approve_recovery(h.clone());
+    assert_eq!(k.get_recovery().0.unwrap().ramp_days, 10);
+    at(&dao(), 3 * DAY);
+    k.set_recovery_days(60); // a running ramp keeps the length it was approved with
+    at(&agent(), 3 * DAY);
+    assert_eq!(k.get_agent_member().standing_bps, 2_500 + 7_500 * 2 / 10);
+    for c in 4..=6 { meeting::strike(c); }
+    assert!(k.get_agent_standing().suspended);
+    assert!(k.get_recovery().0.unwrap().cancelled_at.is_some(), "cancelled");
+    assert_eq!(k.get_recovery().1, 10_000);
+    // the members reinstate outright: full standing, no ramp
+    at(&dao(), 4 * DAY);
+    k.reinstate_agent();
+    at(&agent(), 4 * DAY);
+    assert_eq!(k.get_agent_member().standing_bps, 10_000);
+    // days 0: an approved plan restores at once
+    at(&agent(), 5 * DAY);
+    for c in 7..=9 { meeting::strike(c); }
+    at(&dao(), 5 * DAY);
+    k.set_recovery_days(0);
+    at(&agent(), 5 * DAY);
+    k.propose_recovery("ipfs://plan-2".into(), h.clone());
+    at(&dao(), 6 * DAY);
+    k.approve_recovery(h.clone());
+    assert_eq!(k.get_agent_member().standing_bps, 10_000);
+    assert!(fails(|| { at(&dao(), 6 * DAY); k.approve_recovery(h.clone()); }), "already approved");
+}
