@@ -546,7 +546,8 @@ async function commons() {
       : t("Every poll counts one member, one vote: the members have not chosen to weigh technical questions by reputation.", "Setiap jajak pendapat dihitung satu anggota satu suara: anggota belum memilih menimbang pertanyaan teknis menurut reputasi.")}
       ${t("The weights are the ones in the task-quality table above. A poll binds nothing; the DAO may pass its result as a proposal.", "Bobotnya adalah yang ada di tabel kualitas tugas di atas. Jajak pendapat tidak mengikat; DAO boleh meloloskan hasilnya sebagai usulan.")}</p>
       ${table([t("Poll", "Jajak pendapat"), t("Options and tallies", "Pilihan dan hitungan"), t("Counted", "Dihitung"), "Status"], [...polls].reverse().map((p) => `<tr>
-        <td><strong>#${esc(p.id)}</strong> ${esc(p.question)}<span class="claim">${esc(word(p.kind))}, ${t("opened by", "dibuka oleh")} ${esc(p.by)}</span></td>
+        <td><strong>#${esc(p.id)}</strong> ${esc(p.question)}<span class="claim">${esc(word(p.kind))}, ${t("opened by", "dibuka oleh")} ${esc(p.by)}</span>${p.agent_reason
+          ? `<span class="claim">${t("The agent asked this itself (0.3.8):", "Agen sendiri yang menanyakan ini (0.3.8):")} “${esc(p.agent_reason)}”</span>` : ""}</td>
         <td data-label="${t("Options and tallies", "Pilihan dan hitungan")}">${p.options.map((o, i) => `${esc(o)}: <strong>${esc(p.tallies[i])}</strong>${ref(p.bylaws?.[i])}`).join("<br>")}</td>
         <td data-label="${t("Counted", "Dihitung")}">${weighs(p.mode)}; ${plural(p.voters.length, "voter", "pemilih")}</td>
         <td data-label="Status">${state(p)}${filed(p)}</td></tr>`))}`;
@@ -595,13 +596,18 @@ async function federation() {
   if (acc) {
     pane("f-accepted", async () => {
       const list = (await view(acc.coop, "get_accepted_referrals", {})).filter((x) => x.from_coop === C);
+      // 0.3.8: a referred job's earnings pay this co-op its share by themselves, on the sister's contract
+      const shares = await Promise.all(list.map((x) => view(acc.coop, "get_referral_share_paid", { job_id: x.job_id }).catch(() => null)));
       return `<p class="small">${t(`Read on the sister co-op's own contract, <a href="${explorer(acc.coop)}">${esc(acc.coop)}</a> (<code>get_accepted_referrals</code>): the jobs from this co-op's board it took on.`,
         `Dibaca di kontrak koperasi saudara sendiri, <a href="${explorer(acc.coop)}">${esc(acc.coop)}</a> (<code>get_accepted_referrals</code>): pekerjaan dari papan koperasi ini yang diambilnya.`)}</p>
-        ${table([t("Referral", "Rujukan"), t("Job", "Pekerjaan"), t("Budget", "Anggaran"), t("Accepted", "Diterima")], [...list].reverse().map((x) => `<tr>
+        ${table([t("Referral", "Rujukan"), t("Job", "Pekerjaan"), t("Budget", "Anggaran"), t("Accepted", "Diterima"), t("Share paid back", "Bagian yang dibayar")], [...list].reverse().map((x) => `<tr>
           <td>${t(`The sister accepted referral <strong>#${esc(x.referral_id)}</strong>`, `Koperasi saudara menerima rujukan <strong>#${esc(x.referral_id)}</strong>`)}</td>
           <td data-label="${t("Job", "Pekerjaan")}"><code>${esc(short(x.job_id))}</code></td>
           <td class="num" data-label="${t("Budget", "Anggaran")}">${usdc(x.budget_usdc)} USDC</td>
-          <td data-label="${t("Accepted", "Diterima")}">${date(x.accepted_at)}${Number(x.referral_id) === Number(acc.referral) ? ` <a href="${txUrl(acc.tx)}">tx</a>` : ""}</td></tr>`))}`;
+          <td data-label="${t("Accepted", "Diterima")}">${date(x.accepted_at)}${Number(x.referral_id) === Number(acc.referral) ? ` <a href="${txUrl(acc.tx)}">tx</a>` : ""}</td>
+          <td data-label="${t("Share paid back", "Bagian yang dibayar")}">${(() => { const sh = shares[list.indexOf(x)];
+            return sh ? (sh.failed ? t("failed: left for the members to pay by vote", "gagal: diserahkan ke anggota untuk dibayar lewat suara")
+              : t(`${usdc(sh.amount)} USDC to this co-op, automatically`, `${usdc(sh.amount)} USDC ke koperasi ini, otomatis`)) : t("none yet", "belum ada"); })()}</td></tr>`))}`;
     });
   } else $("f-accepted").hidden = true;
   // 0.3.6: loans to a sister co-op, paid to the treasury its members name (its DAO), never to its contract
