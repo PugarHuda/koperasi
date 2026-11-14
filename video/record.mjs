@@ -43,6 +43,7 @@ function locate(t) {
     els = [under.at(-1) ?? els[0]];
   }
   for (let i = 0; i < (q.up ?? 0); i++) els = els.map((e) => e.parentElement);
+  if (q.closest) els = els.map((e) => e.closest(q.closest) ?? e);
   if (q.section) {
     // a heading of the wallet panel and its siblings up to the next heading
     const h3 = [...els[0].querySelectorAll("h3.jh")].find((e) => e.textContent.startsWith(q.section));
@@ -265,7 +266,7 @@ const scenes = {
     await h.page.waitForTimeout(1200);
     await h.ready();
     await h.at(200); await h.show("#status > div:nth-child(3)", "Jobs on-chain, with TEE proof", "Taskbond");
-    await h.at("Taskbond"); await h.show("#p-agent", "5 Taskbond wins: 95, 95, 95, 95, 85", "Every");
+    await h.at("Taskbond"); await h.show("#p-agent", "6 Taskbond wins: 95, 95, 95, 95, 85, 85", "Every");
     await h.at("Every"); await h.glide("#receipts", 60);
     await h.show({ sel: "#receipts tbody tr:nth-child(-n+5)", all: true }, "Price, inference, by-laws, TEE proof", length("s05") - 500);
   }),
@@ -284,11 +285,13 @@ const scenes = {
     await h.page.waitForTimeout(500);
     await h.ready();
     await h.at(200); await h.nav(".top nav a[href='#commons']", "Commons");
-    await h.at("dispute"); await h.glide("#cases", 100);
-    await h.show({ sel: "#cases tbody tr:first-child" }, "A jury of three: upheld, refunded", "refunded");
+    await h.at(h.word("dispute", 0, 1200));
+    await h.page.evaluate(() => { [...document.querySelectorAll("#cases tbody tr")].find((e) => e.textContent.includes("demo-court-mwfa3tpt")).id = "kop-case10"; });
+    await h.glide("#kop-case10", 300); await h.at("dispute");
+    await h.show({ sel: "#cases tbody", text: "demo-court-mwfa3tpt", closest: "tr" }, "A jury of three: upheld, refunded", "refunded");
     await h.at("refunded"); await h.glide("#duties", 160);
-    await h.show({ sel: "#duties", line: "The agent is a member too" }, "The risk fund, and its halved share", h.word("At", 2));
-    await h.at(h.word("At", 2)); await h.show({ sel: "#duties", line: "The agent answers to the court" }, "3 upheld cases: suspended", length("s07") - 500);
+    await h.show({ sel: "#duties", line: "The agent is a member too" }, "The risk fund, and its halved share", h.word("At", 1));
+    await h.at(h.word("At", 1)); await h.show({ sel: "#duties", line: "The agent answers to the court" }, "3 upheld cases: suspended", length("s07") - 500);
   }),
   s08: () => scene("s08", `${LIVE}/`, async (h) => {
     await commons(h.page);
@@ -381,6 +384,54 @@ const scenes = {
     await h.click("#side-nav a[href='#/agent']", "The agent", 1300, undefined, false);
     await h.page.waitForTimeout(600);
     await h.show({ sel: "#a-bylaws, #a-tee", all: true }, "By-laws and the Shade Agent", length("s12c") - 300);
+  }),
+  // contract 0.3.6/0.3.7 in the member app: each view is read once off camera (its first read is slow), then the
+  // scene opens on the overview and gets there by a real click in the sidebar
+  s12d: () => scene("s12d", `${LIVE}/dashboard.html#/report`, async (h) => {
+    await until(h.page, "#r-recovery .out", /SHA-256/, 120000);
+    await until(h.page, "#r-court .out", /upheld/, 120000);
+    await h.page.click("#side-nav a[href='#/overview']");
+    await h.page.waitForSelector("#kpis div", { timeout: 120000 });
+    await h.page.waitForTimeout(1000);
+    await h.ready();
+    await h.at(200); await h.click("#side-nav a[href='#/report']", "Agent report", 1300, undefined, false);
+    await h.page.waitForTimeout(500);
+    await h.glide("#r-court", 120);
+    await h.at("In"); await h.show("#r-court", "Court: 9 of 13 upheld, suspended once, reinstated", h.word("To", 0, 900));
+    await h.at(h.word("To", 0, 900)); await h.glide("#r-recovery", 120);
+    await h.show("#r-recovery", "Recovery plan approved, pinned by its hash", h.word("restarts", 0, 700));
+        await h.at(h.word("restarts", 0, 700));
+    await h.show({ sel: "#r-recovery .out", text: "ramp over 30 days", tight: true }, "Its share ramps back up over 30 days", length("s12d") - 300);
+  }),
+  s12e: () => scene("s12e", `${LIVE}/dashboard.html#/federation`, async (h) => {
+    await until(h.page, "#f-accepted .out", /accepted/i, 120000);
+    await until(h.page, "#f-loans .out", /Repaid/, 120000);
+    await h.page.click("#side-nav a[href='#/overview']");
+    await h.page.waitForSelector("#kpis div", { timeout: 120000 });
+    await h.page.waitForTimeout(1000);
+    await h.ready();
+    await h.at(100); await h.click("#side-nav a[href='#/federation']", "Federation", 1100, undefined, false);
+    await h.page.waitForTimeout(400);
+    await h.glide("#f-referrals", 60);
+    await h.show("#f-referrals", "Jobs below its price, passed to a sister co-op", "and");
+    await h.at("and"); await h.show("#f-accepted", "Read on the sister's own contract: accepted", h.word("members", 0, 1000));
+    await h.at(h.word("members", 0, 1000)); await h.glide("#f-loans", 80);
+    await h.show("#f-loans", "Loans to a sister co-op, by vote", "This");
+    await h.at("This"); await h.show({ sel: "#f-loans tbody tr:first-child" }, "1.00 lent, 1.00 repaid, 0.05 interest", length("s12e") - 300);
+  }),
+  s12f: () => scene("s12f", `${LIVE}/dashboard.html#/commons`, async (h) => {
+    await until(h.page, "#c-polls .out", /280/, 120000);
+    await until(h.page, "#c-cases .out", /Juries are drawn/, 120000);
+    await h.page.click("#side-nav a[href='#/overview']");
+    await h.page.waitForSelector("#kpis div", { timeout: 120000 });
+    await h.page.waitForTimeout(1000);
+    await h.ready();
+    await h.at(100); await h.click("#side-nav a[href='#/commons']", "Commons", 1000, undefined, false);
+    await h.page.waitForTimeout(400);
+    await h.show({ sel: "#c-cases .out", text: "Juries are drawn", tight: true }, "Juries: drawn by reputation, square-root weighted", h.word("And", 0, 900));
+    await h.at(h.word("And", 0, 900)); await h.glide("#c-polls", 120);
+    await h.show("#c-polls", "Technical polls: weighed by reputation (#145)", "In");
+    await h.at("In"); await h.show({ sel: "#c-polls tbody tr:nth-child(2)" }, "Poll #0: larger model 280, current 220", length("s12f") - 300);
   }),
   s12b: () => scene("s12b", `${LOCAL}/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/membership`, async (h) => {
     await h.page.waitForSelector("#w-share-amt", { timeout: 150000 });

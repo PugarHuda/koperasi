@@ -1,12 +1,12 @@
 [
-  { "id": "c01", "kind": "title", "text": "Koperasi is an AI agent owned by a co-op of its members, on NEAR." },
-  { "id": "c02", "kind": "page", "clip": "s02", "fromWord": "members", "text": "Who controls it? The members, one vote each. Its by-laws are locked by hash, and it obeys only the version they voted." },
-  { "id": "c03", "kind": "page", "clip": "s04", "fromWord": "hashes", "text": "Don't trust us: your browser checks the by-laws hash, the contract's keys, and nineteen attacks refused on-chain." },
-  { "id": "c04", "kind": "page", "clip": "s06", "text": "The agent proposes changes to its own by-laws, and the members decide. When one proposal rested on a wrong average, they put the old terms back." },
-  { "id": "c05", "kind": "page", "clip": "s07", "fromWord": "refunded", "text": "When it gets a job wrong, the refund comes from a risk fund it saves into." },
-  { "id": "c06", "kind": "page", "clip": "s08", "text": "A second worker runs as a Shade Agent, its key made inside a TEE and attested on-chain." },
-  { "id": "c07", "kind": "page", "clip": "s09", "fromWord": "loan", "text": "Co-ops form a federation, and the contract enforces its loan ceiling." },
-  { "id": "c08", "kind": "page", "clip": "s12b", "fromWord": "Type", "text": "Members vote, share profit by rule, and pledge work to each other." },
-  { "id": "c09", "kind": "terminal", "text": "And every claim checks out, in one command." },
-  { "id": "c10", "kind": "title", "text": "The members own the agent." }
+  {"id": "c01", "kind": "title", "text": "Koperasi is an AI agent owned by a co-op of its members, on NEAR."},
+  {"id": "c02", "kind": "page", "clip": "s02", "fromWord": "members", "text": "Who controls it? The members, one vote each. Its by-laws are locked by hash, and it obeys only the version they voted."},
+  {"id": "c03", "kind": "page", "clip": "s04", "fromWord": "hashes", "text": "Don't trust us: your browser checks the by-laws hash, the contract's keys, and nineteen attacks refused on-chain."},
+  {"id": "c04", "kind": "page", "clip": "s06", "text": "The agent proposes changes to its own by-laws, and the members decide. When one proposal rested on a wrong average, they put the old terms back."},
+  {"id": "c05", "kind": "page", "clip": "s12d", "fromWord": "To", "text": "When the court suspended it, the members approved its recovery plan, and its share climbs back over thirty days."},
+  {"id": "c06", "kind": "page", "clip": "s08", "text": "A second worker runs as a Shade Agent, its key made inside a TEE and attested on-chain."},
+  {"id": "c07", "kind": "page", "clip": "s09", "fromWord": "loan", "text": "Co-ops form a federation, and the contract enforces its loan ceiling."},
+  {"id": "c08", "kind": "page", "clip": "s12b", "fromWord": "Type", "text": "Members vote, share profit by rule, and pledge work to each other."},
+  {"id": "c09", "kind": "terminal", "text": "And every claim checks out, in one command."},
+  {"id": "c10", "kind": "title", "text": "The members own the agent."}
 ]

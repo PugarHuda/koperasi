@@ -15,7 +15,7 @@ const bare = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 const CHAPTERS = { s02: "Who controls the agent", s03: "The Social Money brief", s04: "Don't trust us", s05: "The agent's work",
   s06: "The agent proposes, the members decide", s07: "It pays for its own mistakes", s08: "Shade Agent", s09: "A federation of co-ops",
-  s09b: "A federation of co-ops", s10: "One member, one vote", s11: "Work record", s12: "The member app", s12b: "The member app", s12c: "The member app", s13: "Verify in one command" };
+  s09b: "A federation of co-ops", s10: "One member, one vote", s11: "Work record", s12: "The member app", s12b: "The member app", s12c: "The member app", s12d: "The agent report", s12e: "Between co-ops", s12f: "Polls and juries", s13: "Verify in one command" };
 
 let n = 0, lastChapter = "";
 const scenes = narration.map((nar, i) => {
