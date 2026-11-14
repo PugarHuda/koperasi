@@ -325,13 +325,13 @@ const scenes = {
     await h.page.waitForSelector("#tiers li", { timeout: 90000 });
     await h.page.waitForSelector("#plans *", { timeout: 90000 });
     await h.page.waitForSelector("#standing li", { timeout: 90000 });
-    await h.ready();
-    await h.at(200); await h.nav(".top nav a[href='#members']", "Members");
-    await h.click("#member-pick", "Pick a member", 1500);
-    await h.page.keyboard.press("Escape");
+    // the meters show a member with savings and a share (bob); picked before the scene, so the narration's
+    // "each member has one vote" lands on the meters with the camera already still (the header click takes ~3 s)
+    // the narration reaches "one vote" 2.4 s in, faster than a header click and its scroll: start at the section
     await h.page.selectOption("#member-pick", { index: 2 }).catch(() => {});
-    await h.page.waitForTimeout(400);
-    await h.show("#meters", "One vote each", "Small");
+    await h.glide("#members", 40);
+    await h.ready();
+    await h.at(200); await h.show("#meters", "One vote each", "Small");
     await h.at("Small"); await h.glide("#tiers", 140);
     await h.show("#tiers li:nth-child(2)", "Earned trust, 10-minute veto window", "Profit");
     await h.at("Profit"); await h.glide("#shares", 40);
