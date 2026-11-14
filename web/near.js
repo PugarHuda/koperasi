@@ -77,9 +77,17 @@ function once(body, ttl) {
 export const forget = () => { for (const [k, v] of kept) if (v.ttl !== Infinity) kept.delete(k); };
 
 /** A transaction's full outcome (all receipts and their logs), once final. */
+// an old transaction is only on an archival node: the regular RPCs spend ~10 s each saying NOT_OBSERVED before the
+// fallback reaches one, so a transaction lookup asks FastNear's archival node first, then the usual list
+const ARCHIVAL = testnet ? "https://archival-rpc.testnet.fastnear.com" : "https://archival-rpc.mainnet.fastnear.com";
 export async function txStatus(hash, sender) {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "EXPERIMENTAL_tx_status", params: { tx_hash: hash, sender_account_id: sender, wait_until: "FINAL" } });
-  return once(body, Infinity);
+  const hit = kept.get(body);
+  if (hit) return hit.p;
+  const p = post(ARCHIVAL, body).then(({ status, r }) => (status === 200 && r?.result ? r.result : rpc(body)), () => rpc(body))
+    .catch((e) => { kept.delete(body); throw e; });
+  kept.set(body, { at: Date.now(), p, ttl: Infinity });
+  return p;
 }
 
 export async function view(contract, method, args = {}) {

@@ -338,6 +338,11 @@ async function report() {
     return verdict(t(`By-laws: it proposed ${rows.length} versions; ${passed} approved by the members${again ? ` (${again} re-passed by the members after its own call failed)` : ""}; ${undone.length} later undone by the members${undone.map((r) => ` (v${esc(r.p.version)} → v${r.undoneTo}, #${esc(r.undone.id)})`).join("")}.`,
       `Anggaran dasar: ia mengusulkan ${rows.length} versi; ${passed} disetujui anggota${again ? ` (${again} diloloskan ulang oleh anggota setelah panggilannya sendiri gagal)` : ""}; ${undone.length} kemudian dibatalkan anggota${undone.map((r) => ` (v${esc(r.p.version)} → v${r.undoneTo}, #${esc(r.undone.id)})`).join("")}.`))
       + table([t("By-laws", "Anggaran dasar"), t("What came of it", "Hasilnya"), t("Its reasoning", "Alasannya")], [
+        // v11 came from the members' own poll (#1 → DAO #152); under it the agent asked them about its model (poll #2, 0.3.8) and changed nothing
+        ...(dep.v038?.poll ? [`<tr><td>${t("under v11", "di bawah v11")}</td><td data-label="${t("What came of it", "Hasilnya")}">${t(
+          `asked the members itself (poll #${esc(dep.v038.poll.id)}); they chose “${esc(dep.v038.poll.decided ?? "keep the model")}”, so it changed nothing`,
+          `bertanya sendiri kepada anggota (jajak pendapat #${esc(dep.v038.poll.id)}); mereka memilih “${esc(dep.v038.poll.decided ?? "keep the model")}”, jadi ia tidak mengubah apa pun`)}</td>
+          <td data-label="${t("Its reasoning", "Alasannya")}">“${esc(String(dep.v038.poll.reason ?? "").slice(0, 220))}”</td></tr>`] : []),
         ...(declined ? [`<tr><td>${t(`under v${esc(declined.version)}`, `di bawah v${esc(declined.version)}`)}</td><td data-label="${t("What came of it", "Hasilnya")}">${t("proposed nothing", "tidak mengusulkan apa pun")}</td>
           <td data-label="${t("Its reasoning", "Alasannya")}">“${esc(String(declined.evaluation).slice(0, 220))}”</td></tr>`] : []),
         ...[...rows].reverse().map((r) => `<tr><td>v${esc(r.p.version)}</td><td data-label="${t("What came of it", "Hasilnya")}">${fate(r)}</td>
@@ -630,11 +635,22 @@ async function federation() {
       : `<p class="small" id="f-asks">${t("Loans the agent asked the members for: none yet.", "Pinjaman yang diminta agen kepada anggota: belum ada.")}</p>`;
     const ok = dep.v036?.loan;
     const failed = dep.v036?.loan_failed;
-    const repaid = [dep.v036?.repay, back].filter(Boolean);
+    const v039 = dep.v039?.lend;
+    const repaid = [dep.v036?.repay, back, dep.v039?.repay].filter(Boolean);
+    // 0.3.9: what a loan's interest paid the other sister co-ops (federation dividend), read live; 3 decimals for small parts
+    const divs = new Map(await Promise.all(loans.map((l) => view(C, "get_federation_dividend_paid", { loan_id: Number(l.id) })
+      .then((d) => [Number(l.id), d], () => [Number(l.id), []]))));
+    const usdc3 = (u) => (Number(u) / 1e6).toFixed(3);
     const why = (l) => {
       const r = repaid.find((x) => Number(x.loan) === Number(l.id));
       const by = r ? t(` Repaid by ${sisterProp(r)}.`, ` Dilunasi lewat ${sisterProp(r)}.`) : "";
       if (lent && Number(lent.id) === Number(l.id)) return t(`Asked for by the agent; voted by DAO proposal #${esc(lent.proposal)}.`, `Diminta oleh agen; diputuskan lewat usulan DAO #${esc(lent.proposal)}.`) + by;
+      const div = (divs.get(Number(l.id)) ?? []).filter((x) => BigInt(x.amount.toString()) > 0n)
+        .map((x) => `${usdc3(x.amount)} USDC ${t("to", "ke")} <a href="${explorer(x.to)}">${esc(x.to)}</a>`).join(", ");
+      const dv = div ? t(` Federation dividend from its interest: ${div}${dep.v039?.dividend?.dividend_proposal !== undefined ? ` (rule voted by DAO proposal #${esc(dep.v039.dividend.dividend_proposal)})` : ""}.`,
+        ` Dividen federasi dari bunganya: ${div}${dep.v039?.dividend?.dividend_proposal !== undefined ? ` (aturan diputuskan lewat usulan DAO #${esc(dep.v039.dividend.dividend_proposal)})` : ""}.`) : "";
+      if (v039 && Number(v039.id) === Number(l.id)) return t(`Voted by DAO proposal #${esc(v039.proposal)}; the sister's credit score was ${esc(v039.credit_cap?.score)}/100, so it could borrow at most ${usdc(v039.credit_cap?.cap ?? 0)} USDC.`,
+        `Diputuskan lewat usulan DAO #${esc(v039.proposal)}; skor kredit koperasi saudara ${esc(v039.credit_cap?.score)}/100, jadi plafonnya ${usdc(v039.credit_cap?.cap ?? 0)} USDC.`) + by + dv;
       if (ok && Number(ok.id) === Number(l.id)) return t(`Voted by DAO proposal #${esc(ok.proposal)}.`, `Diputuskan lewat usulan DAO #${esc(ok.proposal)}.`) + by;
       if (failed && Number(failed.id) === Number(l.id)) return t(`The transfer bounced: rolled back to the risk fund (DAO proposal #${esc(failed.proposal)}).`, `Transfernya terpental: dikembalikan ke dana risiko (usulan DAO #${esc(failed.proposal)}).`);
       return "";
