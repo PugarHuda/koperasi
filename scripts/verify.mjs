@@ -797,6 +797,32 @@ if (d.v038?.share) {
     `${s.coop}: job ${s.job} (referral #${rw?.[1]?.referral_id}, receipt ${usd(rw?.[0].price ?? 0)} USDC) sent ${usd(paid?.amount ?? 0)} ${s.token} (${s.bps / 100}%) to ${paid?.to}${paid?.failed ? " (FAILED, held for the DAO)" : ""}`);
 }
 
+// contract 0.3.9 (scripts/v039.mjs): a sister co-op's federation credit score caps its loan; the federation dividend
+const eventsOf = (t) => (t?.receipts_outcome ?? []).flatMap((o) => o.outcome.logs).filter((x) => x.startsWith("EVENT_JSON:")).map((x) => JSON.parse(x.slice(11)))
+  .filter((e) => e.standard === "koperasi");
+if (d.v039?.lend) {
+  const l = d.v039.lend;
+  const [credit, t] = await Promise.all([view(d.contract, "get_coop_credit", { coop: l.coop }),
+    rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: l.vote_tx, sender_account_id: l.voter, wait_until: "FINAL" }).catch(() => null)]);
+  const ev = eventsOf(t), cap = ev.find((e) => e.event === "coop_credit_cap"), lent = ev.find((e) => e.event === "sister_loan");
+  check(credit.score >= 0 && credit.score <= 100 && cap?.data.coop === l.coop && cap.data.score === 100 && BigInt(l.amount) <= BigInt(cap.data.cap) && lent?.data.id === l.id,
+    "a sister co-op's federation credit score caps what it may borrow: the loan's transaction shows the score and the cap it was checked against",
+    `${l.coop}: score now ${credit.score}/100 (late ${credit.late}, open past due ${credit.open_past_due}, repaid on time ${credit.repaid_on_time}); loan #${l.id} of ${usd(l.amount)} USDC `
+    + `(tx ${l.vote_tx.slice(0, 8)}…): coop_credit_cap score ${cap?.data.score}, cap ${cap ? usd(cap.data.cap) : "not found"} USDC (half the risk fund x score/100)`);
+}
+if (d.v039?.repay) {
+  const r = d.v039.repay, v = d.v039.dividend;
+  const [bps, treasury, paid, t] = await Promise.all([view(d.contract, "get_federation_dividend"), view(d.contract, "get_coop_treasury", { coop: v.third }),
+    view(d.contract, "get_federation_dividend_paid", { loan_id: r.loan }),
+    rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r.vote_tx, sender_account_id: r.voter, wait_until: "FINAL" }).catch(() => null)]);
+  const ev = eventsOf(t), fd = ev.filter((e) => e.event === "federation_dividend"), si = ev.find((e) => e.event === "sister_interest");
+  const share = si ? BigInt(si.data.amount) * BigInt(bps) / 10000n : 0n;
+  const ok = paid.length > 0 && paid.every((p) => p.failed === "0" && fd.some((e) => e.data.to === p.to && e.data.amount === p.amount))
+    && paid.reduce((s, p) => s + BigInt(p.amount), 0n) === share / BigInt(paid.length) * BigInt(paid.length) && paid.some((p) => p.to === treasury);
+  check(ok, `the federation dividend (${bps / 100}% of a sister loan's interest, voted by the members) went to the other sister co-ops' treasuries`,
+    `loan #${r.loan} repaid by ${r.dao} #${r.proposal}: interest ${si ? usd(si.data.amount) : "?"} USDC; dividend ${paid.map((p) => `${usd(p.amount)} to ${p.to}`).join(", ") || "none"}; the rest to ${d.dao}`);
+}
+
 // an outside buyer: a fresh wallet the testnet faucet created, not a member, posted (and paid) the agent's jobs
 if (d.outside_buyer) {
   const b = d.outside_buyer, tb = b.taskbond, dj = b.direct;

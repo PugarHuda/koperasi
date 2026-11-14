@@ -12228,7 +12228,7 @@ async function gate(tx, sender, voted, jobId) {
   const job = out.job ? `; job ${String(out.job.id).slice(0, 14)}\u2026 ${out.job.allowed ? "allowed" : "REFUSED"} by the by-laws (${out.job.reason})` : "";
   return { ok, out, line: `tx ${tx} by ${sender}: read v${out.version} from ${out.rpc}: file ${String(out.file_sha256).slice(0, 12)}\u2026 = voted ${String(out.voted_sha256).slice(0, 12)}\u2026${job}` };
 }
-var PAGE, d2, view2, argsOf, near, usd, failed, inFlight, waiting, SEPOLIA_RPCS, BASE_SEPOLIA_RPCS, EVM_RPCS, CHAIN_NAME, NEAR_TX_RPCS, check, info, policy, board, contributors, audit, proposal, last, proposals, approvedCall, fileHash, byLaws, acct, code, want, upgraded, keys, full, agentKeys, scoped, role, daoMembers, members, outside, vp, wide, tasksRole, r, ruleVote, vetoVote, tasks, steward, overdue, termDays, termEnds, cases, allReceipts, routes, tokens, pledges, pclaims, rs, GATE_WASM, GATE_WASMS, shares, receipts, proofs, parsedProofs, proven, gated, third, market, usdc, TP_VERIFIER, TP_RELAYER, crossChain;
+var PAGE, d2, view2, argsOf, near, usd, failed, inFlight, waiting, SEPOLIA_RPCS, BASE_SEPOLIA_RPCS, EVM_RPCS, CHAIN_NAME, NEAR_TX_RPCS, check, info, policy, board, contributors, audit, proposal, last, proposals, approvedCall, fileHash, byLaws, acct, code, want, upgraded, keys, full, agentKeys, scoped, role, daoMembers, members, outside, vp, wide, tasksRole, r, ruleVote, vetoVote, tasks, steward, overdue, termDays, termEnds, cases, allReceipts, routes, tokens, pledges, pclaims, rs, GATE_WASM, GATE_WASMS, eventsOf, shares, receipts, proofs, parsedProofs, proven, gated, third, market, usdc, TP_VERIFIER, TP_RELAYER, crossChain;
 var init_verify = __esm({
   async "scripts/verify.mjs"() {
     init_lib();
@@ -13042,6 +13042,37 @@ var init_verify = __esm({
         paid && !paid.failed && paid.to === d2.dao && paid.from_coop === d2.contract && BigInt(paid.amount) === base * BigInt(s.bps) / 10000n && rw?.[1]?.from_coop === d2.contract,
         "a job this co-op referred paid it its share automatically: the sister co-op's contract sent it to this co-op's DAO when the earnings came in",
         `${s.coop}: job ${s.job} (referral #${rw?.[1]?.referral_id}, receipt ${usd(rw?.[0].price ?? 0)} USDC) sent ${usd(paid?.amount ?? 0)} ${s.token} (${s.bps / 100}%) to ${paid?.to}${paid?.failed ? " (FAILED, held for the DAO)" : ""}`
+      );
+    }
+    eventsOf = (t2) => (t2?.receipts_outcome ?? []).flatMap((o) => o.outcome.logs).filter((x2) => x2.startsWith("EVENT_JSON:")).map((x2) => JSON.parse(x2.slice(11))).filter((e) => e.standard === "koperasi");
+    if (d2.v039?.lend) {
+      const l2 = d2.v039.lend;
+      const [credit, t2] = await Promise.all([
+        view2(d2.contract, "get_coop_credit", { coop: l2.coop }),
+        rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: l2.vote_tx, sender_account_id: l2.voter, wait_until: "FINAL" }).catch(() => null)
+      ]);
+      const ev = eventsOf(t2), cap = ev.find((e) => e.event === "coop_credit_cap"), lent = ev.find((e) => e.event === "sister_loan");
+      check(
+        credit.score >= 0 && credit.score <= 100 && cap?.data.coop === l2.coop && cap.data.score === 100 && BigInt(l2.amount) <= BigInt(cap.data.cap) && lent?.data.id === l2.id,
+        "a sister co-op's federation credit score caps what it may borrow: the loan's transaction shows the score and the cap it was checked against",
+        `${l2.coop}: score now ${credit.score}/100 (late ${credit.late}, open past due ${credit.open_past_due}, repaid on time ${credit.repaid_on_time}); loan #${l2.id} of ${usd(l2.amount)} USDC (tx ${l2.vote_tx.slice(0, 8)}\u2026): coop_credit_cap score ${cap?.data.score}, cap ${cap ? usd(cap.data.cap) : "not found"} USDC (half the risk fund x score/100)`
+      );
+    }
+    if (d2.v039?.repay) {
+      const r2 = d2.v039.repay, v = d2.v039.dividend;
+      const [bps, treasury, paid, t2] = await Promise.all([
+        view2(d2.contract, "get_federation_dividend"),
+        view2(d2.contract, "get_coop_treasury", { coop: v.third }),
+        view2(d2.contract, "get_federation_dividend_paid", { loan_id: r2.loan }),
+        rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: r2.vote_tx, sender_account_id: r2.voter, wait_until: "FINAL" }).catch(() => null)
+      ]);
+      const ev = eventsOf(t2), fd = ev.filter((e) => e.event === "federation_dividend"), si = ev.find((e) => e.event === "sister_interest");
+      const share = si ? BigInt(si.data.amount) * BigInt(bps) / 10000n : 0n;
+      const ok = paid.length > 0 && paid.every((p2) => p2.failed === "0" && fd.some((e) => e.data.to === p2.to && e.data.amount === p2.amount)) && paid.reduce((s, p2) => s + BigInt(p2.amount), 0n) === share / BigInt(paid.length) * BigInt(paid.length) && paid.some((p2) => p2.to === treasury);
+      check(
+        ok,
+        `the federation dividend (${bps / 100}% of a sister loan's interest, voted by the members) went to the other sister co-ops' treasuries`,
+        `loan #${r2.loan} repaid by ${r2.dao} #${r2.proposal}: interest ${si ? usd(si.data.amount) : "?"} USDC; dividend ${paid.map((p2) => `${usd(p2.amount)} to ${p2.to}`).join(", ") || "none"}; the rest to ${d2.dao}`
       );
     }
     if (d2.outside_buyer) {

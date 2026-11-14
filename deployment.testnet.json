@@ -8,7 +8,7 @@
   "agent": "agent.koperasi-mw4i2iwk.testnet",
   "configHash": "aa12afd70e2a1c1e7a326f6245031e1061bfd39a42917343edec2f47d6fa3eee",
   "configUri": "config/config.v11.yaml",
-  "codeSha256": "4053062666b58bd9ebbe5226961fdbaf4e56217ec16b50ceb492f0abf37994ed",
+  "codeSha256": "066449d4608b5727685dd1ec5c3cbeab4694246ec058cc04bcb3f406234addf7",
   "chainSignatures": {
     "signer": "v1.signer-prod.testnet",
     "path": "ethereum-1",
@@ -1321,7 +1321,14 @@
       "receipts": 42,
       "inference_total": "28035",
       "closes_at": "1794673941413242076",
-      "left_to_members": "the script does not vote: the members vote the agent's poll"
+      "left_to_members": "the script does not vote: the members vote the agent's poll",
+      "closed_tx": "Eqwg86VgEKZdeHGsZg2jiqvMC7YRQ9CUkvAJqSseWnvX",
+      "result": 0,
+      "tallies": [
+        "740",
+        "0"
+      ],
+      "decided": "keep deepseek-v3.2"
     },
     "share": {
       "share_proposal": 34,
@@ -1351,6 +1358,120 @@
       "treasury_after": "5000000",
       "events": [
         "EVENT_JSON:{\"standard\":\"koperasi\",\"version\":\"1.0.0\",\"event\":\"referral_share_paid\",\"data\":{\"job_id\":\"demo-referral-mwg7spzp\",\"from_coop\":\"koperasi-mw4i2iwk.testnet\",\"to\":\"koperasi-mw4i2iwk.sputnik-v2.testnet\",\"amount\":\"1200000\"}}"
+      ]
+    }
+  },
+  "v039": {
+    "credit": {
+      "coop": "koperasi-mw80aczw.testnet",
+      "score": 100,
+      "late": 0,
+      "open_past_due": 0,
+      "repaid_on_time": 2,
+      "risk_fund": "2855001",
+      "cap": "1427500"
+    },
+    "dividend": {
+      "third": "koperasi-mw7zrvx4.testnet",
+      "third_dao": "koperasi-mw7zrvx4.sputnik-v2.testnet",
+      "sisters": [
+        "koperasi-mw80aczw.testnet",
+        "koperasi-mw7zrvx4.testnet"
+      ],
+      "dividend_proposal": 160,
+      "bps": 5000,
+      "rule": "50% of each sister loan's interest, split equally among the treasuries of the sister co-ops other than the borrower (at most 5); the rest to koperasi-mw4i2iwk.sputnik-v2.testnet",
+      "sisters_proposal": 157,
+      "treasury_proposal": 158,
+      "storage": "the steward registered the third DAO on the USDC contract (0.00125 NEAR) so its dividend transfer cannot fail",
+      "duplicate_proposal": {
+        "id": 159,
+        "note": "a first run lost the third vote to an RPC error; 160 passed the same change, 159 is left to expire"
+      }
+    },
+    "lend": {
+      "coop": "koperasi-mw80aczw.testnet",
+      "paid_to": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "amount": "1000000",
+      "days": 1,
+      "interest_bps": 500,
+      "proposal": 161,
+      "vote_tx": "4ieXBhVRwk3xHmKnbA1anDQu1Bz4tTvkyDXwCfnLraLF",
+      "voter": "kop-steward-mw4i2iwk.testnet",
+      "id": 3,
+      "status": "Open",
+      "credit_cap": {
+        "coop": "koperasi-mw80aczw.testnet",
+        "score": 100,
+        "cap": "1427500"
+      }
+    },
+    "repay": {
+      "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
+      "proposal": 38,
+      "voter": "kop-steward-mw80aczw.testnet",
+      "vote_tx": "G6mp6DZkRz18k5SFumPCdaiLrgwvVh3jQktPy3ei86Cx",
+      "loan": 3,
+      "amount": "1050000",
+      "topup": {
+        "from": "kop-steward-mw4i2iwk.testnet",
+        "amount": "50000",
+        "tx": "DMUjQpbkhCrpRw7Z5ZBeERmkH1vCPbdmAxHbbsuTcdrx",
+        "note": "from the steward's USDC (the agent's market earnings): the sister co-op had no income of its own to pay the interest from"
+      },
+      "status": "Repaid",
+      "interest": {
+        "due": "50000",
+        "paid": "50000"
+      },
+      "dividend": [
+        {
+          "to": "koperasi-mw7zrvx4.sputnik-v2.testnet",
+          "amount": "25000",
+          "failed": "0"
+        }
+      ],
+      "dividend_note": null,
+      "balances_before": {
+        "dao": "47335024",
+        "third": "0"
+      },
+      "balances_after": {
+        "dao": "47360024",
+        "third": "25000"
+      },
+      "events": [
+        {
+          "standard": "koperasi",
+          "version": "1.0.0",
+          "event": "federation_dividend",
+          "data": {
+            "loan_id": 3,
+            "to": "koperasi-mw7zrvx4.sputnik-v2.testnet",
+            "amount": "25000"
+          }
+        },
+        {
+          "standard": "koperasi",
+          "version": "1.0.0",
+          "event": "sister_interest",
+          "data": {
+            "id": 3,
+            "coop": "koperasi-mw80aczw.testnet",
+            "amount": "50000"
+          }
+        },
+        {
+          "standard": "koperasi",
+          "version": "1.0.0",
+          "event": "sister_repaid",
+          "data": {
+            "id": 3,
+            "coop": "koperasi-mw80aczw.testnet",
+            "amount": "1000000",
+            "outstanding": "0"
+          }
+        }
       ]
     }
   }

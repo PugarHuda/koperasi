@@ -11,7 +11,7 @@ Without cloning anything (Node 20 or later):
 curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs
 ```
 
-From a checkout: `npm install && npm run verify`. Both read every claim below (98 checks on 14 Nov) from NEAR, Ethereum, Base and Arbitrum
+From a checkout: `npm install && npm run verify`. Both read every claim below (101 checks on 14 Nov) from NEAR, Ethereum, Base and Arbitrum
 testnets and end with **`every claim checks out`** (exit code 1 otherwise). The one file is `npm run verify` bundled
 (`npm run build:verify`); it reads the deployment, the by-laws and the gate program from the page instead of a
 checkout, and CI fails if the file the repo holds is not what its source builds. CI runs the check on every push and
@@ -23,7 +23,7 @@ every day (`.github/workflows/tests.yml`).
 |---|---|---|---|
 | 1 | The Social Money brief, line by line | *The Social Money brief, proven live*, under the headline | five green lines read from the chain, and the co-op's activity (members, proposals, tasks, shares, cases, pledges) |
 | 2 | The agent runs only the by-laws the members voted | *Don't trust us* → *It runs only what members voted* | green: the by-laws file your browser hashed equals the hash in the contract |
-| 3 | Nobody can change the contract alone | *No one changes the rules alone* | green: 0 full-access keys; the code is the version a DAO proposal approved (0.3.8, proposal #149, global code `GAKtcBv8…`) |
+| 3 | Nobody can change the contract alone | *No one changes the rules alone* | green: 0 full-access keys; the code is the version a DAO proposal approved (0.3.9, proposal #156, global code `Rx9Drk3C…`) |
 | 4 | The model runs in a genuine TEE | *The AI runs sealed in a TEE* → *Verify … with your own nonce* | Intel TDX and NVIDIA GPU attestation bound to a nonce your browser just made; for deepseek-v3.2 (served through Chutes) the TDX quote is checked against Intel's collateral and Chutes' pinned measurements |
 | 5 | One member, one vote | *Members* | every member holds the DAO role `member`; a decision needs a majority |
 | 6 | Earned trust, with a veto window | *Tasks* | the tiers the members voted, a 10-minute veto window (proposal #62), tasks in every state, and the DAO proposal that paid each one |
@@ -59,6 +59,7 @@ every day (`.github/workflows/tests.yml`).
 | 13v | The agent's own review, and the members' judgment | `/rat/agent-2026.md`, `/rat/agent-2026.rejected.md`; `npm run verify` | a first draft with factual errors rejected by #141; the corrected one accepted by #142, its sha256 in the proposal; by-laws v9 (the agent's mistake, #139) undone by the members' v10 (#140) |
 | 13w | The member dashboard | `/dashboard.html` (the header's "Open the member app") | a sidebar of views read live: KPIs, the agent and its report card (#/report: 6 Taskbond jobs, 92/100 on average), money, commons (polls and their by-laws, juries), federation (referrals, loans between co-ops with interest); `?as=kop-bob-mw4i3w8f.testnet#/membership` shows a member's own panel, read-only |
 | 13x | Juries by reputation, a loan the agent asked for, interest, a poll's by-laws (0.3.7) | `npm run verify` (the 0.3.7 lines); `get_jury_by_reputation`, `get_sister_loans`, `get_sister_interest`, `get_poll` | contract 0.3.7 by vote #149 (the sister by its #31); juries drawn by reputation weight, square-root flattened (#150); DAO #151 filed by the contract from the agent's signed request (1 USDC, 30 days, 500 bps), approved: loan #2; the sister repaid 1.05 USDC by its #32, the 0.05 interest into the treasury (43.69 → 43.74 USDC); poll #1 carries by-laws v11 on an option, and its winner is filed as a `set_config` proposal when it closes |
+| 13z | Federation credit, the federation dividend, a referral share through Intents (0.3.9) | `npm run verify` (the 0.3.9 lines and the Intents referral share); `get_coop_credit`, `get_federation_dividend`, `get_federation_dividend_paid` | contract 0.3.9 by vote #156 (the sister by its #37); loan #3 (1 USDC, 1 day, 500 bps, #161): its transaction's `coop_credit_cap` event shows score 100, cap 1.43 USDC; dividend 50% (#160): of the 0.05 USDC interest the sister repaid (its #38), 0.025 went to the third co-op's DAO `koperasi-mw7zrvx4.sputnik-v2.testnet` (recognised by #157, treasury #158); the referral share of 1.2 USDC paid by the agent's Intents wallet by rule #155 (`Gwd1VA1q…`); poll #2 closed "keep deepseek-v3.2" and the agent changed nothing (`agent/followup.mjs`) |
 | 13y | The docs page and Bahasa Indonesia | `/docs.html`; the *Bahasa Indonesia* switch on the landing page, the dashboard, `/cert.html` and `/coops.html` | what Koperasi is, a job's path as a diagram, who decides what, trust, money, a 44-term glossary, what we do not claim; each page's live sentences redrawn in Bahasa from the data already read |
 | 13 | Every state change is an event | *What the co-op just did* | NEP-297 events from the contract, as they happen |
 
@@ -66,8 +67,8 @@ every day (`.github/workflows/tests.yml`).
 
 | # | Check | Command | You should see |
 |---|---|---|---|
-| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `4053062666b58bd9ebbe5226961fdbaf4e56217ec16b50ceb492f0abf37994ed`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
-| 15 | The tests | `npm test` | lint, typecheck, 48 unit tests and 197 contract tests (unit, fuzz, invariant) pass |
+| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `066449d4608b5727685dd1ec5c3cbeab4694246ec058cc04bcb3f406234addf7`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
+| 15 | The tests | `npm test` | lint, typecheck, 51 unit tests and 204 contract tests (unit, fuzz, invariant) pass |
 | 16 | Against the real Sputnik DAO code, not a mock | `cd contract && cargo test --test sputnik_sandbox` (Linux/macOS) | a task paid out of the treasury of a local DAO running the showcase DAO's own wasm |
 
 ## What is not real yet (said plainly)
