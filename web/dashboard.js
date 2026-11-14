@@ -582,6 +582,8 @@ function notifyLine() {
     ${t("Outside the page", "Di luar halaman")}:</span> <a class="small-link" href="/api/inbox?who=${encodeURIComponent(me)}">${t("your RSS feed", "feed RSS Anda")}</a>
     <br><span class="small" id="ntfy"></span>`;
   // push with the page closed: scripts/notify.mjs posts to this ntfy.sh topic every 15 minutes (no account, no secret)
+  // ponytail: anyone who knows the account can compute the topic and post to it; a push is a hint, the chain is the truth.
+  // A private ntfy server with a publish token (or an HMAC topic from a CI secret) closes that, at the cost of a server.
   const who = me;
   import("./share.js").then(({ ntfyTopic }) => ntfyTopic(C, who)).then((topic) => {
     const el2 = $("ntfy");
@@ -591,7 +593,9 @@ function notifyLine() {
       ${t("in the ntfy app", "di aplikasi ntfy")} (<a class="small-link" href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" rel="noopener">Android</a>,
       <a class="small-link" href="https://apps.apple.com/app/ntfy/id1625396347" rel="noopener">iOS</a>) ${t("subscribe to", "langgani")}
       <code>${esc(topic)}</code>, ${t("or open", "atau buka")} <a class="small-link" href="${url}" rel="noopener">${esc(url)}</a>.
-      ${t("Checked every 15 minutes.", "Diperiksa setiap 15 menit.")}`;
+      ${t("Checked every 15 minutes.", "Diperiksa setiap 15 menit.")}
+      ${t("The topic is public (ntfy.sh has no sender check): trust a push only if it opens koperasi-kohl.vercel.app, and act only after the dashboard shows the same item.",
+    "Topik ini publik (ntfy.sh tidak memeriksa pengirim): percayai push hanya jika membuka koperasi-kohl.vercel.app, dan bertindak hanya setelah dashboard menampilkan hal yang sama.")}`;
   }).catch(() => { /* no Web Crypto (http page): the RSS feed still works */ });
   $("notify-btn").onclick = async () => {
     if (timer) { stopPolling(); store(NOTIFY, null); notifyMsg = ""; notifyLine(); return; }
