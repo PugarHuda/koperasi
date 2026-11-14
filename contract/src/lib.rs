@@ -1007,5 +1007,7 @@ mod solidarity;
 mod referrals;
 mod recovery;
 mod polls;
+mod payouts;
+mod jobs;
 pub use commons::*;
 pub use tasks::*;

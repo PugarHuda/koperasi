@@ -389,4 +389,24 @@ pub enum Event {
     /// That transfer failed: the amount went to the DAO's unforwarded balance (`flush_to_dao`).
     #[event_version("1.0.0")]
     FederationDividendFailed { loan_id: u32, to: AccountId, amount: U128 },
+
+    // ---------- 0.3.10 (after the hackathon deadline): NEAR Intents payouts, payout caps, the co-op job market ----------
+    /// The members named (or, None, removed) the NEAR Intents verifier referral shares are paid through.
+    #[event_version("1.0.0")]
+    IntentsVerifierSet { verifier: Option<AccountId> },
+    /// A referral share goes through NEAR Intents: deposited on `verifier`, then withdrawn to the treasury `to`.
+    #[event_version("1.0.0")]
+    ReferralShareViaIntents { job_id: String, verifier: AccountId, to: AccountId, amount: U128 },
+    /// The members capped one payment to `destination` (0: no cap).
+    #[event_version("1.0.0")]
+    PayoutCapSet { destination: AccountId, max_per_payment: U128 },
+    /// This co-op's agent offered its sister co-ops a job.
+    #[event_version("1.0.0")]
+    CoopJobPosted { job_id: String, budget_usdc: U128, deadline: U64 },
+    /// This co-op's agent bid for a job a sister co-op offered.
+    #[event_version("1.0.0")]
+    CoopBidPlaced { from_coop: AccountId, job_id: String, price_usdc: U128 },
+    /// A job this co-op offered went to the sister co-op with the best bid.
+    #[event_version("1.0.0")]
+    CoopJobAwarded { job_id: String, coop: AccountId, price: U128 },
 }

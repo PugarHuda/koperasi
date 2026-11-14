@@ -3507,8 +3507,8 @@ fn a_failed_sister_loan_transfer_goes_back_to_the_risk_fund() {
     lend(&mut k, &sister, 400_000, 30); // not open: the co-op may be lent again
 }
 
-/// Past due, anyone calls a sister loan late: recorded here and told to the sister co-ops; that co-op is not lent again.
-/// A co-op another sister noted late is not lent either.
+/// Past due, anyone calls a sister loan late: recorded here and told to the sister co-ops. 0.3.10: once repaid, that co-op
+/// is lent again, less (its score, so its cap, is lower). A co-op another sister notes late (in arrears) is not lent.
 #[test]
 fn a_late_sister_loan_is_recorded_and_told_and_blocks_further_loans() {
     let (mut k, sister) = sister_setup();
@@ -3526,14 +3526,19 @@ fn a_late_sister_loan_is_recorded_and_told_and_blocks_further_loans() {
     assert_eq!(repay(&mut k, "sister_repay:0", 300_000), 0);
     assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Repaid);
     assert_eq!(k.get_risk_fund().0 .0, 1_000_000);
-    assert!(fails(|| lend(&mut k, &sister, 100, 30)), "a loan to this co-op went late");
-    // a co-op that a sister noted late is refused too
+    // 0.3.10 graduated sanctions: score 60, so at most half the risk fund x 60/100
+    let m = panic_msg(|| lend(&mut k, &sister, 300_001, 30));
+    assert!(m.contains("federation credit score 60/100: at most 300000"), "{m}");
+    lend(&mut k, &sister, 300_000, 30);
+    assert!(fails(|| lend(&mut k, &sister, 100, 30)), "still one loan open per co-op");
+    // a co-op that a sister notes late is refused (currently in arrears)
     let third = acc("koperasi-three.testnet");
     as_(&dao(), near(0));
     k.set_sister_coops(vec![sister.clone(), third.clone()]);
     as_(&sister, near(0));
     k.note_late_elsewhere(third.clone(), true);
-    assert!(fails(|| lend(&mut k, &third, 100, 30)), "noted late by a sister");
+    let m = panic_msg(|| lend(&mut k, &third, 100, 30));
+    assert!(m.contains("a sister co-op noted this co-op late"), "{m}");
     as_(&sister, near(0));
     k.note_late_elsewhere(third.clone(), false);
     lend(&mut k, &third, 100, 30);
@@ -3914,7 +3919,7 @@ fn a_loan_suggestion_not_filed_is_forgotten_and_the_gates_hold() {
     as_(&dao(), near(0));
     k.pause();
     assert!(fails(|| agent_suggests(&mut k, &agent(), 40 * DAY, &sister, 100_000, 30, 0, why, None)), "paused");
-    // a co-op that went late here is not suggested
+    // a co-op whose loan here is late (still open) is not suggested
     as_(&dao(), near(0));
     k.unpause();
     let third = acc("koperasi-three.testnet");
@@ -3923,7 +3928,7 @@ fn a_loan_suggestion_not_filed_is_forgotten_and_the_gates_hold() {
     lend_at(&mut k, &third, 1_000, 1, None);
     at(&acc("anyone.testnet"), 3 * DAY);
     k.mark_sister_late(0);
-    assert!(fails(|| agent_suggests(&mut k, &agent(), 40 * DAY, &third, 100, 30, 0, why, None)), "late before");
+    assert!(fails(|| agent_suggests(&mut k, &agent(), 40 * DAY, &third, 100, 30, 0, why, None)), "late and unpaid: still open");
 }
 
 /// The signed path: anyone submits the agent's signature, once; every term is signed.
@@ -4278,7 +4283,7 @@ fn a_sister_coops_credit_score_follows_the_federation_rule() {
 }
 
 /// `lend_to_sister` lends at most half the risk fund x score/100 (the refusal names the score; 0 cannot borrow) and logs
-/// the cap; the 0.3.6 refusals still stand behind it.
+/// the cap; 0.3.10: a late loan repaid only lowers the score, a co-op lent again under its reduced cap.
 #[test]
 fn lend_to_sister_is_capped_by_the_coops_credit_score() {
     let (mut k, sister) = sister_setup();
@@ -4292,8 +4297,10 @@ fn lend_to_sister_is_capped_by_the_coops_credit_score() {
     assert_eq!(k.get_risk_fund().0 .0, 1_000_000);
     let m = panic_msg(|| lend(&mut k, &sister, 400_000, 10));
     assert!(m.contains("federation credit score 60/100: at most 300000"), "{m}");
-    let m = panic_msg(|| lend(&mut k, &sister, 300_000, 10));
-    assert!(m.contains("a loan to this co-op went late"), "under the cap, the 0.3.6 refusal still holds: {m}");
+    lend(&mut k, &sister, 300_000, 10); // 0.3.10: late but repaid: lent again under the reduced cap
+    assert!(logs_have("\"score\":60") && logs_have("\"cap\":\"300000\""));
+    at(&me(), DAY);
+    k.on_sister_lent(1, U128(300_000), Err(PromiseError::Failed)); // void: the risk fund is whole again
     let (third, fourth) = (acc("koperasi-three.testnet"), acc("koperasi-four.testnet"));
     as_(&dao(), near(0));
     k.set_sister_coops(vec![sister.clone(), third.clone(), fourth.clone()]);
@@ -4303,7 +4310,7 @@ fn lend_to_sister_is_capped_by_the_coops_credit_score() {
     }
     let m = panic_msg(|| lend(&mut k, &sister, 1, 10));
     assert!(m.contains("federation credit score 0/100: this co-op cannot borrow"), "{m}");
-    assert_eq!(k.get_sister_loans().len(), 1, "nothing kept by a refusal");
+    assert_eq!(k.get_sister_loans().len(), 2, "nothing kept by a refusal");
     // a co-op with no record borrows the usual cap
     assert!(fails(|| lend(&mut k, &fourth, 500_001, 10)));
     lend(&mut k, &fourth, 500_000, 10);
@@ -4325,7 +4332,7 @@ fn the_agents_loan_suggestion_is_capped_by_the_coops_credit_score() {
     let m = panic_msg(|| agent_suggests(&mut k, &agent(), 4 * DAY, &third, 300_000, 30, 0, why, None));
     assert!(m.contains("federation credit score 60/100: at most 270000"), "{m}");
     let m = panic_msg(|| agent_suggests(&mut k, &agent(), 4 * DAY, &third, 100, 30, 0, why, None));
-    assert!(m.contains("this co-op was late on a loan"), "{m}");
+    assert!(m.contains("a loan to this co-op is still open"), "late and unpaid: {m}");
     for c in [&sister, &fourth] {
         as_(c, near(0));
         k.note_late_elsewhere(third.clone(), true);
@@ -4450,4 +4457,434 @@ fn a_failed_federation_dividend_goes_to_the_dao() {
     at(&acc("anyone.testnet"), DAY);
     k.flush_to_dao();
     assert_eq!(ft_transfers(), vec![(dao().to_string(), 2_500)]);
+}
+
+// ---------- 0.3.10 (after the hackathon deadline): credit decides; NEAR Intents payouts; payout caps; the job market ----------
+
+/// Graduated sanctions on the agent's suggestion too: late but repaid, it may be suggested under its reduced cap; a
+/// co-op a sister notes late (in arrears) is refused; score 0 is refused.
+#[test]
+fn a_coop_late_but_repaid_may_borrow_again_less_but_not_while_in_arrears() {
+    let (mut k, sister) = sister_setup();
+    let why = "repaid its late loan in full";
+    lend_at(&mut k, &sister, 100_000, 1, None);
+    at(&acc("anyone.testnet"), 3 * DAY);
+    k.mark_sister_late(0);
+    repay(&mut k, "sister_repay:0", 100_000);
+    assert_eq!(k.get_coop_credit(sister.clone()).score, 60);
+    let m = panic_msg(|| agent_suggests(&mut k, &agent(), 4 * DAY, &sister, 300_001, 30, 0, why, None));
+    assert!(m.contains("federation credit score 60/100: at most 300000"), "{m}");
+    agent_suggests(&mut k, &agent(), 4 * DAY, &sister, 300_000, 30, 0, why, None);
+    assert!(k.get_loan_suggestion(sister.clone()).is_some(), "late but repaid: suggested under the reduced cap");
+    // in arrears elsewhere: refused by the members' lending and by the agent's suggestion
+    let (third, fourth) = (acc("koperasi-three.testnet"), acc("koperasi-four.testnet"));
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone(), third.clone(), fourth.clone()]);
+    as_(&sister, near(0));
+    k.note_late_elsewhere(third.clone(), true);
+    let m = panic_msg(|| lend(&mut k, &third, 100, 30));
+    assert!(m.contains("a sister co-op noted this co-op late"), "{m}");
+    let m = panic_msg(|| agent_suggests(&mut k, &agent(), 4 * DAY, &third, 100, 30, 0, why, None));
+    assert!(m.contains("a sister co-op noted this co-op late"), "{m}");
+    // the note lifted (repaid there): lent again, less
+    as_(&sister, near(0));
+    k.note_late_elsewhere(third.clone(), false);
+    lend(&mut k, &third, 100, 30);
+    // score 0: refused
+    for c in [&third, &fourth] {
+        as_(c, near(0));
+        k.note_late_elsewhere(sister.clone(), true);
+    }
+    let m = panic_msg(|| lend(&mut k, &sister, 1, 30));
+    assert!(m.contains("federation credit score 0/100"), "{m}");
+}
+
+/// Function calls the contract started: (receiver, args, attached yocto).
+fn calls(method: &str) -> Vec<(String, Value, u128)> {
+    near_sdk::test_utils::get_created_receipts().iter().flat_map(|r| r.actions.iter().filter_map(move |a| match a {
+        near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, attached_deposit, .. } if method_name == method.as_bytes() =>
+            Some((r.receiver_id.to_string(), near_sdk::serde_json::from_slice(args).unwrap(), attached_deposit.as_yoctonear())),
+        _ => None,
+    })).collect()
+}
+
+fn verifier() -> AccountId {
+    acc("intents.testnet")
+}
+
+/// Only the DAO names the verifier (not this contract, the token or the DAO); None removes it.
+#[test]
+fn only_the_dao_names_the_intents_verifier() {
+    let mut k = setup();
+    assert_eq!(k.get_intents_verifier(), None);
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_intents_verifier(Some(verifier())); }), "only the DAO");
+    for bad in [acc("koperasi.testnet"), usdc(), dao()] {
+        assert!(fails(|| { as_(&dao(), near(0)); k.set_intents_verifier(Some(bad.clone())); }), "not a verifier: {bad}");
+    }
+    as_(&dao(), near(0));
+    k.set_intents_verifier(Some(verifier()));
+    assert!(logs_have("\"intents_verifier_set\"") && logs_have("\"verifier\":\"intents.testnet\""));
+    assert_eq!(k.get_intents_verifier(), Some(verifier()));
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_intents_verifier(None); }), "only the DAO (removal)");
+    as_(&dao(), near(0));
+    k.set_intents_verifier(None);
+    assert_eq!(k.get_intents_verifier(), None);
+}
+
+/// Only the DAO caps a destination; 0 removes the cap.
+#[test]
+fn only_the_dao_caps_a_payout_destination() {
+    let mut k = setup();
+    let t = acc("kop-two.sputnik-v2.testnet");
+    assert_eq!(k.get_payout_cap(t.clone()), None);
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_payout_cap(t.clone(), U128(5)); }), "only the DAO");
+    as_(&dao(), near(0));
+    k.set_payout_cap(t.clone(), U128(5));
+    assert!(logs_have("\"payout_cap_set\"") && logs_have("\"max_per_payment\":\"5\""));
+    assert_eq!(k.get_payout_cap(t.clone()), Some(U128(5)));
+    k.set_payout_cap(t.clone(), U128(0));
+    assert_eq!(k.get_payout_cap(t), None);
+}
+
+/// A share over the treasury's cap is cut to the cap (plain path); the rest goes to the DAO with the earnings.
+#[test]
+fn a_referral_share_over_the_treasurys_cap_is_cut_to_it() {
+    let (mut k, _, treasury) = referral_setup();
+    as_(&dao(), near(0));
+    k.set_payout_cap(treasury.clone(), U128(1_000_000));
+    as_(&dao(), near(0));
+    k.set_payout_cap(acc("other.testnet"), U128(1)); // another destination's cap changes nothing here
+    deposit(&mut k, &steward(), 10_000_000, "earnings:j-ref");
+    assert_eq!(ft_transfers(), vec![(treasury.to_string(), 1_000_000), (dao().to_string(), 9_000_000)]);
+    assert_eq!(k.get_referral_share_paid("j-ref".into()).unwrap().amount.0, 1_000_000);
+    assert_eq!(k.get_ledger().unwrap().1 .0, 10_000_000, "nothing lost");
+}
+
+/// The share through NEAR Intents: ft_transfer_call to the verifier (msg = this contract), then ft_withdraw as this
+/// contract to the treasury, memo naming the job; the cap applies on this path too.
+#[test]
+fn a_referral_share_is_paid_through_near_intents_when_a_verifier_is_set() {
+    let (mut k, sister, treasury) = referral_setup();
+    as_(&dao(), near(0));
+    k.set_intents_verifier(Some(verifier()));
+    as_(&dao(), near(0));
+    k.set_payout_cap(treasury.clone(), U128(1_200_000));
+    deposit(&mut k, &steward(), 10_000_000, "earnings:j-ref");
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 8_800_000)], "no plain transfer to the treasury");
+    assert_eq!(calls("ft_transfer_call"), vec![(usdc().to_string(), json!({ "receiver_id": "intents.testnet", "amount": "1200000",
+        "memo": "koperasi referral share j-ref", "msg": "koperasi.testnet" }), 1)]);
+    assert!(logs_have("\"referral_share_via_intents\"") && logs_have("\"verifier\":\"intents.testnet\"") && logs_have("\"amount\":\"1200000\""));
+    assert_eq!(k.get_referral_share_verifier("j-ref".into()), Some(verifier()));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 10_000_000);
+    at(&me(), DAY);
+    let _ = k.on_intents_deposit("j-ref".into(), verifier(), treasury.clone(), U128(1_200_000), usdc(), Ok(U128(1_200_000)));
+    assert_eq!(calls("ft_withdraw"), vec![(verifier().to_string(), json!({ "token": usdc(), "receiver_id": treasury, "amount": "1200000",
+        "memo": "koperasi referral share j-ref", "msg": null }), 1)]);
+    assert_eq!(k.get_ledger().unwrap().1 .0, 10_000_000, "still in flight");
+    at(&me(), DAY);
+    k.on_intents_withdrawn(Some("j-ref".into()), verifier(), U128(1_200_000), usdc(), Ok(U128(1_200_000)));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 8_800_000);
+    let p = k.get_referral_share_paid("j-ref".into()).unwrap();
+    assert_eq!((p.from_coop, p.to, p.amount.0, p.failed), (sister, treasury, 1_200_000, false));
+    assert_eq!((k.get_info().unforwarded.0, k.get_intents_held(verifier(), usdc()).0), (0, 0));
+    // once per job, on this path too
+    deposit(&mut k, &steward(), 1_000_000, "earnings:j-ref");
+    assert!(calls("ft_transfer_call").is_empty());
+}
+
+/// Step 1 refused (the transfer failed, or the verifier sent it all back): back here, to `unforwarded`; marked failed.
+fn refused_deposit(result: Result<U128, PromiseError>) {
+    {
+        let (mut k, _, treasury) = referral_setup();
+        as_(&dao(), near(0));
+        k.set_intents_verifier(Some(verifier()));
+        deposit(&mut k, &steward(), 10_000_000, "earnings:j-ref");
+        at(&me(), DAY);
+        let _ = k.on_intents_deposit("j-ref".into(), verifier(), treasury.clone(), U128(1_500_000), usdc(), result);
+        assert!(calls("ft_withdraw").is_empty(), "no withdrawal");
+        assert!(logs_have("\"referral_share_failed\""));
+        assert_eq!(k.get_info().unforwarded.0, 1_500_000);
+        assert_eq!(k.get_intents_held(verifier(), usdc()).0, 0);
+        assert!(k.get_referral_share_paid("j-ref".into()).unwrap().failed);
+        assert_eq!(k.get_ledger().unwrap().1 .0, 8_500_000);
+        deposit(&mut k, &steward(), 10_000_000, "earnings:j-ref");
+        assert!(calls("ft_transfer_call").is_empty() && ft_transfers() == vec![(dao().to_string(), 10_000_000)], "not again");
+    }
+}
+
+#[test]
+fn a_failed_intents_deposit_goes_to_the_dao_and_is_never_paid_twice() {
+    refused_deposit(Err(PromiseError::Failed));
+}
+
+#[test]
+fn an_intents_deposit_sent_back_goes_to_the_dao_and_is_never_paid_twice() {
+    refused_deposit(Ok(U128(0)));
+}
+
+/// The verifier kept only part: the rest came back here, the part kept is held on the verifier.
+#[test]
+fn an_intents_deposit_kept_in_part_is_split_between_unforwarded_and_held() {
+    let (mut k, _, treasury) = referral_setup();
+    as_(&dao(), near(0));
+    k.set_intents_verifier(Some(verifier()));
+    deposit(&mut k, &steward(), 10_000_000, "earnings:j-ref");
+    at(&me(), DAY);
+    let _ = k.on_intents_deposit("j-ref".into(), verifier(), treasury, U128(1_500_000), usdc(), Ok(U128(500_000)));
+    assert_eq!((k.get_info().unforwarded.0, k.get_intents_held(verifier(), usdc()).0), (1_000_000, 500_000));
+}
+
+/// Step 2 refused: the USDC is on this contract's intents balance, held (not `unforwarded`); anyone sends it to the DAO
+/// through the verifier; a failed flush keeps it held.
+fn refused_withdrawal(result: Result<U128, PromiseError>) {
+    {
+        let (mut k, _, _) = referral_setup();
+        as_(&dao(), near(0));
+        k.set_intents_verifier(Some(verifier()));
+        deposit(&mut k, &steward(), 10_000_000, "earnings:j-ref");
+        at(&me(), DAY);
+        k.on_intents_withdrawn(Some("j-ref".into()), verifier(), U128(1_500_000), usdc(), result);
+        assert!(logs_have("\"referral_share_failed\""));
+        assert!(k.get_referral_share_paid("j-ref".into()).unwrap().failed);
+        assert_eq!((k.get_info().unforwarded.0, k.get_intents_held(verifier(), usdc()).0), (0, 1_500_000));
+        assert_eq!(k.get_ledger().unwrap().1 .0, 8_500_000);
+        assert!(fails(|| { at(&acc("anyone.testnet"), DAY); let _ = k.flush_intents_to_dao(verifier(), acc("other-token.testnet")); }), "nothing held in that token");
+        at(&acc("anyone.testnet"), DAY);
+        let _ = k.flush_intents_to_dao(verifier(), usdc());
+        assert_eq!(calls("ft_withdraw"), vec![(verifier().to_string(), json!({ "token": usdc(), "receiver_id": dao(), "amount": "1500000",
+            "memo": "koperasi", "msg": null }), 1)]);
+        assert_eq!(k.get_intents_held(verifier(), usdc()).0, 0);
+        assert_eq!(k.get_ledger().unwrap().1 .0, 10_000_000);
+        assert!(fails(|| { at(&acc("anyone.testnet"), DAY); let _ = k.flush_intents_to_dao(verifier(), usdc()); }), "once");
+        at(&me(), DAY);
+        k.on_intents_withdrawn(None, verifier(), U128(1_500_000), usdc(), Err(PromiseError::Failed));
+        assert_eq!(k.get_intents_held(verifier(), usdc()).0, 1_500_000, "a failed flush keeps it held");
+        at(&me(), DAY);
+        let _ = k.flush_intents_to_dao(verifier(), usdc());
+        at(&me(), DAY);
+        k.on_intents_withdrawn(None, verifier(), U128(1_500_000), usdc(), Ok(U128(1_500_000)));
+        assert_eq!(k.get_intents_held(verifier(), usdc()).0, 0);
+        assert_eq!(k.get_ledger().unwrap().1 .0, 8_500_000);
+    }
+}
+
+#[test]
+fn a_failed_intents_withdrawal_is_held_and_flushed_to_the_dao() {
+    refused_withdrawal(Err(PromiseError::Failed));
+}
+
+#[test]
+fn an_intents_withdrawal_sent_back_is_held_and_flushed_to_the_dao() {
+    refused_withdrawal(Ok(U128(0)));
+}
+
+/// The agent's signing key noted (it signs a receipt), as in the referral tests.
+fn note_signing_key(k: &mut Koperasi, sk: &ed25519_dalek::SigningKey) {
+    let pk: Vec<u8> = [vec![0u8], sk.verifying_key().to_bytes().to_vec()].concat();
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(agent()).signer_account_id(agent())
+        .signer_account_pk(pk.try_into().unwrap()).block_timestamp(DAY);
+    testing_env!(b.build());
+    k.record_receipt("j-pk".into(), U128(1), U128(0), H1.into(), "00".into(), None);
+}
+
+fn post_job(k: &mut Koperasi, who: &AccountId, job: &str, budget: u128, hours: u32, desc: &str, sig: Option<String>) -> u32 {
+    at(who, DAY);
+    k.post_coop_job(job.into(), U128(budget), hours, desc.into(), sig)
+}
+
+/// The agent offers a job (directly or signed, own nonce, once); every refusal; the last 200 kept.
+#[test]
+fn the_agent_offers_its_sister_coops_a_job() {
+    use ed25519_dalek::{Signer, SigningKey};
+    let mut k = setup();
+    let relayer = acc("relayer.testnet");
+    assert!(fails(|| { post_job(&mut k, &relayer, "j-1", 100, 24, "translate", None); }), "not the agent");
+    assert!(fails(|| { post_job(&mut k, &agent(), "j 1", 100, 24, "translate", None); }), "job_id with a space");
+    assert!(fails(|| { post_job(&mut k, &agent(), "", 100, 24, "translate", None); }), "empty job_id");
+    assert!(fails(|| { post_job(&mut k, &agent(), &"j".repeat(129), 100, 24, "translate", None); }), "job_id over 128");
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-1", 100, 24, " ", None); }), "no description");
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-1", 100, 24, &"x".repeat(281), None); }), "description over 280");
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-1", 0, 24, "translate", None); }), "no budget");
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-1", 100, 0, "translate", None); }), "0 hours");
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-1", 100, 721, "translate", None); }), "over 720 hours");
+    assert_eq!(post_job(&mut k, &agent(), "j-1", 100, 24, "translate", None), 0);
+    assert!(logs_have("\"coop_job_posted\"") && logs_have("\"job_id\":\"j-1\""));
+    let j = k.get_coop_job("j-1".into()).unwrap();
+    assert_eq!((j.budget_usdc.0, j.posted_at.0, j.deadline.0, j.winner), (100, DAY, DAY + DAY, None));
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-1", 100, 24, "translate", None); }), "once per job");
+    // signed: the terms are signed, a signature counts once
+    let sk = SigningKey::from_bytes(&[11; 32]);
+    note_signing_key(&mut k, &sk);
+    let msg = k.get_coop_job_message("j-2".into(), U128(50), 48, "summarise".into());
+    assert_eq!(msg, jobs::coop_job_message(&me(), 1, "j-2", 50, 48, "summarise"), "nonce 1: the direct post used 0");
+    let sign = |m: &str| near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, sk.sign(m.as_bytes()).to_bytes());
+    assert!(fails(|| { post_job(&mut k, &relayer, "j-2", 51, 48, "summarise", Some(sign(&msg))); }), "the budget is signed");
+    assert!(fails(|| { post_job(&mut k, &relayer, "j-2", 50, 48, "summarise", Some(sign("another message"))); }), "another message");
+    assert_eq!(post_job(&mut k, &relayer, "j-2", 50, 48, "summarise", Some(sign(&msg))), 1);
+    assert!(fails(|| { post_job(&mut k, &relayer, "j-3", 50, 48, "summarise", Some(sign(&msg))); }), "replayed");
+    // the gates: TEE-only unattested, paused, suspended
+    as_(&dao(), near(0));
+    k.set_agent_tee(agent(), true);
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-3", 1, 1, "x", None); }), "TEE-only, unattested");
+    as_(&dao(), near(0));
+    k.set_agent_tee(agent(), false);
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-3", 1, 1, "x", None); }), "paused");
+    as_(&dao(), near(0));
+    k.unpause();
+    at(&me(), DAY);
+    for c in 0..3 {
+        meeting::strike(c);
+    }
+    assert!(fails(|| { post_job(&mut k, &agent(), "j-3", 1, 1, "x", None); }), "suspended");
+    at(&dao(), DAY + 1);
+    k.reinstate_agent();
+    // bounded: the last 200
+    for i in 0..200 {
+        post_job(&mut k, &agent(), &format!("b-{i}"), 1, 1, "x", None);
+    }
+    let all = k.get_coop_jobs(None, Some(500));
+    assert_eq!((all.len(), all[0].id, all[199].id), (200, 2, 201));
+    assert!(k.get_coop_job("j-1".into()).is_none() && k.get_coop_job("j-2".into()).is_none(), "the oldest dropped");
+}
+
+fn bid(k: &mut Koperasi, who: &AccountId, ns: u64, from: &AccountId, job: &str, price: u128, sig: Option<String>) {
+    at(who, ns);
+    k.place_bid(from.clone(), job.into(), U128(price), sig);
+}
+
+/// The agent bids for a sister's job here, on its own contract (directly or signed, own nonce); one bid per job; the
+/// gates; the last 200 kept; the poster reads it with `get_bids_for`.
+#[test]
+fn the_agent_bids_for_a_sister_coops_job_on_its_own_contract() {
+    use ed25519_dalek::{Signer, SigningKey};
+    let mut k = setup();
+    let poster = acc("kop-two.testnet");
+    let relayer = acc("relayer.testnet");
+    assert!(fails(|| bid(&mut k, &agent(), DAY, &poster, "j-1", 80, None)), "not a sister");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![poster.clone()]);
+    assert!(fails(|| bid(&mut k, &relayer, DAY, &poster, "j-1", 80, None)), "not the agent");
+    assert!(fails(|| bid(&mut k, &agent(), DAY, &poster, "j 1", 80, None)), "job_id with a space");
+    assert!(fails(|| bid(&mut k, &agent(), DAY, &poster, "j-1", 0, None)), "no price");
+    bid(&mut k, &agent(), DAY, &poster, "j-1", 80, None);
+    assert!(logs_have("\"coop_bid_placed\"") && logs_have("\"price_usdc\":\"80\""));
+    let b = k.get_bids_for(poster.clone(), "j-1".into()).unwrap();
+    assert_eq!((b.job_id.as_str(), b.from_coop.clone(), b.price_usdc.0, b.at.0), ("j-1", poster.clone(), 80, DAY));
+    assert!(k.get_bids_for(poster.clone(), "j-2".into()).is_none());
+    assert!(fails(|| bid(&mut k, &agent(), DAY, &poster, "j-1", 70, None)), "one bid per job");
+    // signed
+    let sk = SigningKey::from_bytes(&[12; 32]);
+    note_signing_key(&mut k, &sk);
+    let msg = k.get_bid_message(poster.clone(), "j-2".into(), U128(60));
+    assert_eq!(msg, jobs::bid_message(&me(), 1, &poster, "j-2", 60));
+    let sig = near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, sk.sign(msg.as_bytes()).to_bytes());
+    assert!(fails(|| bid(&mut k, &relayer, DAY, &poster, "j-2", 59, Some(sig.clone()))), "the price is signed");
+    bid(&mut k, &relayer, DAY, &poster, "j-2", 60, Some(sig.clone()));
+    assert!(fails(|| bid(&mut k, &relayer, DAY, &poster, "j-3", 60, Some(sig.clone()))), "replayed");
+    // gates
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| bid(&mut k, &agent(), DAY, &poster, "j-3", 1, None)), "paused");
+    as_(&dao(), near(0));
+    k.unpause();
+    as_(&dao(), near(0));
+    k.set_agent_tee(agent(), true);
+    assert!(fails(|| bid(&mut k, &agent(), DAY, &poster, "j-3", 1, None)), "TEE-only, unattested");
+    as_(&dao(), near(0));
+    k.set_agent_tee(agent(), false);
+    at(&me(), DAY);
+    for c in 0..3 {
+        meeting::strike(c);
+    }
+    assert!(fails(|| bid(&mut k, &agent(), DAY, &poster, "j-3", 1, None)), "suspended");
+    at(&dao(), DAY + 1);
+    k.reinstate_agent();
+    // bounded: the last 200
+    for i in 0..200 {
+        bid(&mut k, &agent(), DAY, &poster, &format!("b-{i}"), 1, None);
+    }
+    assert!(k.get_bids_for(poster.clone(), "j-1".into()).is_none() && k.get_bids_for(poster.clone(), "j-2".into()).is_none(), "the oldest dropped");
+    assert!(k.get_bids_for(poster.clone(), "b-0".into()).is_some() && k.get_bids_for(poster, "b-199".into()).is_some());
+}
+
+/// The answers of the sisters' `get_bids_for`, as the award callback receives them (None: a failed read).
+fn bid_answers(ns: u64, answers: Vec<Option<Option<jobs::CoopBid>>>) {
+    let results = answers.into_iter().map(|a| match a {
+        Some(b) => near_sdk::PromiseResult::Successful(near_sdk::serde_json::to_vec(&b).unwrap()),
+        None => near_sdk::PromiseResult::Failed,
+    }).collect();
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(me()).account_balance(near(100)).block_timestamp(ns);
+    testing_env!(b.build(), near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(), results);
+}
+
+fn a_bid(job: &str, price: u128, at: u64) -> Option<jobs::CoopBid> {
+    Some(jobs::CoopBid { job_id: job.into(), from_coop: me(), price_usdc: U128(price), at: U64(at) })
+}
+
+/// After the deadline anyone awards: one view per sister (at most 5); credit x budget / price wins; invalid bids,
+/// failed reads and bids outside the window do not count; awarded once.
+#[test]
+fn a_coop_job_goes_to_the_best_bid_weighed_by_federation_credit() {
+    let mut k = setup();
+    let s: Vec<AccountId> = (1..=6).map(|i| acc(&format!("kop-{i}.testnet"))).collect();
+    as_(&dao(), near(0));
+    k.set_sister_coops(s.clone());
+    post_job(&mut k, &agent(), "j-1", 100, 24, "translate", None); // posted DAY, deadline 2 DAY
+    assert!(fails(|| { at(&acc("anyone.testnet"), 3 * DAY); let _ = k.award_coop_job("j-9".into()); }), "no such job");
+    assert!(fails(|| { at(&acc("anyone.testnet"), 2 * DAY); let _ = k.award_coop_job("j-1".into()); }), "bids still open");
+    at(&acc("anyone.testnet"), 2 * DAY + 1);
+    let _ = k.award_coop_job("j-1".into());
+    let reads = calls("get_bids_for");
+    assert_eq!(reads.len(), 5, "the first 5 sisters only");
+    assert_eq!(reads[0], (s[0].to_string(), json!({ "from_coop": me(), "job_id": "j-1" }), 0));
+    assert_eq!(reads[4].0, s[4].to_string());
+    // kop-2 noted late by kop-3: credit 60
+    as_(&s[2], near(0));
+    k.note_late_elsewhere(s[1].clone(), true);
+    let coops = s[..5].to_vec();
+    // kop-1: 100 x 100 / 80 = 125; kop-2: 60 x 100 / 50 = 120; kop-3: over budget; kop-4: after the deadline; kop-5: failed read
+    let answers = || vec![Some(a_bid("j-1", 80, DAY + 5)), Some(a_bid("j-1", 50, DAY + 5)), Some(a_bid("j-1", 101, DAY + 5)),
+        Some(a_bid("j-1", 10, 2 * DAY + 1)), None];
+    assert!(fails(|| { bid_answers(3 * DAY, answers()); k.on_coop_bids("j-1".into(), s[..4].to_vec()); }), "one answer per sister");
+    bid_answers(3 * DAY, answers());
+    assert_eq!(k.on_coop_bids("j-1".into(), coops.clone()), s[0]);
+    assert!(logs_have("\"coop_job_awarded\"") && logs_have("\"coop\":\"kop-1.testnet\"") && logs_have("\"price\":\"80\""));
+    let j = k.get_coop_job("j-1".into()).unwrap();
+    assert_eq!((j.winner, j.price), (Some(s[0].clone()), Some(U128(80))));
+    assert!(fails(|| { at(&acc("anyone.testnet"), 3 * DAY); let _ = k.award_coop_job("j-1".into()); }), "already awarded");
+    assert!(fails(|| { bid_answers(3 * DAY, answers()); k.on_coop_bids("j-1".into(), coops.clone()); }), "awarded once, even by a late callback");
+
+    // the credit decides: kop-2 at 60 credit asking 40 (150) beats kop-1 asking 80 (125)
+    post_job(&mut k, &agent(), "j-2", 100, 1, "summarise", None);
+    bid_answers(3 * DAY, vec![Some(a_bid("j-2", 80, DAY)), Some(a_bid("j-2", 40, DAY)), Some(None), Some(None), Some(None)]);
+    assert_eq!(k.on_coop_bids("j-2".into(), coops.clone()), s[1]);
+    // only bids naming this co-op and this job, placed after the posting, asking something, by a co-op with credit;
+    // none valid: refused, the job stays open for a later award
+    post_job(&mut k, &agent(), "j-3", 100, 1, "review", None);
+    let mut other = a_bid("j-3", 10, DAY).unwrap();
+    other.from_coop = acc("elsewhere.testnet");
+    for c in [&s[2], &s[3], &s[5]] {
+        as_(c, near(0));
+        k.note_late_elsewhere(s[4].clone(), true);
+    }
+    assert_eq!(k.get_coop_credit(s[4].clone()).score, 0);
+    bid_answers(3 * DAY, vec![Some(Some(other)), Some(a_bid("j-1", 10, DAY)), Some(a_bid("j-3", 10, DAY - 1)), Some(a_bid("j-3", 0, DAY)),
+        Some(a_bid("j-3", 10, DAY))]);
+    let m = panic_msg(|| { k.on_coop_bids("j-3".into(), coops.clone()); });
+    assert!(m.contains("no valid bid"), "{m}");
+    assert!(k.get_coop_job("j-3".into()).unwrap().winner.is_none());
+    // a malformed answer is no bid
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(me()).block_timestamp(3 * DAY);
+    testing_env!(b.build(), near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(),
+        vec![near_sdk::PromiseResult::Successful(b"not json".to_vec())]);
+    assert!(fails(|| { k.on_coop_bids("j-3".into(), vec![s[0].clone()]); }), "a malformed answer is no bid");
+    // paused: no award
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| { at(&acc("anyone.testnet"), 3 * DAY); let _ = k.award_coop_job("j-3".into()); }), "paused");
 }
