@@ -11,7 +11,7 @@ Without cloning anything (Node 20 or later):
 curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs
 ```
 
-From a checkout: `npm install && npm run verify`. Both read every claim below (95 checks on 14 Nov) from NEAR, Ethereum, Base and Arbitrum
+From a checkout: `npm install && npm run verify`. Both read every claim below (98 checks on 14 Nov) from NEAR, Ethereum, Base and Arbitrum
 testnets and end with **`every claim checks out`** (exit code 1 otherwise). The one file is `npm run verify` bundled
 (`npm run build:verify`); it reads the deployment, the by-laws and the gate program from the page instead of a
 checkout, and CI fails if the file the repo holds is not what its source builds. CI runs the check on every push and
@@ -23,7 +23,7 @@ every day (`.github/workflows/tests.yml`).
 |---|---|---|---|
 | 1 | The Social Money brief, line by line | *The Social Money brief, proven live*, under the headline | five green lines read from the chain, and the co-op's activity (members, proposals, tasks, shares, cases, pledges) |
 | 2 | The agent runs only the by-laws the members voted | *Don't trust us* → *It runs only what members voted* | green: the by-laws file your browser hashed equals the hash in the contract |
-| 3 | Nobody can change the contract alone | *No one changes the rules alone* | green: 0 full-access keys; the code is the version a DAO proposal approved (0.3.7, proposal #149, global code `GAKtcBv8…`) |
+| 3 | Nobody can change the contract alone | *No one changes the rules alone* | green: 0 full-access keys; the code is the version a DAO proposal approved (0.3.8, proposal #149, global code `GAKtcBv8…`) |
 | 4 | The model runs in a genuine TEE | *The AI runs sealed in a TEE* → *Verify … with your own nonce* | Intel TDX and NVIDIA GPU attestation bound to a nonce your browser just made; for deepseek-v3.2 (served through Chutes) the TDX quote is checked against Intel's collateral and Chutes' pinned measurements |
 | 5 | One member, one vote | *Members* | every member holds the DAO role `member`; a decision needs a majority |
 | 6 | Earned trust, with a veto window | *Tasks* | the tiers the members voted, a 10-minute veto window (proposal #62), tasks in every state, and the DAO proposal that paid each one |
@@ -66,8 +66,8 @@ every day (`.github/workflows/tests.yml`).
 
 | # | Check | Command | You should see |
 |---|---|---|---|
-| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `e142e3d10d796f38a055cbf1ece4bc419628ef28393e136821652567e525e0f0`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
-| 15 | The tests | `npm test` | lint, typecheck, 48 unit tests and 189 contract tests (unit, fuzz, invariant) pass |
+| 14 | The code on chain is this source | `cd contract && cargo near build reproducible-wasm` (Docker), then `sha256sum target/near/koperasi.wasm` | `4053062666b58bd9ebbe5226961fdbaf4e56217ec16b50ceb492f0abf37994ed`, the `codeSha256` in `deployment.testnet.json` (CI does the same every week: `.github/workflows/rebuild.yml`); the page's *Rebuild it yourself* card shows the commit from the contract's NEP-330 metadata |
+| 15 | The tests | `npm test` | lint, typecheck, 48 unit tests and 197 contract tests (unit, fuzz, invariant) pass |
 | 16 | Against the real Sputnik DAO code, not a mock | `cd contract && cargo test --test sputnik_sandbox` (Linux/macOS) | a task paid out of the treasury of a local DAO running the showcase DAO's own wasm |
 
 ## What is not real yet (said plainly)

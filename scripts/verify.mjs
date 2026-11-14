@@ -747,6 +747,24 @@ if (d.v037?.poll?.proposal !== undefined) {
     `poll #${q.id}: "${poll?.options[poll.result]}" won (${JSON.stringify(poll?.tallies)}, ${poll?.mode}); DAO #${p.id} set_config v${a?.args.version} ${q.bylaws.uri} (sha256 matches the file: ${h === q.bylaws.hash}), ${p.status}`);
 }
 
+// contract 0.3.8 (scripts/v038.mjs): the agent opens a technical poll itself; a referred job pays the referring co-op its share
+if (d.v038?.poll) {
+  const q = d.v038.poll;
+  const [poll, mine] = await Promise.all([view(d.contract, "get_poll", { id: q.id }), view(d.contract, "get_agent_polls")]);
+  const a = mine.find((x) => x.id === q.id);
+  check(poll?.kind === "Technical" && poll.by === d.agent && a?.reason === q.reason && poll.agent_reason === q.reason && poll.question === q.question,
+    "the agent opened a technical poll itself, from its own record (its signature, relayed), with its reason; the members vote it",
+    `poll #${q.id} by ${poll?.by} (${poll?.kind}, ${poll?.mode}): "${poll?.question}" ${JSON.stringify(poll?.options)}; reason: "${a?.reason}"; tallies ${JSON.stringify(poll?.tallies)}${poll?.closed ? `, closed: result ${poll.result}` : ""}`);
+}
+if (d.v038?.share) {
+  const s = d.v038.share;
+  const [paid, rw] = await Promise.all([view(s.coop, "get_referral_share_paid", { job_id: s.job }), view(s.coop, "get_receipt_with_referral", { job_id: s.job })]);
+  const base = [s.price, s.budget, rw?.[0].price ?? "0"].map(BigInt).reduce((m, x) => (x < m ? x : m));
+  check(paid && !paid.failed && paid.to === d.dao && paid.from_coop === d.contract && BigInt(paid.amount) === base * BigInt(s.bps) / 10000n && rw?.[1]?.from_coop === d.contract,
+    "a job this co-op referred paid it its share automatically: the sister co-op's contract sent it to this co-op's DAO when the earnings came in",
+    `${s.coop}: job ${s.job} (referral #${rw?.[1]?.referral_id}, receipt ${usd(rw?.[0].price ?? 0)} USDC) sent ${usd(paid?.amount ?? 0)} ${s.token} (${s.bps / 100}%) to ${paid?.to}${paid?.failed ? " (FAILED, held for the DAO)" : ""}`);
+}
+
 // an outside buyer: a fresh wallet the testnet faucet created, not a member, posted (and paid) the agent's jobs
 if (d.outside_buyer) {
   const b = d.outside_buyer, tb = b.taskbond, dj = b.direct;

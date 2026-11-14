@@ -60,8 +60,8 @@ built on an unmodified Sputnik DAO (no new multisig):
   stay one member one vote; a technical poll's winning by-laws become a DAO proposal; juries can be drawn by
   reputation, square-root flattened so no one member captures the draw (#150).
 - **Proof:** contract 0.3.7 upgraded only by vote (#149, the sister co-op by its #31), 0 full-access keys on both co-ops,
-  rebuilt byte for byte from source (sha256 `e142e3d1…`); 189 contract tests; 19 attacks sent to the live co-op, all
-  refused on-chain; `verify` checks 95 claims. A docs page (`/docs.html`) explains it in English and Bahasa Indonesia.
+  rebuilt byte for byte from source (sha256 `40530626…`); 197 contract tests; 19 attacks sent to the live co-op, all
+  refused on-chain; `verify` checks 98 claims. A docs page (`/docs.html`) explains it in English and Bahasa Indonesia.
 
 **Autonomous Business / Agent Economy.** The DAO owns the agent, and the agent is a member that answers for itself:
 - **What it may do:** its prompt, model, prices and markets are by-laws pinned by hash, checked in an Intel TDX enclave
@@ -124,7 +124,7 @@ late loans told to sister co-ops are proven by contract tests. Private push topi
 
 - [x] Repo with README: one-liner and positioning at the top, live demo link, per-track evidence, contract addresses, setup and tests
 - [x] Live page: https://koperasi-kohl.vercel.app
-- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `e142e3d1…`, 0.3.7, proposal #149; CI rebuilds it weekly)
+- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `40530626…`, 0.3.8, proposal #149; CI rebuilds it weekly)
 - [x] CI: lint, typecheck, unit, contract, Playwright, npm audit, `npm run verify` (daily)
 - [x] Security rounds 1–14 ([05-security](reports/05-security.md)); 19 attacks refused on-chain, re-sent weekly in CI
 - [x] **Demo video**: `video/out/koperasi.mp4` (4:33), the 60-second cut `video/out/koperasi-60.mp4` and the 30-second opening `video/out/intro30.mp4`; attach the 60-second cut to the X post

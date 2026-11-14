@@ -12993,6 +12993,26 @@ var init_verify = __esm({
         `poll #${q2.id}: "${poll?.options[poll.result]}" won (${JSON.stringify(poll?.tallies)}, ${poll?.mode}); DAO #${p2.id} set_config v${a?.args.version} ${q2.bylaws.uri} (sha256 matches the file: ${h === q2.bylaws.hash}), ${p2.status}`
       );
     }
+    if (d2.v038?.poll) {
+      const q2 = d2.v038.poll;
+      const [poll, mine] = await Promise.all([view2(d2.contract, "get_poll", { id: q2.id }), view2(d2.contract, "get_agent_polls")]);
+      const a = mine.find((x2) => x2.id === q2.id);
+      check(
+        poll?.kind === "Technical" && poll.by === d2.agent && a?.reason === q2.reason && poll.agent_reason === q2.reason && poll.question === q2.question,
+        "the agent opened a technical poll itself, from its own record (its signature, relayed), with its reason; the members vote it",
+        `poll #${q2.id} by ${poll?.by} (${poll?.kind}, ${poll?.mode}): "${poll?.question}" ${JSON.stringify(poll?.options)}; reason: "${a?.reason}"; tallies ${JSON.stringify(poll?.tallies)}${poll?.closed ? `, closed: result ${poll.result}` : ""}`
+      );
+    }
+    if (d2.v038?.share) {
+      const s = d2.v038.share;
+      const [paid, rw] = await Promise.all([view2(s.coop, "get_referral_share_paid", { job_id: s.job }), view2(s.coop, "get_receipt_with_referral", { job_id: s.job })]);
+      const base = [s.price, s.budget, rw?.[0].price ?? "0"].map(BigInt).reduce((m2, x2) => x2 < m2 ? x2 : m2);
+      check(
+        paid && !paid.failed && paid.to === d2.dao && paid.from_coop === d2.contract && BigInt(paid.amount) === base * BigInt(s.bps) / 10000n && rw?.[1]?.from_coop === d2.contract,
+        "a job this co-op referred paid it its share automatically: the sister co-op's contract sent it to this co-op's DAO when the earnings came in",
+        `${s.coop}: job ${s.job} (referral #${rw?.[1]?.referral_id}, receipt ${usd(rw?.[0].price ?? 0)} USDC) sent ${usd(paid?.amount ?? 0)} ${s.token} (${s.bps / 100}%) to ${paid?.to}${paid?.failed ? " (FAILED, held for the DAO)" : ""}`
+      );
+    }
     if (d2.outside_buyer) {
       const b2 = d2.outside_buyer, tb = b2.taskbond, dj = b2.direct;
       const txOf = (hash, by) => rpcCall(NEAR_TX_RPCS, "EXPERIMENTAL_tx_status", { tx_hash: hash, sender_account_id: by, wait_until: "FINAL" });
