@@ -1234,7 +1234,16 @@
           "tx": "BfhCeRsfqv4SgL2RauWtGQ68uoFnrK4GPxHtJSRMeqQR"
         }
       ],
-      "change": "system_prompt: \"Cite every source you use.\" -> \"Cite every source you use, with a link where one exists.\"; nothing else"
+      "change": "system_prompt: \"Cite every source you use.\" -> \"Cite every source you use, with a link where one exists.\"; nothing else",
+      "closed_tx": "4ZnrQjAKtVCUSQw1zmMZaRadU5EYsxPcbNaBi9Dp4oBr",
+      "result": 1,
+      "tallies": [
+        "260",
+        "480"
+      ],
+      "proposal_tx": "C8HV1x5jfySeKgkr93KkASYN27Gk4w2eXpqnv6xW9eM7",
+      "proposal": 152,
+      "left_to_members": "the script does not vote this by-laws proposal: the members decide it in the DAO"
     },
     "repay": {
       "dao": "koperasi-mw80aczw.sputnik-v2.testnet",
