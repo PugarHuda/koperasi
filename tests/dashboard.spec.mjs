@@ -77,3 +77,46 @@ test("?as= on localhost shows that member's own panel in My membership", async (
   await go(page, "Proposals");
   await expect(page.locator("#props li").first()).toBeVisible();
 });
+
+test("the agent's report card judges it as a member, from the chain", async ({ page }) => {
+  await page.goto("/dashboard.html#/report");
+  await expect(page.locator("#h-report")).toHaveText("Agent report");
+  await expect(page.locator("#r-jobs .rc-verdict")).toContainText(/\d+ jobs on-chain/);
+  await expect(page.locator("#r-taskbond")).toContainText("95/100");
+  await expect(page.locator("#r-court .rc-verdict")).toContainText(/Court: \d+ of \d+ cases upheld/);
+  await expect(page.locator("#r-money .rc-verdict")).toContainText(/risk fund holds \d+\.\d\d USDC/);
+  // the agent's v9, undone by the members' v10 (#140); its review rejected (#141), the corrected one accepted (#142)
+  await expect(page.locator("#r-props .rc-verdict")).toContainText("v9 → v10, #140");
+  await expect(page.locator("#r-fixes")).toContainText("#141");
+  await expect(page.locator("#r-fixes .rc-verdict")).toContainText("#142");
+  await expect(page.locator("#r-tee .rc-verdict")).toContainText("Intel TDX");
+});
+
+test("My history shows a previewed member's votes, pledges and court record", async ({ page }, testInfo) => {
+  onlyLocal(testInfo);
+  test.setTimeout(120_000);
+  await page.goto(`/dashboard.html?as=${BOB}#/membership`);
+  const box = page.locator("#m-history");
+  await expect(box).toContainText(/DAO votes\s*\d+ of the last \d+ proposals: \d+ approve/);
+  await expect(box).toContainText(/Court, as juror\s*#\d+/);
+  await expect(box).toContainText(/Credit\s*score \d+ of 10/);
+  await box.locator("summary").click();
+  await expect(box.locator(".timeline li").first()).toContainText(/You voted|You pledged|Juror on case|You called in|You brought/);
+  await expect(page.locator("#notify")).toContainText("Notify me");
+  await expect(page.locator('#notify a[href^="/api/inbox?who="]')).toHaveAttribute("href", `/api/inbox?who=${encodeURIComponent(BOB)}`);
+});
+
+test("the dashboard's content turns Indonesian with the language button", async ({ page }) => {
+  await page.goto("/dashboard.html#/report");
+  await expect(page.locator("#r-court .rc-verdict")).toContainText("Court:");
+  const lang = page.locator(".lang-btn");
+  if (!(await lang.isVisible())) await page.locator("#menu-btn").click();
+  await lang.click();
+  await expect(page.locator("#h-report")).toHaveText("Rapor agen");
+  await expect(page.locator("#r-court .rc-verdict")).toContainText(/Pengadilan: \d+ dari \d+ perkara dikabulkan/);
+  await expect(page.locator("#r-taskbond .rc-verdict")).toContainText("Penilai luar");
+  await go(page, "Ringkasan");
+  await expect(page.locator("#kpis")).toContainText(/Anggota\s*\d+/);
+  await expect(page.locator("#kpis")).toContainText("masing-masing satu suara");
+  await page.evaluate(() => localStorage.removeItem("kop-lang"));
+});

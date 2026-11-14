@@ -27,6 +27,7 @@
       <a href="#/membership" data-id="Keanggotaan saya">My membership</a>
       <a href="#/proposals" data-id="Usulan">Proposals</a>
       <a href="#/agent" data-id="Agen">The agent</a>
+      <a href="#/report" data-id="Rapor agen">Agent report</a>
       <a href="#/money" data-id="Uang">Money</a>
       <a href="#/commons" data-id="Bersama">Commons</a>
       <a href="#/federation" data-id="Federasi">Federation</a>
@@ -44,65 +45,80 @@
       <h1 id="h-overview" tabindex="-1" data-id="Ringkasan">Overview</h1>
       <p class="lead" id="net">Reading NEAR…</p>
       <dl class="kpis" id="kpis"></dl>
-      <div class="pane" id="recent"><h2 data-id="Terbaru">Recent on-chain</h2><div class="out"></div></div>
+      <div class="pane" id="recent"><h2 data-id="Terbaru on-chain">Recent on-chain</h2><div class="out"></div></div>
     </section>
 
     <section id="v-membership" class="view" aria-labelledby="h-membership" hidden>
       <h1 id="h-membership" tabindex="-1" data-id="Keanggotaan saya">My membership</h1>
       <ol class="steps" id="join-steps">
-        <li><b>Connect a NEAR testnet wallet</b> (Meteor, Intear, Nightly…). Meteor makes a free testnet account.</li>
-        <li><b>Pay the join deposit</b>, refunded if you leave or the members say no.</li>
-        <li><b>Ask the members</b>: a DAO proposal from your own wallet.</li>
-        <li><b>The members vote</b>, one member one vote; then <b>sync</b> your membership.</li>
+        <li data-idh="&lt;b&gt;Hubungkan dompet NEAR testnet&lt;/b&gt; (Meteor, Intear, Nightly…). Meteor membuatkan akun testnet gratis."><b>Connect a NEAR testnet wallet</b> (Meteor, Intear, Nightly…). Meteor makes a free testnet account.</li>
+        <li data-idh="&lt;b&gt;Bayar simpanan pokok&lt;/b&gt;, dikembalikan jika Anda keluar atau anggota menolak."><b>Pay the join deposit</b>, refunded if you leave or the members say no.</li>
+        <li data-idh="&lt;b&gt;Minta persetujuan anggota&lt;/b&gt;: usulan DAO dari dompet Anda sendiri."><b>Ask the members</b>: a DAO proposal from your own wallet.</li>
+        <li data-idh="&lt;b&gt;Anggota memilih&lt;/b&gt;, satu anggota satu suara; lalu &lt;b&gt;sinkronkan&lt;/b&gt; keanggotaan Anda."><b>The members vote</b>, one member one vote; then <b>sync</b> your membership.</li>
       </ol>
+      <p class="notify" id="notify" aria-live="polite" hidden></p>
       <div class="joinapp" id="joinapp" aria-live="polite"><p class="muted">Loading the wallet panel…</p></div>
+      <div class="pane" id="m-history" hidden><h2 data-id="Riwayat saya">My history</h2><div class="out"></div></div>
     </section>
 
     <section id="v-proposals" class="view" aria-labelledby="h-proposals" hidden>
       <h1 id="h-proposals" tabindex="-1" data-id="Usulan">Proposals</h1>
-      <p class="lead">Open DAO proposals: what each one does, read from its kind; the proposer's words apart. Members vote here with their wallet.</p>
+      <p class="lead" data-id="Usulan DAO yang terbuka: apa yang dilakukan masing-masing, dibaca dari jenisnya; kata-kata pengusul terpisah. Anggota memilih di sini dengan dompetnya.">Open DAO proposals: what each one does, read from its kind; the proposer's words apart. Members vote here with their wallet.</p>
       <p class="note-line" id="vote-note" hidden aria-live="polite"></p>
       <ul class="props" id="props"></ul>
     </section>
 
     <section id="v-agent" class="view" aria-labelledby="h-agent" hidden>
       <h1 id="h-agent" tabindex="-1" data-id="Agen">The agent</h1>
-      <div class="pane" id="a-bylaws"><h2>By-laws</h2><div class="out"></div></div>
-      <div class="pane" id="a-tee"><h2>The Shade Agent</h2><div class="out"></div></div>
-      <div class="pane" id="a-props"><h2>Its proposals</h2><div class="out"></div></div>
-      <div class="pane" id="a-risk"><h2>Its share and the risk fund</h2><div class="out"></div></div>
-      <div class="pane" id="a-receipts"><h2>Receipts</h2><div class="out"></div></div>
+      <div class="pane" id="a-bylaws"><h2 data-id="Anggaran dasar">By-laws</h2><div class="out"></div></div>
+      <div class="pane" id="a-tee"><h2 data-id="Shade Agent">The Shade Agent</h2><div class="out"></div></div>
+      <div class="pane" id="a-props"><h2 data-id="Usulannya">Its proposals</h2><div class="out"></div></div>
+      <div class="pane" id="a-risk"><h2 data-id="Bagiannya dan dana risiko">Its share and the risk fund</h2><div class="out"></div></div>
+      <div class="pane" id="a-receipts"><h2 data-id="Tanda terima">Receipts</h2><div class="out"></div></div>
+    </section>
+
+    <section id="v-report" class="view" aria-labelledby="h-report" hidden>
+      <h1 id="h-report" tabindex="-1" data-id="Rapor agen">Agent report</h1>
+      <p class="lead" data-id="Agen adalah anggota koperasi: inilah rapornya, dibaca dari NEAR dan dari berkas yang diperiksa terhadapnya. Satu putusan per baris.">The agent is a member of the co-op: this is its report card, read from NEAR and from the files checked against it. One verdict a row.</p>
+      <div class="pane" id="r-jobs"><h2 data-id="Kerjanya">Its work</h2><div class="out"></div></div>
+      <div class="pane" id="r-taskbond"><h2 data-id="Nilai dari pasar luar">Scores from an outside market</h2><div class="out"></div></div>
+      <div class="pane" id="r-court"><h2 data-id="Catatan pengadilan">Court record</h2><div class="out"></div></div>
+      <div class="pane" id="r-money"><h2 data-id="Uangnya">Its money</h2><div class="out"></div></div>
+      <div class="pane" id="r-props"><h2 data-id="Usulan anggaran dasarnya">Its by-laws proposals</h2><div class="out"></div></div>
+      <div class="pane" id="r-fixes"><h2 data-id="Kesalahannya dan koreksi anggota">Its mistakes and the members' corrections</h2><div class="out"></div></div>
+      <div class="pane" id="r-tee"><h2 data-id="Shade Agent">The Shade Agent</h2><div class="out"></div></div>
     </section>
 
     <section id="v-money" class="view" aria-labelledby="h-money" hidden>
       <h1 id="h-money" tabindex="-1" data-id="Uang">Money</h1>
-      <div class="pane" id="m-treasury"><h2>Treasury and audit</h2><div class="out"></div></div>
-      <div class="pane" id="m-periods"><h2>Profit shares</h2><div class="out"></div></div>
-      <div class="pane" id="m-rep"><h2>Reputation weights</h2><div class="out"></div></div>
-      <div class="pane" id="m-loans"><h2>Loans</h2><div class="out"></div></div>
+      <div class="pane" id="m-treasury"><h2 data-id="Kas dan audit">Treasury and audit</h2><div class="out"></div></div>
+      <div class="pane" id="m-periods"><h2 data-id="Pembagian SHU">Profit shares</h2><div class="out"></div></div>
+      <div class="pane" id="m-rep"><h2 data-id="Bobot reputasi">Reputation weights</h2><div class="out"></div></div>
+      <div class="pane" id="m-loans"><h2 data-id="Pinjaman">Loans</h2><div class="out"></div></div>
     </section>
 
     <section id="v-commons" class="view" aria-labelledby="h-commons" hidden>
       <h1 id="h-commons" tabindex="-1" data-id="Bersama">Commons</h1>
-      <div class="pane" id="c-cases"><h2>Court cases</h2><div class="out"></div></div>
-      <div class="pane" id="c-pledges"><h2>Pledges</h2><div class="out"></div></div>
-      <div class="pane" id="c-standing"><h2>Standing</h2><div class="out"></div></div>
+      <div class="pane" id="c-cases"><h2 data-id="Perkara pengadilan koperasi">Court cases</h2><div class="out"></div></div>
+      <div class="pane" id="c-pledges"><h2 data-id="Janji">Pledges</h2><div class="out"></div></div>
+      <div class="pane" id="c-standing"><h2 data-id="Status anggota">Standing</h2><div class="out"></div></div>
     </section>
 
     <section id="v-federation" class="view" aria-labelledby="h-federation" hidden>
       <h1 id="h-federation" tabindex="-1" data-id="Federasi">Federation</h1>
-      <div class="pane" id="f-fed"><h2>The federation</h2><div class="out"></div></div>
-      <div class="pane" id="f-trades"><h2>Work passed between co-ops</h2><div class="out"></div></div>
+      <div class="pane" id="f-fed"><h2 data-id="Federasi">The federation</h2><div class="out"></div></div>
+      <div class="pane" id="f-trades"><h2 data-id="Kerja antarkoperasi">Work passed between co-ops</h2><div class="out"></div></div>
     </section>
 
     <section id="v-verify" class="view" aria-labelledby="h-verify" hidden>
       <h1 id="h-verify" tabindex="-1" data-id="Periksa">Verify</h1>
-      <p class="lead">Don't trust this page: your browser checks against NEAR. The full checks (the TEE with your own nonce, every payment) are on
+      <p class="lead" data-idh="Jangan percaya halaman ini: browser Anda yang memeriksa ke NEAR. Pemeriksaan lengkap (TEE dengan nonce Anda sendiri, setiap pembayaran) ada di
+        &lt;a href=&quot;/#checks&quot;&gt;halaman utama&lt;/a&gt;; metodenya di &lt;a href=&quot;https://github.com/PugarHuda/koperasi/blob/main/JUDGE.md&quot;&gt;JUDGE.md&lt;/a&gt;.">Don't trust this page: your browser checks against NEAR. The full checks (the TEE with your own nonce, every payment) are on
         <a href="/#checks">the landing page</a>; the method is in <a href="https://github.com/PugarHuda/koperasi/blob/main/JUDGE.md">JUDGE.md</a>.</p>
       <ul class="checklist">
-        <li id="k-bylaws"><b>It runs only what the members voted</b><div class="out">Checking…</div></li>
-        <li id="k-code"><b>Nobody changes the rules alone</b><div class="out">Checking…</div></li>
-        <li id="k-attacks"><b>Attacks on the co-op failed on-chain</b><div class="out"></div></li>
+        <li id="k-bylaws"><b data-id="Ia hanya menjalankan yang dipilih anggota">It runs only what the members voted</b><div class="out">Checking…</div></li>
+        <li id="k-code"><b data-id="Tak seorang pun mengubah aturan sendirian">Nobody changes the rules alone</b><div class="out">Checking…</div></li>
+        <li id="k-attacks"><b data-id="Serangan ke koperasi gagal on-chain">Attacks on the co-op failed on-chain</b><div class="out"></div></li>
       </ul>
     </section>
   </main>

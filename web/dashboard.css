@@ -71,6 +71,14 @@
 .checklist .out { font-size: .9rem; color: rgba(255,255,255,.8); overflow-wrap: anywhere; }
 .checklist .attacks { font-size: .82rem; padding-left: 1.1rem; }
 
+/* the agent's report card: one verdict a row; My history's timeline; the Notify me line */
+.rc-verdict { margin: 0 0 .9rem; padding: .6rem .9rem; font-weight: 600; background: rgba(19,64,255,.18); border-left: 3px solid var(--gold, #ffd54a); }
+.dash .grid th[scope="row"] { text-align: left; font-weight: 600; color: rgba(255,255,255,.75); }
+.timeline { margin-top: 1rem; }
+.timeline summary { cursor: pointer; color: #9fb6ff; margin-bottom: .6rem; }
+.notify { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: baseline; margin: 0 0 1rem; max-width: 52rem; }
+.notify .small { color: rgba(255,255,255,.7); }
+
 @media (max-width: 800px) {
   .dash { grid-template-columns: minmax(0, 1fr); }
   .side { height: auto; z-index: 5; gap: 0; padding: .8rem 1rem; border-right: 0; border-bottom: 1px solid #1b2142; }
