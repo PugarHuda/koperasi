@@ -302,4 +302,7 @@ pub enum Event {
     /// A sister co-op's work record was read and stamped into an account's passport (`kept` false: the stamp removed).
     #[event_version("1.0.0")]
     PassportStamped { account_id: AccountId, coop: AccountId, done: u32, kept: bool },
+    /// The co-op's agent passed a job to a sister co-op (the referral board).
+    #[event_version("1.0.0")]
+    JobReferred { id: u32, job_id: String, to_coop: AccountId, budget_usdc: U128 },
 }

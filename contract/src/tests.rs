@@ -3010,3 +3010,93 @@ fn reputation_weighs_how_judgments_held_up_in_court() {
     // alice: 1 good of 1 -> 3/2; bob: 1 bad of 1 -> 2/3
     assert_eq!((w(&k, &alice), w(&k, &bob)), (1500, 666));
 }
+
+/// 0.3.5: counters for the reputation factor, kept as tasks are handed back, vetoed and paid.
+#[test]
+fn task_quality_counts_hand_backs_vetoes_and_paid_tasks() {
+    let mut k = trusted_with_veto(); // carol: task #0 paid
+    let carol = acc("carol.testnet");
+    assert_eq!(k.get_task_quality(carol.clone()), solidarity::TaskQuality { paid: 1, handed_back: 0, vetoed: 0 });
+    // carol takes a task and hands it back
+    as_(&acc("alice.testnet"), TASK_FEE);
+    let id = k.post_task("fix the minutes".into(), U128(10 * MILLI));
+    as_(&carol, near(0));
+    k.claim_task(id);
+    k.give_up_task(id);
+    // a payout of hers on trust, vetoed by alice
+    let (id, _) = deliver_by(&mut k, "bob.testnet", "carol.testnet", 80 * MILLI);
+    as_(&acc("alice.testnet"), near(0));
+    k.veto_task(id);
+    assert_eq!(k.get_task_quality(carol.clone()), solidarity::TaskQuality { paid: 1, handed_back: 1, vetoed: 1 });
+    assert_eq!(k.get_task_quality(acc("alice.testnet")), solidarity::TaskQuality::default(), "the vetoer is not counted");
+    // as a member, her weight: 1 task done, good 1, bad 2 -> x (1+2)/(2+2)
+    with_members(&mut k, &["carol.testnet"]);
+    let w = k.get_reputation_weights().iter().find(|(x, _)| *x == carol).map_or(0, |(_, w)| w.0);
+    assert_eq!(w, 100 * 3 / 4);
+}
+
+/// 0.3.5: the factor (good + 2) / (bad + 2) counts task quality with the court record.
+#[test]
+fn reputation_weighs_task_quality() {
+    let mut k = setup();
+    with_members(&mut k, &["alice.testnet", "bob.testnet"]);
+    let (alice, bob) = (acc("alice.testnet"), acc("bob.testnet"));
+    commons::mark(&alice, |s| s.pledges_honored += 10);
+    commons::mark(&bob, |s| s.pledges_honored += 10);
+    solidarity::note_task(&alice, |q| q.paid += 2); // 4/2
+    solidarity::note_task(&bob, |q| { q.handed_back += 1; q.vetoed += 1 }); // 2/4
+    let w = |k: &Koperasi, a: &AccountId| k.get_reputation_weights().iter().find(|(x, _)| x == a).map_or(0, |(_, w)| w.0);
+    assert_eq!((w(&k, &alice), w(&k, &bob)), (2000, 500));
+    // with the court record: a case bob brought, upheld -> bob good 1, bad 2: 3/4
+    commons::put_case(&commons::Case { id: 0, job_id: "j".into(), claimant: bob.clone(), refund_to: acc("buyer.testnet"), amount: U128(1),
+        reason: "r".into(), jurors: vec![], votes: vec![], opened: U64(0), status: commons::CaseStatus::Upheld, refund_proposal: None });
+    assert_eq!(w(&k, &bob), 750);
+}
+
+/// 0.3.5: the agent passes a job to a sister co-op; anyone may submit its signature, once.
+#[test]
+fn the_agent_refers_jobs_to_sister_coops() {
+    use ed25519_dalek::{Signer, SigningKey};
+    let mut k = setup();
+    let sister = acc("kop-two.testnet");
+    let relayer = acc("relayer.testnet");
+    let refer = |k: &mut Koperasi, coop: &AccountId, sig: Option<String>| k.post_referral("j-77".into(), coop.clone(), U128(5_000_000), "needs Javanese".into(), sig);
+    assert!(fails(|| { at(&agent(), DAY); refer(&mut k, &sister, None); }), "not a sister yet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone()]);
+    assert!(fails(|| { at(&agent(), DAY); refer(&mut k, &acc("stranger-coop.testnet"), None); }), "only a sister co-op");
+    assert!(fails(|| { at(&agent(), DAY); let _ = k.post_referral("j 1".into(), sister.clone(), U128(1), "r".into(), None); }), "a job_id without spaces");
+    assert!(fails(|| { at(&relayer, DAY); refer(&mut k, &sister, None); }), "not the agent");
+    at(&agent(), DAY);
+    assert_eq!(refer(&mut k, &sister, None), 0);
+    assert!(logs_have("job_referred"));
+    // the signed path: the agent's key is kept when it signs a receipt
+    let sk = SigningKey::from_bytes(&[7; 32]);
+    let pk: Vec<u8> = [vec![0u8], sk.verifying_key().to_bytes().to_vec()].concat();
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(me()).predecessor_account_id(agent()).signer_account_id(agent())
+        .signer_account_pk(pk.try_into().unwrap()).block_timestamp(DAY);
+    testing_env!(b.build());
+    k.record_receipt("j-pk".into(), U128(1), U128(0), H1.into(), "00".into(), None);
+    let msg = k.get_referral_message("j-77".into(), sister.clone(), U128(5_000_000), "needs Javanese".into());
+    assert_eq!(msg, solidarity::referral_message(&me(), 1, "j-77", &sister, 5_000_000, "needs Javanese"), "nonce 1: the direct post used 0");
+    let sign = |m: &str| near_sdk::base64::Engine::encode(&near_sdk::base64::engine::general_purpose::STANDARD, sk.sign(m.as_bytes()).to_bytes());
+    assert!(fails(|| { at(&relayer, DAY); let _ = k.post_referral("j-77".into(), sister.clone(), U128(9_000_000), "needs Javanese".into(), Some(sign(&msg))); }), "the budget is signed");
+    at(&relayer, DAY);
+    assert_eq!(refer(&mut k, &sister, Some(sign(&msg))), 1);
+    assert!(fails(|| { at(&relayer, DAY); refer(&mut k, &sister, Some(sign(&msg))); }), "replayed");
+    let r = k.get_referrals(None, None);
+    assert_eq!((r.len(), r[1].job_id.as_str(), r[1].budget_usdc.0), (2, "j-77", 5_000_000));
+    // bounded: only the last 200 are kept
+    for _ in 0..199 {
+        at(&agent(), DAY);
+        refer(&mut k, &sister, None);
+    }
+    let r = k.get_referrals(None, Some(500));
+    assert_eq!((r.len(), r[0].id, r[199].id), (200, 1, 200));
+    assert_eq!(k.get_referrals(Some(150), Some(10)).len(), 10);
+    // paused: refused
+    as_(&dao(), near(0));
+    k.pause();
+    assert!(fails(|| { at(&agent(), DAY); refer(&mut k, &sister, None); }), "paused");
+}

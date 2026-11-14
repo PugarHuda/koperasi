@@ -65,6 +65,20 @@ pub(crate) fn note_agent_key(agent: &AccountId) {
     }
 }
 
+/// The founding agent calls directly, or the caller submits its ed25519 signature (base64) of `msg()`, checked against
+/// the key the agent last signed a receipt with.
+pub(crate) fn assert_agent_or_signed(agent: &AccountId, signature: Option<&str>, msg: impl FnOnce() -> String) {
+    if env::predecessor_account_id() == *agent {
+        return;
+    }
+    let pk = load::<(AccountId, Vec<u8>)>(KEY_AGENT_PK).filter(|(a, _)| a == agent).map(|(_, pk)| pk)
+        .unwrap_or_else(|| env::panic_str("only the co-op's agent: it has signed no receipt under this code yet"));
+    let sig = signature.and_then(|s| near_sdk::base64::Engine::decode(&near_sdk::base64::engine::general_purpose::STANDARD, s).ok())
+        .and_then(|b| <[u8; 64]>::try_from(b).ok()).unwrap_or_else(|| env::panic_str("only the co-op's agent, or its signature (base64, 64 bytes)"));
+    let msg = msg();
+    require!(pk.len() == 33 && pk[0] == 0 && env::ed25519_verify(&sig, msg.as_bytes(), &pk[1..].try_into().unwrap()), "not the agent's signature");
+}
+
 /// New by-laws the agent put to the members; `proposal` is the DAO proposal once filed.
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
@@ -260,15 +274,9 @@ impl Koperasi {
         let mut all: Vec<AgentProposal> = load(KEY_AGENT_PROPOSALS).unwrap_or_default();
         // a nonce that only goes up, on either path; it starts past every proposal filed before it existed
         let nonce: u32 = load(KEY_AGENT_NONCE).unwrap_or(all.len() as u32);
-        if env::predecessor_account_id() != self.agent_id {
-            let pk = load::<(AccountId, Vec<u8>)>(KEY_AGENT_PK).filter(|(a, _)| *a == self.agent_id).map(|(_, pk)| pk)
-                .unwrap_or_else(|| env::panic_str("only the co-op's agent: it has signed no receipt under this code yet"));
-            let sig = signature.as_deref().and_then(|s| near_sdk::base64::Engine::decode(&near_sdk::base64::engine::general_purpose::STANDARD, s).ok())
-                .and_then(|b| <[u8; 64]>::try_from(b).ok()).unwrap_or_else(|| env::panic_str("only the co-op's agent, or its signature (base64, 64 bytes)"));
-            // bound to this contract, to the next version and to the nonce: a signature counts once
-            let msg = agent_proposal_message(&env::current_account_id(), nonce, version, &hash, &uri, &reason);
-            require!(pk.len() == 33 && pk[0] == 0 && env::ed25519_verify(&sig, msg.as_bytes(), &pk[1..].try_into().unwrap()), "not the agent's signature");
-        }
+        // bound to this contract, to the next version and to the nonce: a signature counts once
+        assert_agent_or_signed(&self.agent_id, signature.as_deref(),
+            || agent_proposal_message(&env::current_account_id(), nonce, version, &hash, &uri, &reason));
         save(KEY_AGENT_NONCE, &(nonce + 1));
         require!(!agent_suspended(), "the agent is suspended");
         require!(version == self.config.version + 1, "the next version only");

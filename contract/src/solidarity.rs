@@ -20,10 +20,67 @@
 //!   calls `note_attested`. An agent the members mark `set_agent_tee(account, true)` records receipts only while its
 //!   attestation holds: the contract refuses them from that key otherwise, whoever holds it.
 //!
+//! - **Quality from tasks** (0.3.5): the same factor also counts each task a member delivered and was paid for, and
+//!   against them each task they took and handed back and each payout of theirs another member vetoed. Counted as it
+//!   happens (`quality:<account>`), from the upgrade on: nothing before it is counted.
+//! - **A referral board between federation co-ops** (0.3.5): the founding agent (directly, or anyone with its signature,
+//!   as for `agent_propose_bylaws`) posts a job it passes to a sister co-op (`post_referral`); the last 200 are kept.
+//!
 //! State lives under its own storage keys, so the upgrade needs no state migration.
 
 use crate::tasks::{load, save};
 use crate::*;
+
+const KEY_REFERRAL_COUNT: &[u8] = b"referral_count";
+/// Referral signatures consumed so far: only ever goes up (separate from the by-laws proposals' nonce).
+const KEY_REFERRAL_NONCE: &[u8] = b"referral_nonce";
+/// Referrals kept: older ones are removed as new ones are posted.
+pub const MAX_REFERRALS: u32 = 200;
+const MAX_REFERRAL_REASON: usize = 280;
+
+fn referral_key(id: u32) -> Vec<u8> {
+    format!("referral:{id}").into_bytes()
+}
+fn quality_key(a: &AccountId) -> Vec<u8> {
+    format!("quality:{a}").into_bytes()
+}
+
+/// A member's task record for the reputation factor (0.3.5).
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Default, PartialEq, Debug)]
+pub struct TaskQuality {
+    /// tasks delivered and paid
+    pub paid: u32,
+    /// tasks taken and handed back
+    pub handed_back: u32,
+    /// payouts on trust another member vetoed
+    pub vetoed: u32,
+}
+
+/// Called from tasks.rs where a task is paid, handed back or vetoed.
+pub(crate) fn note_task(a: &AccountId, f: impl FnOnce(&mut TaskQuality)) {
+    let mut q: TaskQuality = load(&quality_key(a)).unwrap_or_default();
+    f(&mut q);
+    save(&quality_key(a), &q);
+}
+
+/// What the agent signs to pass a job to a sister co-op (bound to this contract and to the referral nonce).
+pub fn referral_message(contract: &AccountId, nonce: u32, job_id: &str, to_coop: &AccountId, budget_usdc: u128, reason: &str) -> String {
+    format!("koperasi-agent-referral/1 {contract} #{nonce} {job_id} {to_coop} {budget_usdc}
+{reason}")
+}
+
+/// A job the agent passed to a sister co-op.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Referral {
+    pub id: u32,
+    pub job_id: String,
+    pub to_coop: AccountId,
+    pub budget_usdc: U128,
+    pub reason: String,
+    pub at: U64,
+}
 
 const KEY_AGENT_SHARE: &[u8] = b"agent_share_bps";
 const KEY_AGENT_SHU: &[u8] = b"agent_shu_total";
@@ -161,8 +218,12 @@ impl Koperasi {
             }
             if self.in_good_standing(a) && w > 0 {
                 // 0.3.4: weighted by how the member's judgments held up in court (x100 to keep the fraction)
-                let (good, bad) = court_record(&cases, a);
-                out.push((a.clone(), w as u128 * 100 * (good as u128 + 2) / (bad as u128 + 2)));
+                // 0.3.5: and by their tasks: paid for them; handed back or vetoed against them
+                let (court_good, court_bad) = court_record(&cases, a);
+                let q: TaskQuality = load(&quality_key(a)).unwrap_or_default();
+                let good = court_good as u128 + q.paid as u128;
+                let bad = court_bad as u128 + q.handed_back as u128 + q.vetoed as u128;
+                out.push((a.clone(), w as u128 * 100 * (good + 2) / (bad + 2)));
             }
         }
         out
@@ -307,5 +368,47 @@ impl Koperasi {
     /// Each member's reputation weight if a dividend were paid now (good standing, weight > 0).
     pub fn get_reputation_weights(&self) -> Vec<(AccountId, U128)> {
         self.reputation_weights(false).into_iter().map(|(a, w)| (a, U128(w))).collect()
+    }
+
+    /// An account's task record for the reputation factor (counted from 0.3.5 on).
+    pub fn get_task_quality(&self, account_id: AccountId) -> TaskQuality {
+        load(&quality_key(&account_id)).unwrap_or_default()
+    }
+
+    // ---------- the referral board (0.3.5) ----------
+
+    /// The founding agent passes a job to a sister co-op: directly, or anyone submitting the agent's ed25519 signature
+    /// (base64) of `get_referral_message(...)`. Returns the referral's id.
+    pub fn post_referral(&mut self, job_id: String, to_coop: AccountId, budget_usdc: U128, reason: String, signature: Option<String>) -> u32 {
+        require!(!self.paused, "koperasi is paused");
+        let nonce: u32 = load(KEY_REFERRAL_NONCE).unwrap_or(0);
+        crate::meeting::assert_agent_or_signed(&self.agent_id, signature.as_deref(),
+            || referral_message(&env::current_account_id(), nonce, &job_id, &to_coop, budget_usdc.0, &reason));
+        // fixed fields first, separated by spaces, the free text last: the signed text reads one way only
+        require!(!job_id.is_empty() && job_id.len() <= 128 && job_id.bytes().all(|b| b.is_ascii_graphic()), "job_id: 1 to 128 characters, no spaces");
+        require!(!reason.trim().is_empty() && reason.len() <= MAX_REFERRAL_REASON, "reason: 1 to 280 characters");
+        require!(self.get_sister_coops().contains(&to_coop), "not a sister co-op the members recognise");
+        save(KEY_REFERRAL_NONCE, &(nonce + 1)); // a signature counts once
+        let id: u32 = load(KEY_REFERRAL_COUNT).unwrap_or(0);
+        save(KEY_REFERRAL_COUNT, &(id + 1));
+        if id >= MAX_REFERRALS {
+            env::storage_remove(&referral_key(id - MAX_REFERRALS));
+        }
+        save(&referral_key(id), &Referral { id, job_id: job_id.clone(), to_coop: to_coop.clone(), budget_usdc, reason, at: U64(env::block_timestamp()) });
+        Event::JobReferred { id, job_id, to_coop, budget_usdc }.emit();
+        id
+    }
+
+    /// The exact text the agent signs for its next `post_referral`.
+    pub fn get_referral_message(&self, job_id: String, to_coop: AccountId, budget_usdc: U128, reason: String) -> String {
+        referral_message(&env::current_account_id(), load(KEY_REFERRAL_NONCE).unwrap_or(0), &job_id, &to_coop, budget_usdc.0, &reason)
+    }
+
+    /// Referrals still kept (the last 200), oldest first from `from`; at most `limit` (50 by default, 200 at most).
+    pub fn get_referrals(&self, from: Option<u32>, limit: Option<u32>) -> Vec<Referral> {
+        let n: u32 = load(KEY_REFERRAL_COUNT).unwrap_or(0);
+        let from = from.unwrap_or(0).max(n.saturating_sub(MAX_REFERRALS));
+        let to = n.min(from.saturating_add(limit.unwrap_or(50).min(MAX_REFERRALS)));
+        (from..to).filter_map(|i| load(&referral_key(i))).collect()
     }
 }
