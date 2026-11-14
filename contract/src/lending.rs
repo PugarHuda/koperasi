@@ -560,7 +560,12 @@ impl Koperasi {
         let interest = (amount - take).min(due - paid);
         if interest > 0 {
             save(&sister_interest_key(id), &(U128(due), U128(paid + interest)));
-            self.forward_to_dao(interest);
+            // 0.3.9: the federation dividend's part to the other sister co-ops' treasuries; the rest to the DAO as before
+            let coop = l.coop.clone();
+            let rest = self.pay_federation_dividend(id, &coop, interest);
+            if rest > 0 {
+                self.forward_to_dao(rest);
+            }
             Event::SisterInterest { id, coop: l.coop.clone(), amount: U128(interest) }.emit();
         }
         let outstanding = left - take + due - paid - interest;
@@ -591,6 +596,7 @@ impl Koperasi {
         // the sister's contract cannot spend or return USDC: the loan goes to the treasury the members name (its DAO)
         require!(paid_to != coop && paid_to != env::current_account_id(), "pay the sister's treasury (its DAO), not a contract");
         require!(amount.0 > 0 && amount.0 <= risk_fund() * SISTER_CAP_BPS / 10_000, "at most half the risk fund");
+        let (score, cap) = self.assert_credit_cap(&coop, amount.0); // 0.3.9
         require!(sister_late_count(&coop) == 0, "a loan to this co-op went late");
         require!(crate::solidarity::late_elsewhere(&coop).is_none(), "a sister co-op noted this co-op late");
         let mut all = sister_loans();
@@ -609,12 +615,14 @@ impl Koperasi {
         if all.len() > MAX_SISTER_LOANS {
             if let Some(i) = all.iter().position(|l| matches!(l.status, SisterLoanStatus::Repaid | SisterLoanStatus::Failed)) {
                 env::storage_remove(&sister_interest_key(all[i].id));
+                env::storage_remove(&dividend_key(all[i].id));
                 all.remove(i);
             }
         }
         save(KEY_SISTER_LOANS, &all);
         take_risk(amount.0);
         crate::bump(crate::KEY_IN_FLIGHT, amount.0, false);
+        Event::CoopCreditCap { coop: coop.clone(), score, cap: U128(cap) }.emit();
         Event::SisterLoan { id, coop: coop.clone(), paid_to: paid_to.clone(), amount, due }.emit();
         ext_ft::ext(self.usdc_id.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
@@ -744,7 +752,8 @@ impl Koperasi {
         require!((1..=365).contains(&days), "term 1 to 365 days");
         require!(interest_bps <= MAX_SISTER_INTEREST_BPS, "interest at most 2000 bps");
         require!(amount.0 > 0 && amount.0 <= risk_fund() * SISTER_CAP_BPS / 10_000, "at most half the risk fund");
-        require!(sister_late_count(&coop) == 0 && crate::solidarity::late_elsewhere(&coop).is_none(), "this co-op was late on a loan");
+        self.assert_credit_cap(&coop, amount.0); // 0.3.9
+        require!(sister_late_count(&coop) == 0 &&crate::solidarity::late_elsewhere(&coop).is_none(), "this co-op was late on a loan");
         require!(!sister_loans().iter().any(|l| l.coop == coop && matches!(l.status, SisterLoanStatus::Open | SisterLoanStatus::Late)),
             "a loan to this co-op is still open");
         let now = env::block_timestamp();
@@ -803,5 +812,138 @@ impl Koperasi {
     /// (loan id, interest due, interest paid) for every sister loan still kept.
     pub fn get_sister_interest(&self) -> Vec<(u32, U128, U128)> {
         sister_loans().iter().map(|l| { let (d, p) = sister_interest(l.id); (l.id, U128(d), U128(p)) }).collect()
+    }
+}
+
+// ---------- 0.3.9: binding federation credit; the federation dividend ----------
+//
+// A sister co-op's credit score, the rule web/coops.html shows: 100, -40 for each loan to it that went late (this
+// co-op's count, plus each sister's "late elsewhere" note), -10 for each open loan to it past due, +5 for each loan repaid
+// on time; between 0 and 100. `lend_to_sister` and the agent's suggestion lend at most half the risk fund x score/100.
+// The late and open-loan refusals of 0.3.6 still stand after it.
+//
+// The federation dividend: the members vote a share (`set_federation_dividend`, bps) of each sister loan's interest
+// that is split equally among the treasuries (`set_coop_treasury`) of the other sister co-ops; the rest goes to the DAO
+// as before. A failed transfer goes to the DAO's unforwarded balance (`flush_to_dao`): never sent twice.
+
+const KEY_FED_DIVIDEND: &[u8] = b"federation_dividend_bps";
+const MAX_DIVIDEND_RECIPIENTS: usize = 20;
+const GAS_DIVIDEND_PAID: Gas = Gas::from_tgas(5);
+
+fn dividend_key(id: u32) -> Vec<u8> {
+    format!("federation_dividend:{id}").into_bytes()
+}
+
+/// A sister co-op's federation credit, as this co-op's contract sees it.
+#[near(serializers = [json])]
+pub struct CoopCredit {
+    pub score: u32,
+    /// loans to it called late here, plus the sister co-ops noting it late
+    pub late: u32,
+    pub open_past_due: u32,
+    /// loans to it still kept here, repaid and never late
+    pub repaid_on_time: u32,
+}
+
+/// What a sister loan's interest paid one treasury, all payments together; `failed` went to the DAO instead.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct DividendPaid {
+    pub to: AccountId,
+    pub amount: U128,
+    pub failed: U128,
+}
+
+impl Koperasi {
+    /// Refuses `amount` over half the risk fund x the co-op's score / 100. Returns (score, cap).
+    fn assert_credit_cap(&self, coop: &AccountId, amount: u128) -> (u32, u128) {
+        let score = self.get_coop_credit(coop.clone()).score;
+        require!(score > 0, "federation credit score 0/100: this co-op cannot borrow");
+        let cap = risk_fund() * SISTER_CAP_BPS / 10_000 * score as u128 / 100;
+        require!(amount <= cap, format!("federation credit score {score}/100: at most {cap} (half the risk fund x score/100)"));
+        (score, cap)
+    }
+
+    /// The federation dividend of `interest` paid on sister loan `id` by `borrower`: sent to the other sister co-ops'
+    /// treasuries in equal parts. Returns what is left for the DAO.
+    fn pay_federation_dividend(&mut self, id: u32, borrower: &AccountId, interest: u128) -> u128 {
+        let bps = load::<u16>(KEY_FED_DIVIDEND).unwrap_or(0) as u128;
+        if bps == 0 {
+            return interest;
+        }
+        let to: Vec<AccountId> = self.get_sister_coops().iter().filter(|c| *c != borrower)
+            .filter_map(|c| self.get_coop_treasury(c.clone())).take(MAX_DIVIDEND_RECIPIENTS).collect();
+        if to.is_empty() {
+            return interest;
+        }
+        let each = interest * bps / 10_000 / to.len() as u128;
+        if each == 0 {
+            return interest;
+        }
+        let mut paid: Vec<DividendPaid> = load(&dividend_key(id)).unwrap_or_default();
+        for t in &to {
+            match paid.iter_mut().find(|p| p.to == *t) {
+                Some(p) => p.amount.0 += each,
+                None => paid.push(DividendPaid { to: t.clone(), amount: U128(each), failed: U128(0) }),
+            }
+            crate::bump(crate::KEY_IN_FLIGHT, each, false);
+            Event::FederationDividend { loan_id: id, to: t.clone(), amount: U128(each) }.emit();
+            let _ = ext_ft::ext(self.usdc_id.clone())
+                .with_attached_deposit(NearToken::from_yoctonear(1))
+                .with_static_gas(crate::GAS_FT_TRANSFER)
+                .ft_transfer(t.clone(), U128(each), Some(format!("Koperasi federation dividend, sister loan #{id}")))
+                .then(Self::ext(env::current_account_id()).with_static_gas(GAS_DIVIDEND_PAID).on_federation_dividend(id, t.clone(), U128(each)));
+        }
+        save(&dividend_key(id), &paid);
+        interest - each * to.len() as u128
+    }
+}
+
+#[near]
+impl Koperasi {
+    /// A sister co-op's federation credit score (no record: 100) and what it is made of.
+    pub fn get_coop_credit(&self, coop: AccountId) -> CoopCredit {
+        let now = env::block_timestamp();
+        let loans = sister_loans();
+        let mine = loans.iter().filter(|l| l.coop == coop);
+        let open_past_due = mine.clone().filter(|l| l.status == SisterLoanStatus::Open && l.due.0 < now).count() as u32;
+        // ponytail: only loans still kept (the last 100) count as repaid on time; the late count is kept for good
+        let repaid_on_time = mine.filter(|l| l.status == SisterLoanStatus::Repaid && !l.was_late).count() as u32;
+        let late = sister_late_count(&coop) + self.get_late_elsewhere(coop).len() as u32;
+        let score = (100 - 40 * late as i64 - 10 * open_past_due as i64 + 5 * repaid_on_time as i64).clamp(0, 100) as u32;
+        CoopCredit { score, late, open_past_due, repaid_on_time }
+    }
+
+    /// DAO only: the share (bps, at most 10000) of each sister loan's interest split among the other sister co-ops'
+    /// treasuries (0: all of it to the DAO, as before).
+    pub fn set_federation_dividend(&mut self, bps: u16) {
+        self.assert_dao();
+        require!(bps <= 10_000, "at most 10000 bps");
+        save(KEY_FED_DIVIDEND, &bps);
+        Event::FederationDividendSet { bps }.emit();
+    }
+
+    pub fn get_federation_dividend(&self) -> u16 {
+        load(KEY_FED_DIVIDEND).unwrap_or(0)
+    }
+
+    /// What sister loan `loan_id`'s interest paid each treasury as federation dividend (kept while the loan is kept).
+    pub fn get_federation_dividend_paid(&self, loan_id: u32) -> Vec<DividendPaid> {
+        load(&dividend_key(loan_id)).unwrap_or_default()
+    }
+
+    /// Callback of a federation dividend's transfer: failed, the amount goes to the DAO's unforwarded balance.
+    #[private]
+    pub fn on_federation_dividend(&mut self, loan_id: u32, to: AccountId, amount: U128, #[callback_result] r: Result<(), PromiseError>) {
+        crate::bump(crate::KEY_IN_FLIGHT, amount.0, true);
+        if r.is_err() {
+            self.unforwarded += amount.0;
+            let mut paid: Vec<DividendPaid> = load(&dividend_key(loan_id)).unwrap_or_default();
+            if let Some(p) = paid.iter_mut().find(|p| p.to == to) {
+                p.failed.0 += amount.0;
+                save(&dividend_key(loan_id), &paid);
+            }
+            Event::FederationDividendFailed { loan_id, to, amount }.emit();
+        }
     }
 }
