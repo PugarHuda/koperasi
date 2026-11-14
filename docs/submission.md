@@ -4,7 +4,7 @@ Every number and transaction here can be checked on testnet; see [reports/03-con
 The video and the deck must be recorded and made by the builder, because they need a face, a voice and a screen. This
 file is the script.
 
-## Demo video script (the 2:03 cut; the full video is 4:24)
+## Demo video script (an early 2:03 draft; the final video is 4:33, `video/out/koperasi.mp4`, with a 60-second cut, `video/out/koperasi-60.mp4`)
 
 | Time | Screen | Narration |
 |---|---|---|
@@ -52,8 +52,16 @@ built on an unmodified Sputnik DAO (no new multisig):
   and a social fund, mandatory dues, members standing surety for each other, savings and loans with credit from the
   record, an annual members' meeting whose report the agent writes in a TEE, pledges of work, and a court drawn at
   random with evidence from both sides and appeal to every member.
-- **Proof:** contract 0.3.6 upgraded only by vote (#144), 0 full-access keys, rebuilt byte for byte from source; 176
-  contract tests; 19 attacks sent to the live co-op, all refused on-chain; `verify` checks 92 claims.
+- **Co-ops that lend and refer to each other:** referrals both ways (the sister co-op's contract reads this co-op's
+  board itself); loans to a sister co-op's DAO from the risk fund, repaid by the sister's own vote; since 0.3.7 at
+  interest, paid into the surplus (loan #2, 1 USDC at 5%, repaid 1.05 by the sister's #32), and the agent itself can ask
+  the members for such a loan (#151, filed by the contract from its signed request).
+- **Reputation where it fits:** technical polls weigh each member's reputation (#145; poll #0 280/220), general ones
+  stay one member one vote; a technical poll's winning by-laws become a DAO proposal; juries can be drawn by
+  reputation, square-root flattened so no one member captures the draw (#150).
+- **Proof:** contract 0.3.7 upgraded only by vote (#149, the sister co-op by its #31), 0 full-access keys on both co-ops,
+  rebuilt byte for byte from source (sha256 `e142e3d1…`); 189 contract tests; 19 attacks sent to the live co-op, all
+  refused on-chain; `verify` checks 95 claims. A docs page (`/docs.html`) explains it in English and Bahasa Indonesia.
 
 **Autonomous Business / Agent Economy.** The DAO owns the agent, and the agent is a member that answers for itself:
 - **What it may do:** its prompt, model, prices and markets are by-laws pinned by hash, checked in an Intel TDX enclave
@@ -68,15 +76,21 @@ built on an unmodified Sputnik DAO (no new multisig):
   in court, into a risk fund that refunded a buyer at once when a jury upheld a case (#10), with no vote needed.
 - **It trades with other co-ops' agents:** a job below its members' price went, by its own decision, to the sister
   co-op whose voted price fit; that agent did it and paid the 30% the federation set (#27).
-- **Judged by others:** 3 jobs won on Taskbond, another team's testnet market, 95/100 each.
-- **Who can stop it:** the court suspended it after three upheld cases and the members reinstated it (#100).
+- **Judged by others:** 6 jobs won on Taskbond, another team's testnet market (95, 95, 95, 95, 85, 85/100); #18 was
+  posted by a fresh wallet funded only by the testnet faucet.
+- **Who can stop it:** the court suspended it after three upheld cases and the members reinstated it (#100); later,
+  for real, two more upheld cases suspended it again, and the members approved a recovery plan by its sha256 (#148):
+  its profit share climbs back from 25% over 30 days.
+- **Paid where members live:** NEAR Intents payouts on Base and Arbitrum Sepolia, each checked on both sides (the
+  agent's signed `ft_withdraw` on NEAR and the token transfer on the other chain).
 - **Shade Agent, live:** a worker in a Phala TDX VM, its key made in the TEE, had its attestation verified on-chain
   (dcap-qvl) by a registry the co-op's DAO owns, against the code and machine the members approved (#137); admitted
   TEE-only (#138), it passed the by-laws gate in an enclave and recorded its receipt from inside the TEE.
 
 **Honest limits.** The members and buyers are the builder's testnet accounts; Agent Market and NEAR Intents have no
 testnet (the Intents wallet runs on Tidepool's mirror); no loan has been late on testnet yet (the grace is 7 days), so
-late loans told to sister co-ops are proven by contract tests.
+late loans told to sister co-ops are proven by contract tests. Private push topics run in GitHub Actions; the Vercel
+API that hands a member their topic still needs `NOTIFY_SECRET` set.
 
 ## X post (draft, a thread of 3; attach the video to the first)
 
@@ -110,10 +124,10 @@ late loans told to sister co-ops are proven by contract tests.
 
 - [x] Repo with README: one-liner and positioning at the top, live demo link, per-track evidence, contract addresses, setup and tests
 - [x] Live page: https://koperasi-kohl.vercel.app
-- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `98c1e7fd…`, 0.3.6, proposal #144; CI rebuilds it weekly)
+- [x] Contract running code chosen by vote, reproducible rebuild = on-chain hash (sha256 `e142e3d1…`, 0.3.7, proposal #149; CI rebuilds it weekly)
 - [x] CI: lint, typecheck, unit, contract, Playwright, npm audit, `npm run verify` (daily)
 - [x] Security rounds 1–14 ([05-security](reports/05-security.md)); 19 attacks refused on-chain, re-sent weekly in CI
-- [x] **Demo video**: `video/out/koperasi.mp4` (4:24) and the 30-second opening `video/out/intro30.mp4`; attach the 30-second one to the X post
+- [x] **Demo video**: `video/out/koperasi.mp4` (4:33), the 60-second cut `video/out/koperasi-60.mp4` and the 30-second opening `video/out/intro30.mp4`; attach the 60-second cut to the X post
 - [x] **Pitch deck**: 9 slides built from the outline above (shared by the builder as a link)
 - [x] **Repo public** (since 12 Nov)
 - [ ] **Submission form** before 14 Nov 23:59 UTC (06:59 WIB on 15 Nov)

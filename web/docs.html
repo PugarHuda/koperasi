@@ -182,25 +182,30 @@
                 memegang uang. Ia boleh mengusulkan anggaran dasar baru dari catatannya sendiri (ia menandatangani, kontrak mengajukan usulan DAO dan
                 tidak ikut memilih); anggota yang memutuskan.</dd></div>
             <div><dt><span lang="en">The court</span><span lang="id">Pengadilan</span></dt>
-              <dd lang="en">A random jury of three; an appeal to every member (1 NEAR bond, 7 days). Each upheld case against the agent is a strike:
+              <dd lang="en">A jury of three drawn at random (since 0.3.7, by reputation weight flattened by a square root, as the members voted in #150); an appeal to every member (1 NEAR bond, 7 days). Each upheld case against the agent is a strike:
                 its daily inference budget and profit share halve per strike in 90 days. Three strikes suspend it until the members reinstate it or
                 approve a recovery plan by its sha256; its share then climbs back from 25% over 30 days.</dd>
-              <dd lang="id">Juri tiga orang yang diundi; banding ke semua anggota (jaminan 1 NEAR, 7 hari). Setiap perkara yang dikabulkan terhadap
+              <dd lang="id">Juri tiga orang yang diundi (sejak 0.3.7 menurut bobot reputasi yang diratakan dengan akar kuadrat, sesuai suara anggota #150); banding ke semua anggota (jaminan 1 NEAR, 7 hari). Setiap perkara yang dikabulkan terhadap
                 agen adalah satu strike: anggaran inferensi harian dan bagian SHU-nya berkurang separuh per strike dalam 90 hari. Tiga strike
                 menangguhkannya sampai anggota memulihkannya atau menyetujui rencana pemulihan lewat sha256-nya; bagiannya lalu naik lagi dari 25%
                 selama 30 hari.</dd></div>
             <div><dt><span lang="en">The federation</span><span lang="id">Federasi</span></dt>
               <dd lang="en">A secondary co-op: a Sputnik DAO whose only members are co-ops' DAOs, each voting there only by its own members' proposal.
                 Sister co-ops count each other's work records and credit (the passport), refer jobs both ways (30% to the co-op that brought the job),
-                lend to each other, and are bound by its resolutions: its 2% loan ceiling is written into each contract.</dd>
+                lend to each other (at interest, paid into the lender's surplus; the agent may ask the members for such a loan), and are bound by
+                its resolutions: its 2% ceiling on members' loans is written into each contract.</dd>
               <dd lang="id">Koperasi sekunder: Sputnik DAO yang anggotanya hanya DAO koperasi, masing-masing memilih di sana hanya lewat usulan anggotanya
                 sendiri. Koperasi saudara saling menghitung catatan kerja dan kredit (paspor), saling merujuk pekerjaan (30% untuk koperasi yang membawa
-                pekerjaan), saling meminjamkan, dan terikat resolusinya: batas bunga pinjaman 2% tertulis di setiap kontrak.</dd></div>
+                pekerjaan), saling meminjamkan (dengan bunga yang masuk ke SHU pemberi pinjaman; agen boleh mengusulkan pinjaman seperti itu kepada
+                anggota), dan terikat resolusinya: batas bunga pinjaman anggota 2% tertulis di setiap kontrak.</dd></div>
             <div><dt><span lang="en">Technical polls</span><span lang="id">Jajak pendapat teknis</span></dt>
               <dd lang="en">Polls record what members think and bind nothing. General polls are one member, one vote. Technical ones weigh each vote
-                by the member's reputation weight, because the members voted so; poll #0 closed 280 to 220.</dd>
+                by the member's reputation weight, because the members voted so; poll #0 closed 280 to 220. Since 0.3.7 an option of a technical poll
+                can carry by-laws: when the poll closes, the contract files the winning by-laws as a DAO proposal, and the members still vote it.</dd>
               <dd lang="id">Jajak pendapat mencatat pendapat anggota dan tidak mengikat. Yang umum tetap satu anggota satu suara. Yang teknis menimbang
-                setiap suara dengan bobot reputasi anggota, karena anggota memutuskan begitu; jajak #0 ditutup 280 lawan 220.</dd></div>
+                setiap suara dengan bobot reputasi anggota, karena anggota memutuskan begitu; jajak #0 ditutup 280 lawan 220. Sejak 0.3.7 pilihan
+                jajak teknis bisa membawa anggaran dasar: saat jajak ditutup, kontrak mengajukan anggaran dasar pemenang sebagai usulan DAO, dan
+                anggota tetap memilihnya.</dd></div>
           </dl>
         </section>
 
@@ -208,13 +213,13 @@
           <h2 id="trust"><span lang="en">Trust &amp; verification</span><span lang="id">Kepercayaan &amp; verifikasi</span></h2>
           <ul>
             <li lang="en"><b>No one changes the code alone.</b> The contract account has 0 full-access keys. Its code is a global contract the members
-              switch to by vote; contract 0.3.6 is live by DAO proposal #144.</li>
+              switch to by vote; contract 0.3.7 is live by DAO proposal #149 (the sister co-op by its own #31, also with 0 full-access keys).</li>
             <li lang="id"><b>Tak seorang pun mengubah kode sendirian.</b> Akun kontrak punya 0 kunci akses penuh. Kodenya kontrak global yang dipilih
-              anggota lewat suara; kontrak 0.3.6 berlaku lewat usulan DAO #144.</li>
+              anggota lewat suara; kontrak 0.3.7 berlaku lewat usulan DAO #149 (koperasi saudara lewat usulannya sendiri #31, juga dengan 0 kunci akses penuh).</li>
             <li lang="en"><b>A reproducible build.</b> <code>cargo near build reproducible-wasm</code> rebuilds the code byte for byte: sha256
-              <code>98c1e7fd…</code>, the hash on chain. CI rebuilds it every week.</li>
+              <code>e142e3d1…</code>, the hash on chain. CI rebuilds it every week.</li>
             <li lang="id"><b>Build yang dapat direproduksi.</b> <code>cargo near build reproducible-wasm</code> membangun ulang kode byte demi byte:
-              sha256 <code>98c1e7fd…</code>, sama dengan hash di chain. CI membangunnya ulang setiap minggu.</li>
+              sha256 <code>e142e3d1…</code>, sama dengan hash di chain. CI membangunnya ulang setiap minggu.</li>
             <li lang="en"><b>TEE proofs.</b> The by-laws gate runs in an Intel TDX enclave (OutLayer) and its transaction is on the receipt. The model's
               Intel TDX and NVIDIA GPU attestation is on the receipt too, and the landing page checks it against a nonce your browser makes.</li>
             <li lang="id"><b>Bukti TEE.</b> Gerbang anggaran dasar berjalan di enklave Intel TDX (OutLayer) dan transaksinya ada di tanda terima.
@@ -233,9 +238,9 @@
               jaminannya. Dibiarkan terlihat, bukan ditutupi.</li>
           </ul>
           <h3><span lang="en">Check every claim yourself</span><span lang="id">Periksa sendiri setiap klaim</span></h3>
-          <p lang="en">Read-only, no wallet, no keys, no clone (Node 20 or later). It reads 92 claims from NEAR, Ethereum, Base and Arbitrum testnets
+          <p lang="en">Read-only, no wallet, no keys, no clone (Node 20 or later). It reads 95 claims from NEAR, Ethereum, Base and Arbitrum testnets
             and ends with <code>every claim checks out</code>:</p>
-          <p lang="id">Hanya baca, tanpa dompet, kunci, atau clone (Node 20 ke atas). Ia membaca 92 klaim dari testnet NEAR, Ethereum, Base, dan
+          <p lang="id">Hanya baca, tanpa dompet, kunci, atau clone (Node 20 ke atas). Ia membaca 95 klaim dari testnet NEAR, Ethereum, Base, dan
             Arbitrum dan berakhir dengan <code>every claim checks out</code>:</p>
           <pre><code>curl -sO https://koperasi-kohl.vercel.app/verify.mjs &amp;&amp; node verify.mjs</code></pre>
           <p lang="en">From a checkout: <code>npm install &amp;&amp; npm run verify</code>. CI runs it every day.</p>
@@ -264,10 +269,12 @@
               reputasi (10%, menurut catatan setiap anggota), dan 5% untuk agen; sisanya menurut simpanan dan poin kontribusi.</li>
             <li lang="en"><b>The risk fund and the agent's savings.</b> The contract holds a risk fund. The agent saves 10% of every earnings deposit
               into it and gets 5% of every share (halved per strike, none while suspended). It refunds an upheld case against the agent at once,
-              with no proposal, and can lend a sister co-op up to half of it.</li>
+              with no proposal, and can lend a sister co-op up to half of it, at interest: loan #2, 1 USDC at 5% for 30 days, came back as
+              1.05 USDC, the interest into the treasury.</li>
             <li lang="id"><b>Dana risiko dan simpanan agen.</b> Kontrak memegang dana risiko. Agen menyimpan 10% dari setiap setoran pendapatan ke
               sana dan mendapat 5% dari setiap pembagian (berkurang separuh per strike, nol saat ditangguhkan). Dana ini langsung mengembalikan uang
-              atas perkara yang dikabulkan terhadap agen, tanpa usulan, dan bisa dipinjamkan ke koperasi saudara hingga separuhnya.</li>
+              atas perkara yang dikabulkan terhadap agen, tanpa usulan, dan bisa dipinjamkan ke koperasi saudara hingga separuhnya, dengan bunga:
+              pinjaman #2, 1 USDC dengan bunga 5% selama 30 hari, kembali 1,05 USDC, bunganya masuk ke kas.</li>
             <li lang="en"><b>Loans.</b> From a loan fund the members voted: at most 0.5 NEAR times the borrower's credit score out of 10, 30 days,
               2% flat, with a member standing surety (<i>tanggung renteng</i>). The federation's ceiling caps the rate in the code.</li>
             <li lang="id"><b>Pinjaman.</b> Dari dana pinjaman yang dipilih anggota: paling banyak 0,5 NEAR dikali skor kredit peminjam dari 10,

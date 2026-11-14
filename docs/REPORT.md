@@ -9,6 +9,26 @@ Per-phase detail is in [`docs/reports/`](reports), each with a *12 Nov* pass at 
 [05 security](reports/05-security.md) (round 7) · [06 QA](reports/06-qa.md) · [submission materials](submission.md) ·
 [the judges' checklist](../JUDGE.md).
 
+## 14 Nov: what is live now
+
+This report was written on 12 Nov; the sections below keep that day's numbers. Since then:
+
+- **Contract 0.3.7**, by vote #149 (the sister co-op by its own #31), global code `GAKtcBv8…`, reproducible, sha256
+  `e142e3d1…`; both co-ops have 0 full-access keys. 0.3.5 (#143) added task quality in the reputation weight and the
+  referral board; 0.3.6 (#144) referrals both ways, loans between co-ops, reputation-weighed technical polls and
+  recovery after a strike; 0.3.7 interest on loans between co-ops (paid into the surplus), loans the agent asks the
+  members for, juries drawn by reputation (square-root flattened) and a technical poll's winning by-laws filed as a DAO
+  proposal.
+- **On-chain since:** loan #1 to the sister co-op (#147), repaid by its #30; loan #2, asked for by the agent (#151), 1
+  USDC at 5%, repaid with 0.05 USDC interest by the sister's #32; juries by reputation (#150); poll #0 weighed 280/220
+  (#145); the agent's recovery for real (cases #11, #12, plan approved by its sha256 in #148); 6 Taskbond jobs won
+  (#13–#18), #18 from a fresh faucet-only wallet, `buyer-lda4zjo8.testnet`; NEAR Intents payouts checked on both sides.
+- **Pages:** the member dashboard (`/dashboard.html`, with the agent's report card), a docs page (`/docs.html`, 44-term
+  glossary), Bahasa Indonesia on the landing page, dashboard, work record and co-ops pages.
+- **Private push topics:** `NOTIFY_SECRET` is set in GitHub; Vercel still needs it before `/api/notify-topic` answers.
+- **Tests:** 189 contract tests, 48 unit tests; `npm run verify`: 95 checks, every claim checks out.
+- **Video:** 4:33, and a 60-second cut.
+
 ## 1. Judges' scorecard and the track's brief
 
 Our own estimate on the rubric (technical, design, impact, originality, sustainability), so read it as biased:
@@ -101,17 +121,18 @@ whole life on chain with an agent whose wallet and cross-chain payments answer t
 | | |
 |---|---|
 | Live page | https://koperasi-kohl.vercel.app |
-| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet), 0.2.8, global code `7bLZ4Sq9…`, sha256 `61f1fa38…`, proposal #82, 0 full-access keys |
+| Contract | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet), 0.3.7, global code `GAKtcBv8…`, sha256 `e142e3d1…`, proposal #149, 0 full-access keys (12 Nov: 0.2.8, #82) |
 | DAO | [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet) |
 | The DAO's Ethereum address | `0xb3dc0128b4a9804de94796480bef8ba014dfca7d` (Chain Signatures) |
 | The agent's Intents wallet | `agent_7faa1d7f6f2be9e778c9fd18` (Tidepool testnet), owner: the address above |
 | Every co-op from this repo | https://koperasi-kohl.vercel.app/coops.html |
-| Video | rendered: 4:24, and a 2:03 cut for X (`video/`); not posted yet |
+| Docs | https://koperasi-kohl.vercel.app/docs.html (English and Bahasa Indonesia) |
+| Video | rendered: 4:33, and a 60-second cut (`video/`) |
 
 ## 9. Blockers (only what needs you)
 
 1. **Submit the form** on nearhackathon.com before 14 Nov 23:59 UTC (it cannot be edited after).
-2. **Post on X** with the 2:03 video (draft in [submission.md](submission.md)).
+2. **Post on X** with the 60-second video (draft in [submission.md](submission.md)).
 3. **Real members:** 2–3 people outside the builder, through a member's invite link with a signed vouch.
 4. **A real Agent Market job:** the agent has bid on every matching job; a buyer has to award one.
 5. **Mainnet:** not deployed, by choice (rule 7: it needs real NEAR and your decision).

@@ -42,11 +42,19 @@ Second project by the same builder, independent of this one: [Pusaka](https://gi
 https://pusaka-two.vercel.app), NEAR NFTs that hold real Bitcoin through Chain Signatures: sell the NFT and the
 Bitcoin goes with it (tracks NFTs That Do Something, Unstoppable DeFi, Open Innovation).
 
+Screenshots of the live site, 14 Nov (every number on them is read from NEAR testnet when the page loads):
+
 | The live page: who controls the agent, read from the DAO | Tasks paid from the treasury, by earned trust or by vote |
 |---|---|
-| [![Who controls this AI agent](docs/img/page-top.png)](https://koperasi-kohl.vercel.app) | [![Tasks and trust](docs/img/page-trust.png)](https://koperasi-kohl.vercel.app/#trust) |
-| **What members owe each other: pledges, the co-op court, standing** | **A member's work record, read from the chain** |
-| [![Commons](docs/img/page-commons.png)](https://koperasi-kohl.vercel.app/#commons) | [`/cert.html?who=kop-alice-mw4i3w8f.testnet`](https://koperasi-kohl.vercel.app/cert.html?who=kop-alice-mw4i3w8f.testnet): pledges kept, jury duty, paid work, each traced to its transaction |
+| [![Who controls this AI agent](docs/img/page-top.jpg)](https://koperasi-kohl.vercel.app) | [![Tasks and trust](docs/img/page-trust.jpg)](https://koperasi-kohl.vercel.app/#trust) |
+| **What members owe each other: pledges, the co-op court, standing** | **The member dashboard: the co-op at a glance and what just happened on-chain** |
+| [![Commons](docs/img/page-commons.jpg)](https://koperasi-kohl.vercel.app/#commons) | [![Dashboard overview](docs/img/dash-overview.jpg)](https://koperasi-kohl.vercel.app/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/overview) |
+| **The agent's report card: its work and the outside market's scores** | **Federation: resolutions, the referral board, what the sister co-op accepted** |
+| [![Agent report](docs/img/dash-report.jpg)](https://koperasi-kohl.vercel.app/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/report) | [![Federation](docs/img/dash-federation.jpg)](https://koperasi-kohl.vercel.app/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/federation) |
+| **The docs page: what Koperasi is, a glossary, English and Bahasa** | **On a phone (390 px)** |
+| [![Docs](docs/img/docs-page.jpg)](https://koperasi-kohl.vercel.app/docs.html) | [![Phone](docs/img/mobile-landing.jpg)](https://koperasi-kohl.vercel.app) |
+
+A member's work record, read from the chain: [`/cert.html?who=kop-alice-mw4i3w8f.testnet`](https://koperasi-kohl.vercel.app/cert.html?who=kop-alice-mw4i3w8f.testnet) (pledges kept, jury duty, paid work, each traced to its transaction).
 
 ## Try it in 60 seconds
 
@@ -54,13 +62,14 @@ No wallet, no keys, no clone (Node 20+ for the last step).
 
 1. Bob's membership, read from the chain: <https://koperasi-kohl.vercel.app/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/membership>
 2. The agent's report card, judged as a member: <https://koperasi-kohl.vercel.app/dashboard.html?as=kop-bob-mw4i3w8f.testnet#/report>
-3. Every claim in this README, checked from testnet:
+3. What Koperasi is, in plain words (English and Bahasa Indonesia, a 44-term glossary): <https://koperasi-kohl.vercel.app/docs.html>
+4. Every claim in this README, checked from testnet (95 checks, about a minute):
 
    ```sh
    curl -sO https://koperasi-kohl.vercel.app/verify.mjs && node verify.mjs
    ```
 
-The longer walk-through is [For judges](#for-judges-60-seconds-no-wallet-no-keys) below and [`JUDGE.md`](JUDGE.md).
+Every page (landing, dashboard, work record, co-ops, docs) has a Bahasa Indonesia switch. The longer walk-through is [For judges](#for-judges-60-seconds-no-wallet-no-keys) below and [`JUDGE.md`](JUDGE.md).
 
 ## Architecture
 
@@ -102,6 +111,11 @@ Account names and the rest of the flow: [How it works](#how-it-works) and [`docs
   and their posters are the builder's accounts too. To test outside demand a fresh wallet, `buyer-lda4zjo8.testnet`, funded only by the NEAR
   testnet faucet and never a member, posted Taskbond job #18, which the agent won (85/100); it is still the builder's wallet,
   not a stranger's, and it has not bought a job directly in USDC yet (Circle's testnet USDC comes only from a web faucet).
+- **Push notifications are half wired.** A member's private ntfy topic (an HMAC of a secret only CI and the API hold,
+  handed out after a NEP-413 signature) works in the GitHub workflow, where `NOTIFY_SECRET` is set; the Vercel API that
+  hands members their topic does not have the secret yet, so `/api/notify-topic` cannot answer until it is added.
+- **Loans between co-ops are tiny.** Both were 1 USDC for 30 days; the 5% interest on loan #2 (0.05 USDC) came from the
+  steward's USDC (the agent's Agent Market earnings), because the sister co-op had no income of its own to pay it from.
 - **Everything is on NEAR testnet.** The money is testnet USDC and testnet NEAR; Sepolia and Base Sepolia for the
   payouts on other chains.
 - **The members are the builder's accounts.** 5 members in this co-op and 2 in the sister co-op, all made by the
@@ -121,7 +135,7 @@ quotes its line.
 | The members own the co-op, one vote each | DAO [`koperasi-mw4i2iwk.sputnik-v2.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.sputnik-v2.testnet): role `member`, RoleWeight, threshold 1/2 | *every member in the contract holds role `member`*; *one member, one vote* |
 | No role can act alone | `member` votes, `tasks` only files and approves transfers, outsiders only file proposals (with a bond) | *no role can act alone* |
 | The agent runs only by-laws the members voted | v3 by proposal #7 (a member found v2's model was not served), v4 by #55 (the steward's handover), v5 by #96 (a third-party testnet market, and profit shares on a schedule), v6 by #97 (deepseek-v3.2: TDX and 8 GPUs attested, 13 s where the reasoning model timed out), v7 by #124 (a price the agent itself proposed, below), v8 by #136 (written by the agent with the voted model in a TEE), v9 by #139 (the agent's, on a wrong average, below), v10 by #140 (the members restoring v8); the agent runs only `bc829c10…` | *the agent's by-laws … are the ones the members voted* |
-| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys (the sister co-op too, since 14 Nov: tx `Doqa4tni…`); upgrades only by vote, now #144 (0.3.6, a reproducible build) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
+| Nobody can change the code alone, the builder included | [`koperasi-mw4i2iwk.testnet`](https://testnet.nearblocks.io/address/koperasi-mw4i2iwk.testnet): 0 full-access keys (the sister co-op too, since 14 Nov: tx `Doqa4tni…`); upgrades only by vote, now #149 (0.3.7, global code `GAKtcBv8…`, a reproducible build, sha256 `e142e3d1…`; the sister co-op by its own #31) | *the contract runs the global contract the members voted*; *nobody holds a full-access key* |
 | The agent can only record receipts | `agent.koperasi-mw4i2iwk.testnet`: one function-call key, `record_receipt` / `update_receipt` | *the agent account has only function-call keys …* |
 | Small payouts on earned trust, from the treasury itself | Task #2 needed another member (#30); #3 and #4 paid on trust, no vote (#31, #34); #5, #6 (#44, #45). Each a DAO `Transfer` the contract filed | *task #n was paid from the treasury by DAO proposal #m, filed by the contract*; *the trust tiers were voted* |
 | Any member can stop a no-vote payout before it leaves | A 10-minute veto window by vote #62. Task #7 waited it out and anyone released it (#64). Task #8 was vetoed by bob ([3oQ43dwi…](https://testnet.nearblocks.io/txns/3oQ43dwiSW48PjG983VRL92Hgw4PJF13hGC1Ntc6qWWT)), so it needed one other member, and the steward approved it (#63) | *a payout on trust waits out the veto window the members voted* |
@@ -168,6 +182,7 @@ quotes its line.
 | Reputation weighs judgment, not only volume | Contract 0.3.4: a member's reputation weight is multiplied by (good + 2) / (bad + 2) from the court's last 200 cases: a juror who ruled with the outcome and a claimant whose case was upheld count for them, the opposite against. Share #135 paid it: the steward, with no work since the last dividend, got none (its weight decayed away); the vouched member, 8 rulings with the outcome and none against, weighs 5 times its work | *(weights: `get_reputation_weights`)* |
 | The agent passes on work it cannot take | `agent/route.mjs`, in the runtime: a job below its members' price goes to the cheapest sister co-op whose voted by-laws (sha256 checked against its contract) take it within the budget. A 4.5 USDC localization job went from the showcase (5 USDC) to the sister (4 USDC) by the agent's own decision ([`scripts/route-demo.mjs`](scripts/route-demo.mjs)); the sister's agent did it and its members paid the 30% (#27) | *work passes between the federation's co-ops …* |
 | The agent thinks about its by-laws by itself | `agent/propose.mjs`, in the runtime: when the members' interval has passed and 3 jobs settled under the current by-laws, it reads its record and writes a proposal with the voted model in a TEE, or proposes nothing | (the runtime's log; `web/agent-proposals/`) |
+| Polls that become by-laws, juries by reputation, loans at interest (0.3.7) | Contract 0.3.7, voted in by #149 (the sister co-op by its own #31). **Juries by reputation:** the members voted (#150) that the court draws jurors by reputation weight, flattened by a square root so no one member captures the draw. **The agent asks for a loan:** the agent signed a request to lend the sister co-op 1 USDC for 30 days at 5% (500 bps), a relayer submitted it, the contract checked the signature and filed DAO #151, and the members approved it (loan #2). **Interest into the surplus:** the sister's members repaid 1.05 USDC by their own vote (its #32): the principal back into the risk fund, the 0.05 USDC interest to the co-op's treasury (43.69 → 43.74 USDC), loan #2 Repaid. **A poll's by-laws become a proposal:** a technical poll may carry by-laws on an option; when it closes, the contract files the winner as a `set_config` DAO proposal for the members to vote. Poll #1 (keep v10, or v11: the prompt asks for a link to each cited source) is weighed by reputation, 480 to 260 so far; it closes at 12:30 UTC on 14 Nov | *court juries are drawn by reputation weight …*; *the agent asked the members to lend a sister co-op …*; *a sister co-op repaid a loan with interest …* |
 | Co-ops that refer, lend and recover (0.3.6) | Contract 0.3.6, voted in by #144 (the sister co-op by its own #29). **Referrals both ways:** the sister co-op's contract reads this co-op's referral board itself (a cross-contract call) and accepts the job, signed by its agent: referral #2 accepted, and a job that already has a receipt there is refused. **Loans between co-ops:** the members lend a sister co-op up to half the risk fund, paid to its DAO treasury (DAO #147: 1 USDC for 30 days; #146's first try bounced because the sister's DAO had no USDC storage, and the risk fund got it back). The sister repaid it by its own vote (its #30): loan #1 Repaid. **Reputation for technical questions only:** the members voted that technical polls weigh each member's reputation (#145); general ones stay one member one vote (poll #0: 280 vs 220). **Recovery after a strike, for real:** two more upheld cases (#11, #12, priced at a millionth of a USDC each) suspended the agent for a minute; the steward filed [a recovery plan](web/rat/recovery-plan.md), the members approved it by its sha256 (DAO #148), and the agent works again with its profit share climbing back from 25% over 30 days | *a referral closes the loop …*; *technical questions are weighed by reputation …*; *co-ops lend to each other …* |
 | Task quality and a referral board (0.3.5) | Contract 0.3.5, voted in by #143: the reputation factor also counts work: a paid task for the member (at most 10), a task handed back or a vetoed payout that was then cancelled against them. **Live:** bob handed back task #17 he never delivered and his weight fell 275 → 220. The agent's referrals to sister co-ops go on an on-chain board (`get_referrals`), signed by the agent (ed25519, its own nonce) and refused for a co-op that is not a sister, a suspended agent or an unattested TEE-only one. **Live:** referral #1, the job it passed to the sister co-op, submitted by a relayer | *the agent's referral of a job to a sister co-op is on the co-op's board …*; *task quality counts in the reputation weight …* |
 | Agents that must run in a TEE (Shade Agent) | Contract 0.3.4: the members named a TEE registry, [`kop-tee-mwfb5bj2.testnet`](https://testnet.nearblocks.io/address/kop-tee-mwfb5bj2.testnet) (#134), whose contract ([`tee-registry/`](tee-registry/src/lib.rs)) verifies an Intel TDX quote on-chain with `shade-attestation` (dcap-qvl): up-to-date TCB, report data = the worker's implicit account (its key made in the TEE), and a PPID and code (the compose hash of [`agent/phala-compose.yml`](agent/phala-compose.yml), which pins this repo at a commit) the co-op's DAO approved. An agent the members mark TEE-only records receipts only while that holds, and a revoked one stays out until they vote it back. **Live:** a worker in a Phala TDX VM (`c4ebe4db…`, implicit, its key made in the TEE) was first refused (its machine not yet approved), the members approved its code and machine (#137) and admitted it TEE-only (#138), it registered (quote verified on-chain, valid 7 days), passed the by-laws gate in the OutLayer enclave and recorded receipt `demo-33693cb6…` from inside the TEE | *a Shade Agent: a worker whose key was made in an Intel TDX VM …* |
@@ -297,7 +312,7 @@ Each one here is a contract rule or a vote you can read:
 
 ```sh
 npm install
-npm test        # lint, typecheck, 45 unit tests, 164 contract tests (unit, fuzz, invariant); needs Rust (rustup)
+npm test        # lint, typecheck, 48 unit tests, 189 contract tests (unit, fuzz, invariant); needs Rust (rustup)
 npm run demo    # deploys its own co-op on testnet and runs the whole story in ~3 min
 ```
 
@@ -397,7 +412,7 @@ person is why the steward exists. Both are listed under *Trust assumptions*.
 3. **Savings.** Members stake in a staking pool the DAO chose (`stakely_v2.pool.f863973.m0` on testnet, proposal
    #11) and `sync_savings` reads each stake from the pool on-chain. On testnet the stake earns testnet rewards, not
    NEAR AI credits: NEAR AI's Staking for Inference turns stake into credits on mainnet, for an organization.
-4. **The contract's code.** It runs a global contract the members approved, now proposal #133. `upgrade` obeys only the
+4. **The contract's code.** It runs a global contract the members approved, now proposal #149 (0.3.7). `upgrade` obeys only the
    DAO, and the contract account has no full-access key left, so nobody can deploy code without a vote, the builder
    included. The live page shows the key count from the chain. Every upgrade and what it fixed:
    [`docs/DETAILS.md`](docs/DETAILS.md#code-upgrades-each-by-a-members-vote). Each upgrade publishes a global contract
