@@ -375,4 +375,18 @@ pub enum Event {
     /// That transfer failed: the amount went to the DAO's unforwarded balance (`flush_to_dao`), for the members to pay.
     #[event_version("1.0.0")]
     ReferralShareFailed { job_id: String, from_coop: AccountId, amount: U128 },
+
+    // ---------- 0.3.9: binding federation credit; the federation dividend ----------
+    /// A sister loan was lent under the co-op's federation credit score: at most `cap` (half the risk fund x score/100).
+    #[event_version("1.0.0")]
+    CoopCreditCap { coop: AccountId, score: u32, cap: U128 },
+    /// The members voted the share of each sister loan's interest split among the other sister co-ops' treasuries.
+    #[event_version("1.0.0")]
+    FederationDividendSet { bps: u16 },
+    /// Part of a sister loan's interest was sent to another sister co-op's treasury.
+    #[event_version("1.0.0")]
+    FederationDividend { loan_id: u32, to: AccountId, amount: U128 },
+    /// That transfer failed: the amount went to the DAO's unforwarded balance (`flush_to_dao`).
+    #[event_version("1.0.0")]
+    FederationDividendFailed { loan_id: u32, to: AccountId, amount: U128 },
 }

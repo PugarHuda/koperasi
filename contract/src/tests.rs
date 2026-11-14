@@ -4230,3 +4230,224 @@ fn a_failed_referral_share_goes_to_the_dao_and_is_never_sent_twice() {
     k.flush_to_dao();
     assert_eq!(ft_transfers(), vec![(dao().to_string(), 600_000)]);
 }
+
+// ---------- 0.3.9: binding federation credit; the federation dividend ----------
+
+/// The panic message of a refused call.
+fn panic_msg(f: impl FnOnce()) -> String {
+    let e = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).expect_err("expected a refusal");
+    e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default()
+}
+
+/// (score, late, open past due, repaid on time) of `coop` at time `ns`.
+fn credit_at(k: &Koperasi, coop: &AccountId, ns: u64) -> (u32, u32, u32, u32) {
+    at(&acc("anyone.testnet"), ns);
+    let c = k.get_coop_credit(coop.clone());
+    (c.score, c.late, c.open_past_due, c.repaid_on_time)
+}
+
+/// The score: 100, -10 per open loan past due, +5 per loan repaid on time (at most 100), -40 per late loan here or
+/// sister's late note, at least 0.
+#[test]
+fn a_sister_coops_credit_score_follows_the_federation_rule() {
+    let (mut k, sister) = sister_setup();
+    assert_eq!(credit_at(&k, &sister, DAY), (100, 0, 0, 0), "no record: 100");
+    lend(&mut k, &sister, 100_000, 10); // due day 11
+    assert_eq!(credit_at(&k, &sister, 5 * DAY), (100, 0, 0, 0), "open, not yet due");
+    assert_eq!(credit_at(&k, &sister, 12 * DAY), (90, 0, 1, 0), "open past due: -10");
+    repay(&mut k, "sister_repay:0", 100_000);
+    assert_eq!(credit_at(&k, &sister, 12 * DAY), (100, 0, 0, 1), "repaid on time: +5, at most 100");
+    lend(&mut k, &sister, 100_000, 10);
+    assert_eq!(credit_at(&k, &sister, 12 * DAY), (95, 0, 1, 1));
+    at(&acc("anyone.testnet"), 12 * DAY);
+    k.mark_sister_late(1);
+    assert_eq!(credit_at(&k, &sister, 12 * DAY), (65, 1, 0, 1), "late here: -40 (no longer counted as open past due)");
+    let (third, fourth) = (acc("koperasi-three.testnet"), acc("koperasi-four.testnet"));
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone(), third.clone(), fourth.clone()]);
+    as_(&third, near(0));
+    k.note_late_elsewhere(sister.clone(), true);
+    assert_eq!(credit_at(&k, &sister, 12 * DAY), (25, 2, 0, 1), "a sister's late note: -40");
+    as_(&fourth, near(0));
+    k.note_late_elsewhere(sister.clone(), true);
+    assert_eq!(credit_at(&k, &sister, 12 * DAY), (0, 3, 0, 1), "floor 0");
+    as_(&fourth, near(0));
+    k.note_late_elsewhere(sister.clone(), false);
+    assert_eq!(credit_at(&k, &sister, 12 * DAY).0, 25, "a lifted note no longer counts");
+    assert_eq!(credit_at(&k, &third, 12 * DAY), (100, 0, 0, 0), "another co-op's record is its own");
+}
+
+/// `lend_to_sister` lends at most half the risk fund x score/100 (the refusal names the score; 0 cannot borrow) and logs
+/// the cap; the 0.3.6 refusals still stand behind it.
+#[test]
+fn lend_to_sister_is_capped_by_the_coops_credit_score() {
+    let (mut k, sister) = sister_setup();
+    lend(&mut k, &sister, 500_000, 10);
+    assert!(logs_have("\"coop_credit_cap\"") && logs_have("\"score\":100") && logs_have("\"cap\":\"500000\""));
+    at(&me(), DAY);
+    k.on_sister_lent(0, U128(500_000), Ok(()));
+    at(&acc("anyone.testnet"), 12 * DAY);
+    k.mark_sister_late(0);
+    repay(&mut k, "sister_repay:0", 500_000);
+    assert_eq!(k.get_risk_fund().0 .0, 1_000_000);
+    let m = panic_msg(|| lend(&mut k, &sister, 400_000, 10));
+    assert!(m.contains("federation credit score 60/100: at most 300000"), "{m}");
+    let m = panic_msg(|| lend(&mut k, &sister, 300_000, 10));
+    assert!(m.contains("a loan to this co-op went late"), "under the cap, the 0.3.6 refusal still holds: {m}");
+    let (third, fourth) = (acc("koperasi-three.testnet"), acc("koperasi-four.testnet"));
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone(), third.clone(), fourth.clone()]);
+    for c in [&third, &fourth] {
+        as_(c, near(0));
+        k.note_late_elsewhere(sister.clone(), true);
+    }
+    let m = panic_msg(|| lend(&mut k, &sister, 1, 10));
+    assert!(m.contains("federation credit score 0/100: this co-op cannot borrow"), "{m}");
+    assert_eq!(k.get_sister_loans().len(), 1, "nothing kept by a refusal");
+    // a co-op with no record borrows the usual cap
+    assert!(fails(|| lend(&mut k, &fourth, 500_001, 10)));
+    lend(&mut k, &fourth, 500_000, 10);
+    assert!(logs_have("\"coop\":\"koperasi-four.testnet\"") && logs_have("\"cap\":\"500000\""));
+}
+
+/// The agent's suggestion is checked against the same cap before the DAO proposal is filed.
+#[test]
+fn the_agents_loan_suggestion_is_capped_by_the_coops_credit_score() {
+    let (mut k, sister) = sister_setup();
+    let why = "kop-three asked for working capital";
+    let (third, fourth) = (acc("koperasi-three.testnet"), acc("koperasi-four.testnet"));
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![sister.clone(), third.clone(), fourth.clone()]);
+    lend_at(&mut k, &third, 100_000, 1, None);
+    at(&acc("anyone.testnet"), 3 * DAY);
+    k.mark_sister_late(0);
+    // 900_000 left in the risk fund: half is 450_000, at score 60 at most 270_000
+    let m = panic_msg(|| agent_suggests(&mut k, &agent(), 4 * DAY, &third, 300_000, 30, 0, why, None));
+    assert!(m.contains("federation credit score 60/100: at most 270000"), "{m}");
+    let m = panic_msg(|| agent_suggests(&mut k, &agent(), 4 * DAY, &third, 100, 30, 0, why, None));
+    assert!(m.contains("this co-op was late on a loan"), "{m}");
+    for c in [&sister, &fourth] {
+        as_(c, near(0));
+        k.note_late_elsewhere(third.clone(), true);
+    }
+    let m = panic_msg(|| agent_suggests(&mut k, &agent(), 4 * DAY, &third, 100, 30, 0, why, None));
+    assert!(m.contains("federation credit score 0/100"), "{m}");
+    assert!(k.get_loan_suggestion(third.clone()).is_none(), "nothing filed");
+    agent_suggests(&mut k, &agent(), 4 * DAY, &fourth, 450_000, 30, 0, why, None); // no record: the usual cap
+    assert!(k.get_loan_suggestion(fourth).is_some());
+}
+
+/// Only the DAO sets the federation dividend, at most 10000 bps; 0 by default.
+#[test]
+fn only_the_dao_sets_the_federation_dividend() {
+    let mut k = setup();
+    assert_eq!(k.get_federation_dividend(), 0);
+    assert!(fails(|| { as_(&acc("alice.testnet"), near(0)); k.set_federation_dividend(5000); }), "only the DAO");
+    assert!(fails(|| { as_(&dao(), near(0)); k.set_federation_dividend(10_001); }), "at most 10000");
+    as_(&dao(), near(0));
+    k.set_federation_dividend(10_000);
+    assert!(logs_have("\"federation_dividend_set\"") && logs_have("\"bps\":10000"));
+    assert_eq!(k.get_federation_dividend(), 10_000);
+}
+
+/// Sisters two (the borrower), three, four (treasuries t2, t3, t4) and five (no treasury); a 50% dividend; loan #0 to
+/// two: 100_000 at 10% (10_000 interest), lent.
+fn dividend_setup() -> (Koperasi, AccountId, AccountId, AccountId) {
+    let (mut k, two) = sister_setup();
+    let (t3, t4) = (acc("kop-three.sputnik-v2.testnet"), acc("kop-four.sputnik-v2.testnet"));
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![two.clone(), acc("koperasi-three.testnet"), acc("koperasi-four.testnet"), acc("koperasi-five.testnet")]);
+    k.set_coop_treasury(two.clone(), Some(acc("kop-two.sputnik-v2.testnet")));
+    k.set_coop_treasury(acc("koperasi-three.testnet"), Some(t3.clone()));
+    k.set_coop_treasury(acc("koperasi-four.testnet"), Some(t4.clone()));
+    k.set_federation_dividend(5000);
+    lend_at(&mut k, &two, 100_000, 30, Some(1000));
+    at(&me(), DAY);
+    k.on_sister_lent(0, U128(100_000), Ok(()));
+    (k, two, t3, t4)
+}
+
+/// The dividend's share of each interest payment is split equally among the other sisters with a treasury; the rest
+/// goes to the DAO; per loan, what each treasury was paid is kept.
+#[test]
+fn a_sister_loans_interest_pays_the_federation_dividend_to_the_other_sisters() {
+    let (mut k, _, t3, t4) = dividend_setup();
+    // the principal and 4_000 of interest: 1_000 to each of t3 and t4, 2_000 to the DAO
+    assert_eq!(repay(&mut k, "sister_repay:0", 104_000), 0);
+    assert_eq!(ft_transfers(), vec![(t3.to_string(), 1_000), (t4.to_string(), 1_000), (dao().to_string(), 2_000)],
+        "not the borrower's treasury, not a sister without one");
+    assert!(logs_have("\"federation_dividend\"") && logs_have("\"loan_id\":0") && logs_have("\"to\":\"kop-three.sputnik-v2.testnet\""));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 4_000, "all three in flight");
+    // the rest of the interest; the excess is returned
+    assert_eq!(repay(&mut k, "sister_repay:0", 7_000), 1_000);
+    assert_eq!(ft_transfers(), vec![(t3.to_string(), 1_500), (t4.to_string(), 1_500), (dao().to_string(), 3_000)]);
+    let paid: Vec<(String, u128, u128)> = k.get_federation_dividend_paid(0).iter().map(|p| (p.to.to_string(), p.amount.0, p.failed.0)).collect();
+    assert_eq!(paid, vec![(t3.to_string(), 2_500, 0), (t4.to_string(), 2_500, 0)]);
+    assert_eq!(k.get_sister_loans()[0].status, lending::SisterLoanStatus::Repaid);
+    assert_eq!(k.get_risk_fund().0 .0, 1_000_000, "the principal back in the risk fund");
+    at(&me(), DAY);
+    k.on_federation_dividend(0, t3.clone(), U128(1_500), Ok(()));
+    assert_eq!(k.get_ledger().unwrap().1 .0, 4_000 + 6_000 - 1_500);
+    assert_eq!(k.get_info().unforwarded.0, 0);
+    // settled: nothing more paid out
+    assert_eq!(repay(&mut k, "sister_repay:0", 5_000), 5_000);
+    assert!(ft_transfers().is_empty());
+}
+
+/// bps 0: all the interest to the DAO, as before; only the borrower has a treasury: all to the DAO; 100% to one
+/// treasury: nothing to the DAO; a share too small to split: all to the DAO.
+#[test]
+fn the_federation_dividend_needs_a_share_and_another_treasury() {
+    let (mut k, two) = sister_setup();
+    let three = acc("koperasi-three.testnet");
+    let t3 = acc("kop-three.sputnik-v2.testnet");
+    as_(&dao(), near(0));
+    k.set_sister_coops(vec![two.clone(), three.clone()]);
+    k.set_coop_treasury(two.clone(), Some(acc("kop-two.sputnik-v2.testnet")));
+    k.set_coop_treasury(three.clone(), Some(t3.clone()));
+    let mut id = 0;
+    let mut loan = |k: &mut Koperasi, interest_paid: u128| {
+        lend_at(k, &two, 100_000, 30, Some(1000));
+        repay(k, &format!("sister_repay:{id}"), 100_000 + interest_paid);
+        id += 1;
+        ft_transfers()
+    };
+    assert_eq!(loan(&mut k, 10_000), vec![(dao().to_string(), 10_000)], "bps 0: unchanged");
+    assert!(k.get_federation_dividend_paid(0).is_empty());
+    as_(&dao(), near(0));
+    k.set_federation_dividend(10_000);
+    k.set_coop_treasury(three.clone(), None);
+    assert_eq!(loan(&mut k, 10_000), vec![(dao().to_string(), 10_000)], "only the borrower has a treasury");
+    assert!(k.get_federation_dividend_paid(1).is_empty());
+    as_(&dao(), near(0));
+    k.set_coop_treasury(three.clone(), Some(t3.clone()));
+    assert_eq!(loan(&mut k, 10_000), vec![(t3.to_string(), 10_000)], "100% to the one other treasury");
+    as_(&dao(), near(0));
+    k.set_federation_dividend(1);
+    assert_eq!(loan(&mut k, 10_000), vec![(t3.to_string(), 1), (dao().to_string(), 9_999)], "rounded down, the rest to the DAO");
+    as_(&dao(), near(0));
+    k.set_federation_dividend(5000);
+    lend_at(&mut k, &two, 100_000, 30, Some(1000));
+    repay(&mut k, "sister_repay:4", 100_001);
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 1)], "half of 1 rounds to 0: all to the DAO");
+    assert!(k.get_federation_dividend_paid(4).is_empty());
+}
+
+/// A dividend transfer that fails goes to the DAO's unforwarded balance and is marked; never sent to the sister again.
+#[test]
+fn a_failed_federation_dividend_goes_to_the_dao() {
+    let (mut k, _, t3, t4) = dividend_setup();
+    repay(&mut k, "sister_repay:0", 110_000);
+    assert_eq!(ft_transfers(), vec![(t3.to_string(), 2_500), (t4.to_string(), 2_500), (dao().to_string(), 5_000)]);
+    at(&me(), DAY);
+    k.on_federation_dividend(0, t3.clone(), U128(2_500), Err(PromiseError::Failed));
+    assert!(logs_have("\"federation_dividend_failed\"") && logs_have("\"to\":\"kop-three.sputnik-v2.testnet\""));
+    assert_eq!(k.get_info().unforwarded.0, 2_500);
+    assert_eq!(k.get_ledger().unwrap().1 .0, 10_000 - 2_500);
+    let paid: Vec<(String, u128, u128)> = k.get_federation_dividend_paid(0).iter().map(|p| (p.to.to_string(), p.amount.0, p.failed.0)).collect();
+    assert_eq!(paid, vec![(t3.to_string(), 2_500, 2_500), (t4.to_string(), 2_500, 0)]);
+    assert_eq!(repay(&mut k, "sister_repay:0", 10_000), 10_000, "settled: nothing more");
+    at(&acc("anyone.testnet"), DAY);
+    k.flush_to_dao();
+    assert_eq!(ft_transfers(), vec![(dao().to_string(), 2_500)]);
+}
