@@ -760,7 +760,7 @@ async function paint() {
       ${open.length ? `<ul class="props">${open.map((p) => {
         const mine = p.votes[me];
         const hidden = opaque(p);
-        return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(safeDescribe(p, s))}</pre>${p.description
+        return `<li><span><strong>#${p.id}</strong> <pre class="does" tabindex="0" aria-label="${t("What the proposal does", "Isi proposal")}">${esc(safeDescribe(p, s))}</pre>${p.description
           ? `<span class="claim">${t("Proposer says", "Kata pengusul")}: “${esc(p.description.slice(0, 200))}”</span>` : ""}${(() => {
             const inv = inviteOf(p, s.group);
             const by = inv ? esc(inv.by) : "";

@@ -126,7 +126,7 @@ async function proposals() {
         <button type="button" class="btn ghost small" data-v="VoteReject" data-id="${p.id}">${t("Reject", "Tolak")}</button></span>`;
     };
     list.innerHTML = (open.length ? open.map((p) => `<li><span><strong>#${esc(p.id)}</strong> <span class="claim">${t("by", "oleh")} ${esc(p.proposer)}; ${yes(p)} ${t("of", "dari")} ${needed} ${t("approvals needed", "persetujuan yang diperlukan")}</span>
-        <pre class="does">${esc(safeDescribe(p))}</pre>${p.description ? `<span class="claim">${t("Proposer says", "Kata pengusul")}: “${esc(String(p.description).slice(0, 200))}”</span>` : ""}</span>${action(p)}</li>`).join("")
+        <pre class="does" tabindex="0" aria-label="${t("What the proposal does", "Isi proposal")}">${esc(safeDescribe(p))}</pre>${p.description ? `<span class="claim">${t("Proposer says", "Kata pengusul")}: “${esc(String(p.description).slice(0, 200))}”</span>` : ""}</span>${action(p)}</li>`).join("")
       : `<li>${t("Nothing to vote on right now.", "Belum ada yang perlu dipilih.")}</li>`)
       + `<li class="sub-h"><b>${t("Recently decided", "Baru diputuskan")}</b></li>`
       + decided.map((p) => `<li><span><strong>#${esc(p.id)}</strong> ${esc(oneLine(p.description, 140))}</span><span class="badge">${esc(word(p.status))}</span></li>`).join("");
