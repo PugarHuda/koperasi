@@ -148,6 +148,36 @@ test("the federation lists the referral board, with the transaction that sent on
   await expect(r.locator('a[href$="/txns/7oBAVZgnEoGP81A6XYTV6G1emicSYKXuFNsVhmdKkhSb"]')).toBeVisible();
 });
 
+test("0.3.6: the referral the sister co-op accepted, read on its contract, and the loans between co-ops", async ({ page }) => {
+  await page.goto("/dashboard.html#/federation");
+  const acc = page.locator("#f-accepted");
+  await expect(acc).toContainText("koperasi-mw80aczw.testnet");
+  await expect(acc).toContainText("The sister accepted referral #2");
+  await expect(acc.locator('a[href$="/txns/3KguXhJxUUijdN5ZsaXtBgSe8nhTALKszGU4FswqmuSQ"]')).toBeVisible();
+  const loans = page.locator("#f-loans");
+  await expect(loans).toContainText("koperasi-mw80aczw.sputnik-v2.testnet");
+  await expect(loans.locator("tbody tr").filter({ has: page.getByText("#0", { exact: true }) })).toContainText(/Failed[\s\S]*rolled back to the risk fund \(DAO proposal #146\)/);
+  await expect(loans.locator("tbody tr").filter({ has: page.getByText("#1", { exact: true }) })).toContainText(/1\.00 \/ \d+\.\d\d USDC[\s\S]*Voted by DAO proposal #147/);
+});
+
+test("0.3.6: polls in Commons, technical ones weighed by reputation by the members' choice", async ({ page }) => {
+  await page.goto("/dashboard.html#/commons");
+  const polls = page.locator("#c-polls");
+  await expect(polls).toContainText("Technical questions weigh each vote by the member's reputation weight, by the members' own choice (DAO proposal #145)");
+  const p0 = polls.locator("tbody tr").filter({ has: page.getByText("#0", { exact: true }) });
+  await expect(p0).toContainText("Which embedding model");
+  await expect(p0).toContainText(/keep the current model: \d+/);
+  await expect(p0).toContainText(/by reputation weight; \d+ voters/);
+  await expect(p0).toContainText(/open until|voting ended|closed:/);
+});
+
+test("0.3.6: the agent report shows its recovery record and the ramp", async ({ page }) => {
+  await page.goto("/dashboard.html#/report");
+  const r = page.locator("#r-recovery");
+  await expect(r.locator(".rc-verdict")).toContainText(/Recovery: (no recovery on record|a plan on record)/);
+  await expect(r).toContainText(/from 25% back to all of it over \d+ days/);
+});
+
 test("join from zero: a visitor sees each step with what the chain asks for, and a wallet button", async ({ page }) => {
   await page.goto("/dashboard.html#/membership");
   const steps = page.locator("#join-steps");
