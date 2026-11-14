@@ -11,15 +11,16 @@
 <body>
   <header class="top">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Koperasi</a>
+    <div class="top-actions"></div>
   </header>
   <main class="cert">
     <section class="block dark">
       <p class="hint" id="cert-net">Reading NEAR…</p>
       <h1 id="cert-who">Work record</h1>
-      <p class="sub">Every line below is read from the co-op's contract and DAO on NEAR, now, in your browser. Nothing here was typed by the member or by us:
+      <p class="sub" id="cert-sub">Every line below is read from the co-op's contract and DAO on NEAR, now, in your browser. Nothing here was typed by the member or by us:
         tasks are paid DAO proposals, pledges are confirmed by the member who called them in, jury rulings are the contract's own record.
         Share this link as proof of work (after Hypercerts: who did what, traceable).</p>
-      <form class="stake-row" id="cert-form"><label>Account <input id="cert-input" type="text" autocomplete="off" aria-label="NEAR account"></label>
+      <form class="stake-row" id="cert-form"><label><span id="cert-acct">Account</span> <input id="cert-input" type="text" autocomplete="off" aria-label="NEAR account"></label>
         <button type="submit" class="btn">Show</button></form>
       <table class="grid on-dark" id="cert-sum-t"><caption>Summary</caption><tbody id="cert-sum"></tbody></table>
       <table class="grid on-dark" id="cert-work">
@@ -37,24 +38,30 @@
         <thead><tr><th scope="col">Case</th><th scope="col">Ruling</th><th scope="col">Outcome</th></tr></thead>
         <tbody></tbody>
       </table>
-      <p class="cta-row"><a class="btn" href="/#commons">Back to the co-op</a></p>
+      <p class="cta-row"><a class="btn" id="cert-back" href="/#commons">Back to the co-op</a></p>
     </section>
   </main>
   <script type="module">
     import { dep, explorer, view, all, $, esc, nearAmt } from "./near.js";
+    import { t } from "./lang.js";
     // only a well-formed NEAR account id is ever rendered or put in a link (the query string is the visitor's input)
     const ACCOUNT = /^(?=.{2,64}$)(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
     const asked = new URLSearchParams(location.search).get("who")?.trim().toLowerCase() ?? "";
     const who = ACCOUNT.test(asked) ? asked : "";
     $("cert-input").value = who;
     $("cert-form").onsubmit = (e) => { e.preventDefault(); location.search = `?who=${encodeURIComponent($("cert-input").value.trim())}`; };
-    const rows = (id, html) => { $(id).tBodies[0].innerHTML = html || `<tr><td colspan="3" class="muted">Nothing yet.</td></tr>`; };
-    $("cert-net").textContent = `Read live from ${dep.network}: ${dep.contract}, DAO ${dep.dao}`;
-    if (!who) {
-      $("cert-who").textContent = asked ? "That is not a NEAR account id." : "Whose work record?";
-    } else {
-      $("cert-who").innerHTML = `Work record of <a href="${esc(explorer(who))}">${esc(who)}</a>`;
-      const UNREAD = Symbol("not read"), READ_LATER = "could not be read from NEAR right now (a busy public RPC): reload to try again";
+    const rows = (id, html) => { $(id).tBodies[0].innerHTML = html || `<tr><td colspan="3" class="muted">${t("Nothing yet.", "Belum ada.")}</td></tr>`; };
+    // drawn from what was read, and again (no new reads) when the visitor switches language
+    const live = (fn) => { fn(); addEventListener("koperasi:lang", () => fn()); };
+    live(() => {
+      $("cert-net").textContent = t(`Read live from ${dep.network}: ${dep.contract}, DAO ${dep.dao}`, `Dibaca langsung dari ${dep.network}: ${dep.contract}, DAO ${dep.dao}`);
+      if (!who) $("cert-who").textContent = asked ? t("That is not a NEAR account id.", "Itu bukan ID akun NEAR.") : t("Whose work record?", "Catatan kerja siapa?");
+      else $("cert-who").innerHTML = `${t("Work record of", "Catatan kerja")} <a href="${esc(explorer(who))}">${esc(who)}</a>`;
+    });
+    if (who) {
+      const UNREAD = Symbol("not read");
+      const readLater = () => t("could not be read from NEAR right now (a busy public RPC): reload to try again", "belum bisa dibaca dari NEAR (RPC publik sedang sibuk): muat ulang untuk mencoba lagi");
+      const older = () => t("not on this contract version", "tidak ada di versi kontrak ini");
       try {
         const [member, recs, tasks, pledges, claims, cases, standing, token, passport, sisters] = await Promise.all([
           view(dep.contract, "get_member", { account_id: who }), view(dep.contract, "get_contributors"), all(dep.contract, "get_tasks"),
@@ -66,36 +73,49 @@
           view(dep.contract, "get_sister_coops").catch((e) => (e.final ? [] : UNREAD))]);
         const rec = recs.find(([a]) => a === who)?.[1];
         const [st, good] = standing ?? [null, null];
-        $("cert-sum").innerHTML = [
-          ["Member", member ? `yes, since ${new Date(Number(BigInt(member.joined_at) / 1_000_000n)).toLocaleDateString("en-GB")}` : "no"],
-          ["Paid work", rec ? `${rec.done} finished, ${nearAmt(rec.earned)} NEAR` : "none yet"],
-          ["Standing", !member && st && !(st.pledges_honored + st.pledges_broken + st.juries_served + st.juries_missed + (st.slashed ?? 0)) ? "no record (not a member)" : st ? `${good ? "good" : "not good"}: ${st.pledges_honored} pledge(s) kept, ${st.pledges_broken} broken, ${st.juries_served} jury ruling(s), ${st.juries_missed} missed${st.slashed ? `, slashed ${st.slashed}×` : ""}` : "not on this contract version"],
-          // contract 0.2.7: the record as a non-transferable NEP-171 token, its image drawn by the contract from the record
-          ["Token", token === UNREAD ? READ_LATER : token === undefined ? "not on this contract version" : token
-            ? `a NEP-171 token on <code>${esc(dep.contract)}</code> (id ${esc(who)}), read live from the record, never transferable: any NEAR wallet or explorer that reads NFTs shows it.${
-              /^data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+$/.test(String(token.metadata?.media)) ? `<br><img class="cert-token" src="${token.metadata.media}" alt="${esc(token.metadata.title ?? "")}: ${esc(token.metadata.description ?? "")}" width="300" height="170">` : ""}`
-            : "not minted yet (its owner mints it from the co-op page, for 0.01 NEAR of storage)"],
-          // contract 0.2.8: work records from sister co-ops the members voted to recognise, read by the contract itself
-          ["Passport", passport === UNREAD || sisters === UNREAD ? READ_LATER : passport === undefined ? "not on this contract version" : passport.length
-            ? passport.map((p) => `${p.done} finished at <a href="${esc(explorer(p.coop))}">${esc(p.coop)}</a> (${nearAmt(p.earned)} NEAR), in good standing there: ${
-              sisters.includes(p.coop) ? "<strong>counts as one trust source here</strong>" : "that co-op is no longer recognised here, so it does not count"}`).join("<br>")
-            : `no stamps${sisters.length ? ` (the members recognise ${sisters.map((c) => `<code>${esc(c)}</code>`).join(", ")}: anyone can ask the contract to read a record there)` : ""}`],
-        ].map(([k, v]) => `<tr><th scope="row">${k}</th><td>${v}</td></tr>`).join("");
-        rows("cert-work", (rec?.refs ?? []).map((r) => {
-          const [kind, id] = r.split(":");
-          const t = kind === "task" ? tasks.find((x) => x.id === Number(id)) : null;
-          return `<tr><td>${kind === "task" ? `task #${esc(id)}` : `<a href="${explorer(dep.dao)}">DAO proposal #${esc(id)}</a>`}</td>
-            <td>${t ? esc(t.description) : "a bounty voted by all members"}</td><td class="num">${t ? `${nearAmt(t.amount)} NEAR` : "by the DAO"}</td></tr>`;
-        }).join(""));
         const mine = new Map(pledges.filter((p) => p.issuer === who).map((p) => [p.id, p]));
-        rows("cert-pledges", claims.filter((c) => mine.has(c.pledge)).map((c) => `<tr><td>#${c.pledge} ${esc(mine.get(c.pledge).what)}</td>
-          <td>${esc(c.holder)}</td><td>${{ Open: "waiting", Honored: "kept", Broken: "not kept" }[c.status]}</td></tr>`).join(""));
-        rows("cert-juries", cases.filter((c) => c.jurors.includes(who)).map((c) => {
-          const v = c.votes.find(([j]) => j === who);
-          return `<tr><td>#${c.id} job ${esc(c.job_id)}</td><td>${v ? (v[1] ? "uphold" : "reject") : "did not rule"}</td><td>${esc(c.status)}</td></tr>`;
-        }).join(""));
+        live(() => {
+          const since = member ? new Date(Number(BigInt(member.joined_at) / 1_000_000n)).toLocaleDateString(t("en-GB", "id-ID")) : "";
+          $("cert-sum").innerHTML = [
+            [t("Member", "Anggota"), member ? t(`yes, since ${since}`, `ya, sejak ${since}`) : t("no", "bukan")],
+            [t("Paid work", "Kerja berbayar"), rec ? t(`${rec.done} finished, ${nearAmt(rec.earned)} NEAR`, `${rec.done} selesai, ${nearAmt(rec.earned)} NEAR`) : t("none yet", "belum ada")],
+            [t("Standing", "Status"), !member && st && !(st.pledges_honored + st.pledges_broken + st.juries_served + st.juries_missed + (st.slashed ?? 0)) ? t("no record (not a member)", "tidak ada catatan (bukan anggota)")
+              : st ? t(`${good ? "good" : "not good"}: ${st.pledges_honored} pledge(s) kept, ${st.pledges_broken} broken, ${st.juries_served} jury ruling(s), ${st.juries_missed} missed${st.slashed ? `, slashed ${st.slashed}×` : ""}`,
+                `${good ? "baik" : "tidak baik"}: ${st.pledges_honored} janji ditepati, ${st.pledges_broken} diingkari, ${st.juries_served} putusan juri, ${st.juries_missed} terlewat${st.slashed ? `, dipotong ${st.slashed}×` : ""}`)
+                : older()],
+            // contract 0.2.7: the record as a non-transferable NEP-171 token, its image drawn by the contract from the record
+            [t("Token", "Token"), token === UNREAD ? readLater() : token === undefined ? older() : token
+              ? `${t(`a NEP-171 token on <code>${esc(dep.contract)}</code> (id ${esc(who)}), read live from the record, never transferable: any NEAR wallet or explorer that reads NFTs shows it.`,
+                `token NEP-171 di <code>${esc(dep.contract)}</code> (id ${esc(who)}), dibaca langsung dari catatan, tidak pernah bisa dipindahtangankan: dompet atau explorer NEAR apa pun yang membaca NFT menampilkannya.`)}${
+                /^data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+$/.test(String(token.metadata?.media)) ? `<br><img class="cert-token" src="${token.metadata.media}" alt="${esc(token.metadata.title ?? "")}: ${esc(token.metadata.description ?? "")}" width="300" height="170">` : ""}`
+              : t("not minted yet (its owner mints it from the co-op page, for 0.01 NEAR of storage)", "belum dicetak (pemiliknya mencetaknya dari halaman koperasi, dengan 0,01 NEAR untuk penyimpanan)")],
+            // contract 0.2.8: work records from sister co-ops the members voted to recognise, read by the contract itself
+            [t("Passport", "Paspor"), passport === UNREAD || sisters === UNREAD ? readLater() : passport === undefined ? older() : passport.length
+              ? passport.map((p) => {
+                const at = `<a href="${esc(explorer(p.coop))}">${esc(p.coop)}</a>`;
+                return `${t(`${p.done} finished at ${at} (${nearAmt(p.earned)} NEAR), in good standing there`, `${p.done} selesai di ${at} (${nearAmt(p.earned)} NEAR), berstatus baik di sana`)}: ${
+                  sisters.includes(p.coop) ? t("<strong>counts as one trust source here</strong>", "<strong>dihitung sebagai satu sumber kepercayaan di sini</strong>")
+                    : t("that co-op is no longer recognised here, so it does not count", "koperasi itu tidak lagi diakui di sini, jadi tidak dihitung")}`;
+              }).join("<br>")
+              : `${t("no stamps", "tidak ada cap")}${sisters.length ? t(` (the members recognise ${sisters.map((c) => `<code>${esc(c)}</code>`).join(", ")}: anyone can ask the contract to read a record there)`,
+                ` (anggota mengakui ${sisters.map((c) => `<code>${esc(c)}</code>`).join(", ")}: siapa pun bisa meminta kontrak membaca catatan di sana)`) : ""}`],
+          ].map(([k, v]) => `<tr><th scope="row">${k}</th><td>${v}</td></tr>`).join("");
+          rows("cert-work", (rec?.refs ?? []).map((r) => {
+            const [kind, id] = r.split(":");
+            const task = kind === "task" ? tasks.find((x) => x.id === Number(id)) : null;
+            return `<tr><td>${kind === "task" ? `${t("task", "tugas")} #${esc(id)}` : `<a href="${explorer(dep.dao)}">${t("DAO proposal", "Usulan DAO")} #${esc(id)}</a>`}</td>
+              <td>${task ? esc(task.description) : t("a bounty voted by all members", "bounty yang dipilih semua anggota")}</td><td class="num">${task ? `${nearAmt(task.amount)} NEAR` : t("by the DAO", "oleh DAO")}</td></tr>`;
+          }).join(""));
+          const KEPT = t({ Open: "waiting", Honored: "kept", Broken: "not kept" }, { Open: "menunggu", Honored: "ditepati", Broken: "tidak ditepati" });
+          rows("cert-pledges", claims.filter((c) => mine.has(c.pledge)).map((c) => `<tr><td>#${c.pledge} ${esc(mine.get(c.pledge).what)}</td>
+            <td>${esc(c.holder)}</td><td>${KEPT[c.status]}</td></tr>`).join(""));
+          rows("cert-juries", cases.filter((c) => c.jurors.includes(who)).map((c) => {
+            const v = c.votes.find(([j]) => j === who);
+            return `<tr><td>#${c.id} ${t("job", "pekerjaan")} ${esc(c.job_id)}</td><td>${v ? (v[1] ? t("uphold", "kabulkan") : t("reject", "tolak")) : t("did not rule", "tidak memutus")}</td><td>${esc(c.status)}</td></tr>`;
+          }).join(""));
+        });
       } catch (e) {
-        $("cert-sum").innerHTML = `<tr><th scope="row">Error</th><td>Could not read NEAR: ${esc(e.message)}</td></tr>`;
+        live(() => { $("cert-sum").innerHTML = `<tr><th scope="row">${t("Error", "Galat")}</th><td>${t("Could not read NEAR", "Gagal membaca NEAR")}: ${esc(e.message)}</td></tr>`; });
       }
     }
   </script>

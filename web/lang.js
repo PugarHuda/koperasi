@@ -1,8 +1,9 @@
 // Bahasa Indonesia for the page's own words (the co-ops it is for are Indonesian villages). The headings, the hero, the
 // sections' explanations and the navigation switch; what the page reads from the chain stays as the chain says it.
 // The choice is remembered in this browser only; the page opens in English unless the visitor chose Indonesian.
-// ponytail: a selector → text table, not an i18n library. Dynamic panels (wallet.js) call t(en, id) and re-render on
-// the "koperasi:lang" event.
+// ponytail: a selector → text table, not an i18n library (it also holds cert.html's and coops.html's fixed text; a
+// selector that matches nothing on a page is skipped). What is written from the chain (app.js, wallet.js, cert.html,
+// coops.html) calls t(en, id) and is written again, from the data already read, on the "koperasi:lang" event.
 const ID = [
   ['nav[aria-label="Sections"] a[href="#members"]', "Anggota"],
   ['nav[aria-label="Sections"] a[href="#bylaws"]', "Anggaran dasar"],
@@ -54,6 +55,34 @@ const ID = [
   ["#trust h2", 'Kepercayaan diraih,<br /><span class="dim">tugas demi tugas.</span>'],
   ["#commons h2", 'Kewajiban<br /><span class="dim">antaranggota.</span>'],
   [".rail .tag", null], // the rails' labels: by position below
+  ["#ck-tee > b", "AI berjalan tersegel di dalam TEE"],
+  ["#ck-tee > p", "NEAR AI Cloud membuktikan servernya mesin Intel TDX asli, terikat pada angka acak yang hanya diketahui browser Anda."],
+  ["#ck-attacks > b", "Serangan ditolak on-chain"],
+  ["#card-tee > b", "Agen berjalan di TEE (Shade Agent)"],
+  ["#card-proposal > b", "Agen mengusulkan, anggota memutuskan"],
+  ["#card-credit > b", "Biro kredit milik koperasi-koperasi"],
+  ["#card-errors > b", "Agen keliru, anggota mengoreksinya"],
+  // cert.html (a member's work record)
+  ["#cert-sub", "Setiap baris di bawah dibaca dari kontrak dan DAO koperasi di NEAR, saat ini, di browser Anda. Tidak ada yang diketik oleh anggota maupun oleh kami: tugas adalah usulan DAO yang sudah dibayar, janji dikonfirmasi oleh anggota yang menagihnya, putusan juri adalah catatan kontrak sendiri. Bagikan tautan ini sebagai bukti kerja (mengikuti Hypercerts: siapa mengerjakan apa, bisa dilacak)."],
+  ["#cert-acct", "Akun"],
+  ["#cert-form button", "Tampilkan"],
+  ["#cert-sum-t caption", "Ringkasan"],
+  ["#cert-work caption", 'Kerja berbayar <span class="muted">(setiap baris menyebut tugas atau usulan DAO yang membayarnya)</span>'],
+  ["#cert-work thead tr", '<th scope="col">Sumber</th><th scope="col">Apa</th><th scope="col" class="num">Dibayar</th>'],
+  ["#cert-pledges caption", 'Janji kepada koperasi <span class="muted">(dikonfirmasi oleh siapa pun yang menagihnya)</span>'],
+  ["#cert-pledges thead tr", '<th scope="col">Janji</th><th scope="col">Ditagih oleh</th><th scope="col">Ditepati?</th>'],
+  ["#cert-juries caption", "Tugas juri di pengadilan koperasi"],
+  ["#cert-juries thead tr", '<th scope="col">Perkara</th><th scope="col">Putusan</th><th scope="col">Hasil</th>'],
+  ["#cert-back", "Kembali ke koperasi"],
+  // coops.html (every co-op on this code, and their federation)
+  ["#coops-title", "Koperasi dengan kode ini"],
+  ["#coops-sub", "Setiap baris adalah koperasi tersendiri (dengan Sputnik DAO, kontrak, dan akun agennya sendiri), dibaca dari testnet NEAR saat ini, di browser Anda. Menjalankan npm run deploy mendirikan satu lagi. Hanya koperasi unggulan yang ditampilkan di halaman utama; sisanya koperasi uji milik pembuatnya, ditampilkan apa adanya."],
+  ["#coops caption", 'Koperasi <span class="muted">(koperasi yang kontraknya masih punya kunci full-access bisa diubah kodenya tanpa pemungutan suara)</span>'],
+  ["#coops thead tr", '<th scope="col">Koperasi</th><th scope="col" class="num">Anggota</th><th scope="col" class="num">Pekerjaan</th><th scope="col" class="num">Pembagian SHU</th><th scope="col">Anggaran dasar</th><th scope="col">Mengakui</th><th scope="col">Kode diubah oleh</th>'],
+  ["#network h2", "Federasi koperasi"],
+  ["#network .sub", "Koperasi sekunder, sebagaimana diizinkan hukum perkoperasian Indonesia (UU 25/1992 pasal 15–16): Sputnik DAO tanpa modifikasi yang anggotanya hanya DAO koperasi, satu koperasi satu suara. Sebuah koperasi memilih di sana hanya jika anggotanya sendiri menyetujui usulan yang memberikan suara itu. Koperasi yang saling mengakui menghitung catatan kerja satu sama lain (paspor)."],
+  ["#resolutions caption", 'Resolusi <span class="muted">(setiap suara diberikan lewat usulan DAO koperasi anggota itu sendiri)</span>'],
+  ["#resolutions thead tr", '<th scope="col">#</th><th scope="col">Resolusi</th><th scope="col">Suara</th><th scope="col">Status</th>'],
 ];
 const RAILS = ["Langsung", "Anggota", "Anggaran dasar", "Kerja", "Audit", "SHU", "Tugas & kepercayaan", "Bersama"];
 
