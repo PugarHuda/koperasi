@@ -12742,12 +12742,21 @@ var init_verify = __esm({
     }
     if (d2.chainSignatures?.batch) {
       const b2 = d2.chainSignatures.batch;
-      const sep = async (method, params) => (await (await fetch(SEPOLIA.rpc, {
-        method: "POST",
-        signal: AbortSignal.timeout(3e4),
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
-      })).json()).result;
+      const sep = async (method, params) => {
+        for (const url of [SEPOLIA.rpc, ...SEPOLIA_RPCS.filter((u) => u !== SEPOLIA.rpc)]) {
+          try {
+            const r2 = (await (await fetch(url, {
+              method: "POST",
+              signal: AbortSignal.timeout(3e4),
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+            })).json()).result;
+            if (r2 !== null && r2 !== void 0) return r2;
+          } catch {
+          }
+        }
+        return null;
+      };
       const res = await Promise.all(b2.payouts.map(async (p2) => {
         const [prop, tx, rc] = await Promise.all([view2(d2.dao, "get_proposal", { id: p2.proposal }), sep("eth_getTransactionByHash", [p2.hash]), sep("eth_getTransactionReceipt", [p2.hash])]);
         return prop.status === "Approved" && prop.kind.FunctionCall?.receiver_id === SIGNER && tx?.to?.toLowerCase() === p2.to && rc?.status === "0x1";

@@ -541,8 +541,17 @@ if (d.lending?.loans) {
 // a profit share in Sepolia ETH by Chain Signatures: each payment signed only after its members' vote, landed on Sepolia
 if (d.chainSignatures?.batch) {
   const b = d.chainSignatures.batch;
-  const sep = async (method, params) => (await (await fetch(SEPOLIA.rpc, { method: "POST", signal: AbortSignal.timeout(30_000), headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json()).result;
+  // a pruned node answers null for an old transaction: ask the next Sepolia RPC before calling it not found
+  const sep = async (method, params) => {
+    for (const url of [SEPOLIA.rpc, ...SEPOLIA_RPCS.filter((u) => u !== SEPOLIA.rpc)]) {
+      try {
+        const r = (await (await fetch(url, { method: "POST", signal: AbortSignal.timeout(30_000), headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) })).json()).result;
+        if (r !== null && r !== undefined) return r;
+      } catch { /* the next RPC */ }
+    }
+    return null;
+  };
   const res = await Promise.all(b.payouts.map(async (p) => {
     const [prop, tx, rc] = await Promise.all([view(d.dao, "get_proposal", { id: p.proposal }), sep("eth_getTransactionByHash", [p.hash]), sep("eth_getTransactionReceipt", [p.hash])]);
     return prop.status === "Approved" && prop.kind.FunctionCall?.receiver_id === SIGNER && tx?.to?.toLowerCase() === p.to && rc?.status === "0x1";
