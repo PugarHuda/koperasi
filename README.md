@@ -114,9 +114,10 @@ Account names and the rest of the flow: [How it works](#how-it-works) and [`docs
   gate in the TDX enclave, did the work on the TEE-verified model (receipt `demo-da08bb0a…`, its proof names the buyer), and the wallet paid
   5 USDC with the receipt as memo ([GqvwnZj7…](https://testnet.nearblocks.io/txns/GqvwnZj7onLGKsz5scVdBCuC8JD8Vsim7P6GiDtrcU9i)); the receipt stays
   Submitted because the stand-in market never relays the buyer's acceptance.
-- **Push notifications are half wired.** A member's private ntfy topic (an HMAC of a secret only CI and the API hold,
-  handed out after a NEP-413 signature) works in the GitHub workflow, where `NOTIFY_SECRET` is set; the Vercel API that
-  hands members their topic does not have the secret yet, so `/api/notify-topic` cannot answer until it is added.
+- **Push notifications go through ntfy.sh, a public service.** A member's topic is private (an HMAC of a secret only CI
+  and the API hold, handed out by `/api/notify-topic` after the member's NEP-413 signature), and it was tested end to end
+  on 14 Nov: bob signed for his topic, DAO proposal #153 was opened, and the notify workflow pushed it to his topic. A
+  push is still only a hint: act on what the dashboard shows. Nobody but the builder has subscribed yet.
 - **Loans between co-ops are tiny.** Both were 1 USDC for 30 days; the 5% interest on loan #2 (0.05 USDC) came from the
   steward's USDC (the agent's Agent Market earnings), because the sister co-op had no income of its own to pay it from.
 - **Everything is on NEAR testnet.** The money is testnet USDC and testnet NEAR; Sepolia and Base Sepolia for the

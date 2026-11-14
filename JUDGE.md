@@ -87,6 +87,6 @@ every day (`.github/workflows/tests.yml`).
   with no points. How often the agent may propose is the members' to set (0.3.3; they set no wait, #127).
 - No loan has been late on testnet (a term plus 7 days' grace has not passed), so a late loan told to the sister
   co-ops, dues in arrears and a guarantee called are proven by contract tests only.
-- Push notifications: `NOTIFY_SECRET` is set in GitHub (the notify workflow posts to private topics), but not yet in
-  Vercel, so `/api/notify-topic`, which hands a member their private topic after a NEP-413 signature, cannot answer yet.
+- Push notifications: `NOTIFY_SECRET` is set in GitHub and Vercel; `/api/notify-topic` hands a member their private
+  topic after a NEP-413 signature, and the notify workflow pushed DAO proposal #153 to bob's topic (tested 14 Nov).
 - Testnet only. The path to mainnet is in the README, under *Sustainability and the path to mainnet*.

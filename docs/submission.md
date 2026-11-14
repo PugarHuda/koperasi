@@ -89,8 +89,8 @@ built on an unmodified Sputnik DAO (no new multisig):
 
 **Honest limits.** The members and buyers are the builder's testnet accounts; Agent Market and NEAR Intents have no
 testnet (the Intents wallet runs on Tidepool's mirror); no loan has been late on testnet yet (the grace is 7 days), so
-late loans told to sister co-ops are proven by contract tests. Private push topics run in GitHub Actions; the Vercel
-API that hands a member their topic still needs `NOTIFY_SECRET` set.
+late loans told to sister co-ops are proven by contract tests. Private push topics are live and were tested end to end
+(bob's topic received DAO proposal #153).
 
 ## X post (draft, a thread of 3; attach the video to the first)
 
