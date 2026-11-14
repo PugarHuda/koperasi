@@ -74,8 +74,12 @@
         const rec = recs.find(([a]) => a === who)?.[1];
         const [st, good] = standing ?? [null, null];
         const mine = new Map(pledges.filter((p) => p.issuer === who).map((p) => [p.id, p]));
+        // a dismissed case may be overturned on appeal (contract 0.2.7): the outcome shown is the final one
+        const sat = cases.filter((c) => c.jurors.includes(who));
+        const appeals = new Map(await Promise.all(sat.filter((c) => c.status === "Dismissed")
+          .map((c) => view(dep.contract, "get_appeal", { id: c.id }).catch(() => null).then((a) => [c.id, a]))));
         live(() => {
-          const since = member ? new Date(Number(BigInt(member.joined_at) / 1_000_000n)).toLocaleDateString(t("en-GB", "id-ID")) : "";
+          const since = member ? new Date(Number(BigInt(member.joined_at) / 1_000_000n)).toLocaleDateString(t("en-GB", "id-ID"), { day: "numeric", month: "short", year: "numeric" }) : "";
           $("cert-sum").innerHTML = [
             [t("Member", "Anggota"), member ? t(`yes, since ${since}`, `ya, sejak ${since}`) : t("no", "bukan")],
             [t("Paid work", "Kerja berbayar"), rec ? t(`${rec.done} finished, ${nearAmt(rec.earned)} NEAR`, `${rec.done} selesai, ${nearAmt(rec.earned)} NEAR`) : t("none yet", "belum ada")],
@@ -88,6 +92,7 @@
               ? `${t(`a NEP-171 token on <code>${esc(dep.contract)}</code> (id ${esc(who)}), read live from the record, never transferable: any NEAR wallet or explorer that reads NFTs shows it.`,
                 `token NEP-171 di <code>${esc(dep.contract)}</code> (id ${esc(who)}), dibaca langsung dari catatan, tidak pernah bisa dipindahtangankan: dompet atau explorer NEAR apa pun yang membaca NFT menampilkannya.`)}${
                 /^data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+$/.test(String(token.metadata?.media)) ? `<br><img class="cert-token" src="${token.metadata.media}" alt="${esc(token.metadata.title ?? "")}: ${esc(token.metadata.description ?? "")}" width="300" height="170">` : ""}`
+              : !member ? t("none (not a member)", "tidak ada (bukan anggota)")
               : t("not minted yet (its owner mints it from the co-op page, for 0.01 NEAR of storage)", "belum dicetak (pemiliknya mencetaknya dari halaman koperasi, dengan 0,01 NEAR untuk penyimpanan)")],
             // contract 0.2.8: work records from sister co-ops the members voted to recognise, read by the contract itself
             [t("Passport", "Paspor"), passport === UNREAD || sisters === UNREAD ? readLater() : passport === undefined ? older() : passport.length
@@ -109,9 +114,13 @@
           const KEPT = t({ Open: "waiting", Honored: "kept", Broken: "not kept" }, { Open: "menunggu", Honored: "ditepati", Broken: "tidak ditepati" });
           rows("cert-pledges", claims.filter((c) => mine.has(c.pledge)).map((c) => `<tr><td>#${c.pledge} ${esc(mine.get(c.pledge).what)}</td>
             <td>${esc(c.holder)}</td><td>${KEPT[c.status]}</td></tr>`).join(""));
-          rows("cert-juries", cases.filter((c) => c.jurors.includes(who)).map((c) => {
+          const OUT = t({ Open: "jury out", Upheld: "upheld: refunded", Dismissed: "dismissed" }, { Open: "juri bersidang", Upheld: "dikabulkan: dana dikembalikan", Dismissed: "ditolak" });
+          const APPEAL = t({ Open: "dismissed, on appeal", Upheld: "overturned on appeal, refunded", Dismissed: "dismissed; the appeal kept the ruling" },
+            { Open: "ditolak, sedang dibanding", Upheld: "dibatalkan lewat banding, dana dikembalikan", Dismissed: "ditolak; banding mempertahankan putusan" });
+          rows("cert-juries", sat.map((c) => {
             const v = c.votes.find(([j]) => j === who);
-            return `<tr><td>#${c.id} ${t("job", "pekerjaan")} ${esc(c.job_id)}</td><td>${v ? (v[1] ? t("uphold", "kabulkan") : t("reject", "tolak")) : t("did not rule", "tidak memutus")}</td><td>${esc(c.status)}</td></tr>`;
+            const a = appeals.get(c.id);
+            return `<tr><td>#${c.id} ${t("job", "pekerjaan")} ${esc(c.job_id)}</td><td>${v ? (v[1] ? t("uphold", "kabulkan") : t("reject", "tolak")) : t("did not rule", "tidak memutus")}</td><td>${a ? APPEAL[a.status] ?? esc(a.status) : OUT[c.status] ?? esc(c.status)}</td></tr>`;
           }).join(""));
         });
       } catch (e) {

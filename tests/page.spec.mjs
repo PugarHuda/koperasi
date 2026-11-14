@@ -310,6 +310,15 @@ test("the wallet panel follows the language switch", async ({ page }, testInfo) 
   expect(errors).toEqual([]);
 });
 
+test("juries are drawn by reputation (#150), never described as drawn at random, on the docs and the landing page", async ({ page }) => {
+  for (const path of ["/docs.html", "/"]) {
+    await page.goto(path);
+    const text = await page.locator("body").textContent();
+    expect(text, path).not.toMatch(/drawn at random|random jury|juri acak/i);
+    expect(text, path).toMatch(/drawn (by|from members in good standing, weighted by) reputation|weighted by reputation/);
+  }
+});
+
 test("the docs page loads, its contents link to its sections, and it reads in Bahasa Indonesia", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => { if (!network(e.message)) errors.push(e.message); });

@@ -467,7 +467,7 @@ function commonsPanel(s) {
       <label>USDC <input id="w-c-amt" type="text" inputmode="decimal" autocomplete="off" aria-label="USDC to refund"></label></div>
       <div class="stake-row"><label>Why <input id="w-c-why" type="text" maxlength="280" autocomplete="off" aria-label="Why the buyer should be refunded"></label>
       <button type="button" class="btn" id="w-c-open">Open the case</button></div>
-      <p class="small">Only a job the buyer disputed on Agent Market and the market then paid to the agent. Three members in good standing are drawn at random;
+      <p class="small">Only a job the buyer disputed on Agent Market and the market then paid to the agent. Three members in good standing are drawn, weighted by reputation (the members' choice, #150);
       two must uphold. Upheld: your bond comes back and the contract refunds the buyer from the treasury. Not upheld: the bond goes to the DAO,
       and within 7 days you may appeal to every member (1 NEAR bond): the refund becomes a DAO proposal, one member one vote.</p></details>`;
   }
@@ -612,6 +612,16 @@ async function render() {
 }
 
 async function paint() {
+  // ?as= on the dashboard: someone else's record, read-only; that account may well be a member already, so no "join" pitch
+  const viewing = new URLSearchParams(location.search).get("as")?.match(/^[a-z0-9._-]{2,64}$/)?.[0];
+  if (!me && viewing) {
+    box.innerHTML = t(`<p>You are viewing <strong>${esc(viewing)}</strong> read-only. Connect a NEAR <strong>testnet</strong> wallet to act as yourself.</p>
+      <button type="button" class="btn" id="w-connect">Connect a testnet wallet</button>`,
+    `<p>Anda melihat <strong>${esc(viewing)}</strong> dalam mode hanya baca. Hubungkan dompet NEAR <strong>testnet</strong> untuk bertindak sebagai diri Anda.</p>
+      <button type="button" class="btn" id="w-connect">Hubungkan dompet testnet</button>`);
+    $("w-connect").onclick = () => connector.connect().catch(() => {});
+    return;
+  }
   if (!me) {
     box.innerHTML = t(`<p>Connect a NEAR <strong>testnet</strong> wallet (Meteor, Intear, Nightly…) to join this co-op from here.
       New to testnet? Meteor creates a free testnet account with faucet NEAR.</p>

@@ -92,7 +92,8 @@ export async function view(contract, method, args = {}) {
 
 export const $ = (id) => document.getElementById(id);
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-export const usdc = (u) => (Number(u) / 1e6).toFixed(2);
+// a micro-USDC amount (e.g. a 1e-6 USDC refund) reads "<0.01", not "0.00"
+export const usdc = (u) => (Number(u) > 0 && Number(u) < 10_000 ? "<0.01" : (Number(u) / 1e6).toFixed(2));
 export const nearAmt = (y) => (Number(BigInt(y) / 10n ** 21n) / 1000).toLocaleString("en", { maximumFractionDigits: 2 });
 
 /** Every item of a paged view (get_members, get_receipts: `from`/`limit`), page by page. */

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test as base } from "@playwright/test";
 
-export const RPC = /(rpc\.fastnear\.com|test\.rpc\.fastnear\.com|near-testnet\.drpc\.org|rpc\.testnet\.fastnear\.com)/;
+export const RPC = /(rpc\.fastnear\.com|test\.rpc\.fastnear\.com|near-testnet\.drpc\.org|rpc\.testnet\.fastnear\.com|rpc\.testnet\.near\.org)/;
 
 // Six browser profiles from one runner hit the public RPCs' per-IP limit (429) and tests failed at random. A read the
 // chain answered is kept for the rest of the run and answered from here, so each distinct read reaches the network

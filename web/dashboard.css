@@ -103,3 +103,4 @@
   .dash .terms { grid-template-columns: minmax(0, 1fr); }
   .dash .grid tr { border-color: #1b2142; }
 }
+.tiers.plain b::before { content: none; }

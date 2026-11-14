@@ -109,8 +109,8 @@
           <g lang="id"><text class="t" x="56" y="488">SHU dibagi lewat suara</text><text class="s" x="56" y="507">dibagi oleh kontrak</text></g></g>
         <path d="M150 526V542" /><path class="head" d="M144 541h12l-6 7z" />
         <g class="court"><rect x="10" y="550" width="280" height="64" rx="6" /><circle cx="34" cy="582" r="12" /><text class="n" x="34" y="587" text-anchor="middle">7</text>
-          <g lang="en"><text class="t" x="56" y="578">Disputes go to court</text><text class="s" x="56" y="597">random jury, appeal, strikes</text></g>
-          <g lang="id"><text class="t" x="56" y="578">Sengketa ke pengadilan</text><text class="s" x="56" y="597">juri acak, banding, strike</text></g></g>
+          <g lang="en"><text class="t" x="56" y="578">Disputes go to court</text><text class="s" x="56" y="597">jury by reputation, appeal, strikes</text></g>
+          <g lang="id"><text class="t" x="56" y="578">Sengketa ke pengadilan</text><text class="s" x="56" y="597">juri per reputasi, banding, strike</text></g></g>
             </svg>
             <ol class="steps-ol">
               <li><b><span lang="en">A job arrives.</span><span lang="id">Pekerjaan masuk.</span></b>
@@ -150,11 +150,11 @@
                   pendidikan dan sosial, dividen reputasi, dan bagian agen diambil dari situ), lalu menurut simpanan dan poin kontribusi. Setiap anggota
                   mengklaim bagiannya, atau agen membayarkannya di chain pilihan anggota.</span></li>
               <li><b><span lang="en">Disputes go to the court.</span><span lang="id">Sengketa ke pengadilan.</span></b>
-                <span lang="en">A member opens a case on a job the buyer disputed (0.5 NEAR bond). Three members in good standing are drawn at random;
+                <span lang="en">A member opens a case on a job the buyer disputed (0.5 NEAR bond). Three members in good standing are drawn, weighted by reputation (the members' choice, #150);
                   two must uphold. An upheld case refunds the buyer (from the risk fund at once) and is a strike against the agent; a dismissed one
                   can be appealed to every member.</span>
                 <span lang="id">Seorang anggota membuka perkara atas pekerjaan yang disengketakan pembeli (jaminan 0,5 NEAR). Tiga anggota berstatus baik
-                  diundi; dua harus mengabulkan. Perkara yang dikabulkan mengembalikan uang pembeli (langsung dari dana risiko) dan menjadi strike bagi
+                  diundi menurut bobot reputasi (pilihan anggota, #150); dua harus mengabulkan. Perkara yang dikabulkan mengembalikan uang pembeli (langsung dari dana risiko) dan menjadi strike bagi
                   agen; perkara yang ditolak bisa dibanding ke semua anggota.</span></li>
             </ol>
           </div>
@@ -182,10 +182,10 @@
                 memegang uang. Ia boleh mengusulkan anggaran dasar baru dari catatannya sendiri (ia menandatangani, kontrak mengajukan usulan DAO dan
                 tidak ikut memilih); anggota yang memutuskan.</dd></div>
             <div><dt><span lang="en">The court</span><span lang="id">Pengadilan</span></dt>
-              <dd lang="en">A jury of three drawn at random (since 0.3.7, by reputation weight flattened by a square root, as the members voted in #150); an appeal to every member (1 NEAR bond, 7 days). Each upheld case against the agent is a strike:
+              <dd lang="en">A jury of three drawn from members in good standing, weighted by reputation flattened by a square root (the members' choice, #150; a co-op whose members leave it off draws uniformly); an appeal to every member (1 NEAR bond, 7 days). Each upheld case against the agent is a strike:
                 its daily inference budget and profit share halve per strike in 90 days. Three strikes suspend it until the members reinstate it or
                 approve a recovery plan by its sha256; its share then climbs back from 25% over 30 days.</dd>
-              <dd lang="id">Juri tiga orang yang diundi (sejak 0.3.7 menurut bobot reputasi yang diratakan dengan akar kuadrat, sesuai suara anggota #150); banding ke semua anggota (jaminan 1 NEAR, 7 hari). Setiap perkara yang dikabulkan terhadap
+              <dd lang="id">Juri tiga orang yang diundi dari anggota berstatus baik, dibobot reputasi yang diratakan dengan akar kuadrat (pilihan anggota, #150; koperasi yang anggotanya mematikannya mengundi merata); banding ke semua anggota (jaminan 1 NEAR, 7 hari). Setiap perkara yang dikabulkan terhadap
                 agen adalah satu strike: anggaran inferensi harian dan bagian SHU-nya berkurang separuh per strike dalam 90 hari. Tiga strike
                 menangguhkannya sampai anggota memulihkannya atau menyetujui rencana pemulihan lewat sha256-nya; bagiannya lalu naik lagi dari 25%
                 selama 30 hari.</dd></div>
@@ -320,7 +320,7 @@
             <div><dt>Strike</dt><dd lang="en">A case upheld against the agent; each halves its budget and share for 90 days.</dd><dd lang="id">Perkara yang dikabulkan terhadap agen; masing-masing memotong separuh anggaran dan bagiannya selama 90 hari.</dd></div>
             <div><dt>Suspension <i>· penangguhan</i></dt><dd lang="en">After three strikes the contract refuses the agent's receipts until the members act.</dd><dd lang="id">Setelah tiga strike kontrak menolak tanda terima agen sampai anggota bertindak.</dd></div>
             <div><dt>Recovery plan <i>· rencana pemulihan</i></dt><dd lang="en">A plan the members approve by its sha256 to reinstate the agent, its share climbing back over 30 days.</dd><dd lang="id">Rencana yang disetujui anggota lewat sha256-nya untuk memulihkan agen, bagiannya naik lagi selama 30 hari.</dd></div>
-            <div><dt>Jury <i>· juri</i></dt><dd lang="en">Three members in good standing drawn at random for a case; two must uphold it.</dd><dd lang="id">Tiga anggota berstatus baik yang diundi untuk satu perkara; dua harus mengabulkannya.</dd></div>
+            <div><dt>Jury <i>· juri</i></dt><dd lang="en">Three members in good standing drawn for a case, weighted by reputation (the members' choice, #150); two must uphold it.</dd><dd lang="id">Tiga anggota berstatus baik yang diundi untuk satu perkara, dibobot reputasi (pilihan anggota, #150); dua harus mengabulkannya.</dd></div>
             <div><dt>Appeal <i>· banding</i></dt><dd lang="en">A dismissed case taken to every member, with a 1 NEAR bond, within 7 days.</dd><dd lang="id">Perkara yang ditolak dibawa ke semua anggota, dengan jaminan 1 NEAR, dalam 7 hari.</dd></div>
             <div><dt>Federation <i>· koperasi sekunder</i></dt><dd lang="en">A co-op of co-ops: a DAO whose members are co-ops' DAOs, one co-op one vote.</dd><dd lang="id">Koperasi dari koperasi: DAO yang anggotanya DAO koperasi, satu koperasi satu suara.</dd></div>
             <div><dt>Sister co-op <i>· koperasi saudara</i></dt><dd lang="en">A co-op the members voted to recognise: its records, credit and referrals count here.</dd><dd lang="id">Koperasi yang diakui lewat suara anggota: catatan, kredit, dan rujukannya berlaku di sini.</dd></div>

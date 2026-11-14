@@ -189,6 +189,7 @@ try {
       `<a href="${explorer(dep.contract)}">${t("Contract on NEAR", "Kontrak di NEAR")}</a>`,
       `<a href="${explorer(dep.dao)}">${t("The co-op's DAO", "DAO koperasi")}</a>`,
       `<a href="https://github.com/PugarHuda/koperasi">${t("Source and demo", "Kode sumber dan demo")}</a>`,
+      `<a href="docs.html">${t("Docs", "Panduan")}</a>`,
       `<a href="/coops.html">${t("Every co-op on this code", "Semua koperasi dengan kode ini")}</a>`,
     ].join("");
     $("net").textContent = t(`Reading ${dep.network}: ${dep.contract}`, `Membaca ${dep.network}: ${dep.contract}`);
@@ -324,6 +325,7 @@ try {
     const i = Number(pick.value);
     if (!members[i]) return;
     const m = members[i][1];
+    pick.title = members[i][0]; // the select ellipsizes a long account id: the full one on hover
     $("meters").innerHTML = meter(t("Savings staked, NEAR", "Simpanan di-stake, NEAR"), nearAmt(m.savings), m.savings, tops[0])
       + meter(t("Contribution points", "Poin kontribusi"), m.points, m.points, tops[1])
       + meter(t("Share to claim, USDC", "SHU yang bisa diklaim, USDC"), usdc(claimable[i]), claimable[i], tops[2]);

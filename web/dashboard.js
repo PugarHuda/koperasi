@@ -11,8 +11,16 @@ const wallet = import("./wallet.js");
 const C = dep.contract;
 const D = dep.dao;
 const date = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toLocaleDateString(t("en-GB", "id-ID"), { day: "numeric", month: "short", year: "numeric" });
+const hm = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toISOString().slice(11, 16);
 const short = (h) => `${String(h).slice(0, 10)}…`;
-const oneLine = (s, n) => String(s).replace(/\s+/g, " ").slice(0, n);
+/** One line of at most n characters, cut at a word boundary with "…" (never mid-word). */
+const oneLine = (s, n) => {
+  const x = String(s).replace(/\s+/g, " ").trim();
+  if (x.length <= n) return x;
+  const cut = x.slice(0, n);
+  const sp = cut.lastIndexOf(" ");
+  return `${(sp > n / 2 ? cut.slice(0, sp) : cut).replace(/[\s,;:.(–-]+$/, "")}…`;
+};
 const table = (head, rows) => (rows.length
   ? `<div class="scroll" tabindex="0" role="region" aria-label="${esc(head[0])} ${t("table", "tabel")}"><table class="grid"><thead><tr>${head.map((h) => `<th scope="col">${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`
   : `<p class="muted">${t("Nothing yet.", "Belum ada.")}</p>`);
@@ -71,7 +79,7 @@ async function overview() {
       view(D, "get_proposals", { from_index: Math.max(0, last - 5), limit: 5 })]);
     const items = [
       ...recs.map((r) => ({ ts: r.ts, html: `${t("Job", "Pekerjaan")} <code>${esc(short(r.job_id))}</code>: ${usdc(r.price)} USDC ${t("under by-laws", "dengan anggaran dasar")} v${esc(r.config_version)}, <span class="badge ${esc(r.status)}">${esc(word(r.status))}</span>` })),
-      ...props.map((p) => ({ ts: p.submission_time, html: `${t("DAO proposal", "Usulan DAO")} #${esc(p.id)} ${t("by", "oleh")} ${esc(p.proposer)}: ${esc(oneLine(p.description, 110))} <span class="muted">(${esc(word(p.status))})</span>` })),
+      ...props.map((p) => ({ ts: p.submission_time, html: `${t("DAO proposal", "Usulan DAO")} #${esc(p.id)} ${t("by", "oleh")} ${esc(p.proposer)}: ${esc(oneLine(p.description, 160))} <span class="muted">(${esc(word(p.status))})</span>` })),
     ].sort((a, b) => (BigInt(b.ts) > BigInt(a.ts) ? 1 : -1));
     return `<ul class="feed">${items.map((i) => `<li><time>${date(i.ts)}</time><span>${i.html}</span></li>`).join("")}</ul>`;
   });
@@ -324,13 +332,13 @@ async function report() {
         `disetujui (#${esc(r.p.proposal)}), lalu <strong>dibatalkan oleh v${r.undoneTo} dari anggota (#${esc(r.undone.id)})</strong>`);
       if (r.repassed) return t(`${esc(word(r.dao?.status ?? "?").toLowerCase())} (#${esc(r.p.proposal)}), but its call failed; <strong>the members passed the same file as #${esc(r.repassed.id)}</strong>`,
         `${esc(word(r.dao?.status ?? "?").toLowerCase())} (#${esc(r.p.proposal)}), tetapi panggilannya gagal; <strong>anggota meloloskan berkas yang sama sebagai #${esc(r.repassed.id)}</strong>`);
-      return `${esc(word(r.dao?.status ?? "?"))} (#${esc(r.p.proposal)})`;
+      return `${esc(word(r.dao?.status ?? "?").toLowerCase())} (#${esc(r.p.proposal)})`;
     };
     const again = rows.filter((r) => r.repassed).length;
     return verdict(t(`By-laws: it proposed ${rows.length} versions; ${passed} approved by the members${again ? ` (${again} re-passed by the members after its own call failed)` : ""}; ${undone.length} later undone by the members${undone.map((r) => ` (v${esc(r.p.version)} → v${r.undoneTo}, #${esc(r.undone.id)})`).join("")}.`,
       `Anggaran dasar: ia mengusulkan ${rows.length} versi; ${passed} disetujui anggota${again ? ` (${again} diloloskan ulang oleh anggota setelah panggilannya sendiri gagal)` : ""}; ${undone.length} kemudian dibatalkan anggota${undone.map((r) => ` (v${esc(r.p.version)} → v${r.undoneTo}, #${esc(r.undone.id)})`).join("")}.`))
       + table([t("By-laws", "Anggaran dasar"), t("What came of it", "Hasilnya"), t("Its reasoning", "Alasannya")], [
-        ...(declined ? [`<tr><td>v${esc(declined.version)}?</td><td data-label="${t("What came of it", "Hasilnya")}">${t("it proposed nothing", "ia tidak mengusulkan apa pun")}</td>
+        ...(declined ? [`<tr><td>${t(`under v${esc(declined.version)}`, `di bawah v${esc(declined.version)}`)}</td><td data-label="${t("What came of it", "Hasilnya")}">${t("proposed nothing", "tidak mengusulkan apa pun")}</td>
           <td data-label="${t("Its reasoning", "Alasannya")}">“${esc(String(declined.evaluation).slice(0, 220))}”</td></tr>`] : []),
         ...[...rows].reverse().map((r) => `<tr><td>v${esc(r.p.version)}</td><td data-label="${t("What came of it", "Hasilnya")}">${fate(r)}</td>
           <td data-label="${t("Its reasoning", "Alasannya")}">${esc(String(r.p.reason).slice(0, 200))}${r.file?.evaluation ? `<span class="claim">${t("Its evaluation of the last ones", "Penilaiannya atas versi sebelumnya")}: “${esc(String(r.file.evaluation).slice(0, 200))}”</span>` : ""}${
@@ -375,6 +383,7 @@ async function report() {
       `Jika pengadilan menskors agen, ia (atau pengurus) mengajukan rencana pemulihan; saat anggota menyetujuinya lewat pemungutan suara DAO, agen dipulihkan dan bagiannya naik dari 25% kembali ke penuh selama ${esc(days)} hari (pengaturan anggota).`);
     if (!r) return verdict(t(`Recovery: no recovery on record; its share is not ramped (${bps / 100}%).`, `Pemulihan: tidak ada pemulihan tercatat; bagiannya tidak dibatasi (${bps / 100}%).`)) + `<p class="small">${rule}</p>`;
     const link = /^https?:\/\//.test(r.plan_uri) ? esc(r.plan_uri) : byLawsPath(r.plan_uri) ? esc(RAW + r.plan_uri) : null;
+    const vote = dep.v036?.recovery;
     const plan = link ? `<a href="${link}">${esc(r.plan_uri)}</a>` : `<code>${esc(r.plan_uri)}</code>`;
     const state = r.cancelled_at ? t(`approved ${date(r.approved_at)}, then cut short by a new suspension on ${date(r.cancelled_at)}`, `disetujui ${date(r.approved_at)}, lalu dihentikan oleh skors baru pada ${date(r.cancelled_at)}`)
       : r.approved_at ? t(`approved by the members on ${date(r.approved_at)}; ramp over ${esc(r.ramp_days)} days`, `disetujui anggota pada ${date(r.approved_at)}; naik selama ${esc(r.ramp_days)} hari`)
@@ -384,7 +393,9 @@ async function report() {
         <div class="wide"><dt>${t("Plan", "Rencana")}</dt><dd>${plan}</dd></div>
         <div class="wide"><dt>SHA-256</dt><dd><code>${esc(r.plan_sha256)}</code></dd></div>
         <div><dt>${t("Filed by", "Diajukan oleh")}</dt><dd>${esc(r.proposed_by)}, ${date(r.proposed_at)}</dd></div>
-        <div><dt>${t("Share now", "Bagian sekarang")}</dt><dd>${bps / 100}%</dd></div></dl>
+        <div><dt>${t("Share now", "Bagian sekarang")}</dt><dd>${bps / 100}%</dd></div>${
+  vote && r.plan_sha256 === vote.plan_sha256 ? `<div class="wide"><dt>${t("Approved by", "Disetujui lewat")}</dt><dd><a href="${explorer(D)}">${t("DAO proposal", "Usulan DAO")} #${esc(vote.proposal)}</a>${
+    vote.propose_tx ? ` (<a href="${txUrl(vote.propose_tx)}">tx</a>)` : ""}</dd></div>` : ""}</dl>
       <p class="small">${rule}</p>`;
   });
 }
@@ -516,7 +527,7 @@ async function commons() {
     const state = (p) => {
       if (p.closed) return p.result === null ? t("closed: no winner (no votes, or a tie)", "ditutup: tidak ada pemenang (tanpa suara, atau seri)")
         : t(`closed: <strong>${esc(p.options[p.result])}</strong>`, `ditutup: <strong>${esc(p.options[p.result])}</strong>`);
-      return BigInt(p.closes_at) > now ? t(`open until ${date(p.closes_at)}`, `terbuka sampai ${date(p.closes_at)}`)
+      return BigInt(p.closes_at) > now ? t(`open until ${date(p.closes_at)}, ${hm(p.closes_at)} UTC`, `terbuka sampai ${date(p.closes_at)}, ${hm(p.closes_at)} UTC`)
         : t(`voting ended ${date(p.closes_at)}; not counted yet (anyone may close it)`, `pemungutan berakhir ${date(p.closes_at)}; belum dihitung (siapa pun boleh menutupnya)`);
     };
     return `<p class="small">${rep ? t(`Technical questions weigh each vote by the member's reputation weight, by the members' own choice${modeProp !== undefined ? ` (DAO proposal #${esc(modeProp)})` : ""}; general ones count one member, one vote.`,
@@ -553,7 +564,7 @@ async function federation() {
       ${ceil ? t(`Its ceiling, binding in this contract: loans at most <strong>${ceil.max_rate_bps / 100}%</strong> for ${esc(ceil.max_term_days)} days.`,
         `Batas atasnya, mengikat di kontrak ini: pinjaman paling tinggi <strong>${ceil.max_rate_bps / 100}%</strong> untuk ${esc(ceil.max_term_days)} hari.`) : t("No loan ceiling set yet.", "Belum ada batas atas pinjaman.")}</p>
       <p>${t("Sister co-ops (their work records count here)", "Koperasi saudara (catatan kerja mereka dihitung di sini)")}: ${sisters.length ? sisters.map((s) => `<a href="${explorer(s)}">${esc(s)}</a>`).join(", ") : t("none", "tidak ada")}.</p>
-      ${res.length ? `<ul class="tiers">${res.map((r) => `<li><b>#${esc(r.id)}</b><span>${esc(r.text)}</span></li>`).join("")}</ul>` : ""}
+      ${res.length ? `<ul class="tiers plain">${res.map((r) => `<li><b>#${esc(r.id)}</b><span>${esc(r.text)}</span></li>`).join("")}</ul>` : ""}
       <p class="small"><a href="/coops.html">${t("Every co-op on this code, and the federation's resolutions with each co-op's vote", "Setiap koperasi dengan kode ini, dan resolusi federasi beserta suara tiap koperasi")}</a>.</p>`;
   });
   pane("f-referrals", async () => {
@@ -588,16 +599,27 @@ async function federation() {
     // 0.3.7: interest on each loan, paid into the surplus; the loans the agent asked the members for, one per sister
     const owe = new Map(interest.map(([id, due, paid]) => [Number(id), [due, paid]]));
     const asks = (await Promise.all(sisters.map((s) => view(C, "get_loan_suggestion", { coop: s })))).filter(Boolean);
-    const asked = asks.length ? `<ul class="tiers" id="f-asks">${asks.map((a) => `<li><b>${a.proposal !== null
+    // get_loan_suggestion is cleared once the loan is made: the ask that became a loan is in the deployment record (v037)
+    const lent = dep.v037?.loan;
+    const back = dep.v037?.repay;
+    const sisterProp = (r) => `<a href="${explorer(r.dao)}">${t("the sister's own vote", "suara koperasi saudara sendiri")} (#${esc(r.proposal)})</a>`;
+    const asked = !asks.length && lent ? `<ul class="tiers" id="f-asks"><li><b>${t(`The agent asked for loan #${esc(lent.id)}: DAO proposal #${esc(lent.proposal)}`, `Agen meminta pinjaman #${esc(lent.id)}: usulan DAO #${esc(lent.proposal)}`)}</b>
+      <span>${usdc(lent.amount)} USDC ${t("to", "ke")} <a href="${explorer(lent.coop)}">${esc(lent.coop)}</a> ${t(`for ${esc(lent.days)} days at ${lent.interest_bps / 100}%`, `selama ${esc(lent.days)} hari dengan bunga ${lent.interest_bps / 100}%`)} (<a href="${txUrl(lent.suggest_tx)}">${t("its ask", "permintaannya")}</a>, <a href="${txUrl(lent.vote_tx)}">${t("the members' vote", "suara anggota")}</a>)${
+        back && Number(back.loan) === Number(lent.id) ? t(`; repaid with interest by ${sisterProp(back)}`, `; dilunasi beserta bunga lewat ${sisterProp(back)}`) : ""}; ${t("reason", "alasan")}: “${esc(oneLine(lent.reason, 280))}”</span></li></ul>`
+      : asks.length ? `<ul class="tiers" id="f-asks">${asks.map((a) => `<li><b>${a.proposal !== null
       ? t(`The agent asked for this loan: DAO proposal #${esc(a.proposal)}`, `Agen meminta pinjaman ini: usulan DAO #${esc(a.proposal)}`)
       : t("The agent asked for this loan: not filed with the DAO yet", "Agen meminta pinjaman ini: belum diajukan ke DAO")}</b>
       <span>${usdc(a.amount)} USDC ${t("to", "ke")} <a href="${explorer(a.coop)}">${esc(a.coop)}</a> ${t(`for ${esc(a.days)} days at ${a.interest_bps / 100}%`, `selama ${esc(a.days)} hari dengan bunga ${a.interest_bps / 100}%`)}, ${date(a.at)}; ${t("reason", "alasan")}: “${esc(oneLine(a.reason, 280))}”</span></li>`).join("")}</ul>`
       : `<p class="small" id="f-asks">${t("Loans the agent asked the members for: none yet.", "Pinjaman yang diminta agen kepada anggota: belum ada.")}</p>`;
     const ok = dep.v036?.loan;
     const failed = dep.v036?.loan_failed;
+    const repaid = [dep.v036?.repay, back].filter(Boolean);
     const why = (l) => {
+      const r = repaid.find((x) => Number(x.loan) === Number(l.id));
+      const by = r ? t(` Repaid by ${sisterProp(r)}.`, ` Dilunasi lewat ${sisterProp(r)}.`) : "";
+      if (lent && Number(lent.id) === Number(l.id)) return t(`Asked for by the agent; voted by DAO proposal #${esc(lent.proposal)}.`, `Diminta oleh agen; diputuskan lewat usulan DAO #${esc(lent.proposal)}.`) + by;
+      if (ok && Number(ok.id) === Number(l.id)) return t(`Voted by DAO proposal #${esc(ok.proposal)}.`, `Diputuskan lewat usulan DAO #${esc(ok.proposal)}.`) + by;
       if (failed && Number(failed.id) === Number(l.id)) return t(`The transfer bounced: rolled back to the risk fund (DAO proposal #${esc(failed.proposal)}).`, `Transfernya terpental: dikembalikan ke dana risiko (usulan DAO #${esc(failed.proposal)}).`);
-      if (ok && Number(ok.id) === Number(l.id)) return t(`Voted by DAO proposal #${esc(ok.proposal)}.`, `Diputuskan lewat usulan DAO #${esc(ok.proposal)}.`);
       return "";
     };
     return `<p class="small">${t("The members lend USDC from the risk fund to a sister co-op by a DAO vote; the money goes to the treasury the sister's members name (its DAO), which can spend it and pay it back.",
@@ -688,6 +710,15 @@ function history() {
     const called = pclaims.filter((c) => c.holder === who);
     const sued = cases.filter((c) => c.claimant === who);
     const juror = cases.filter((c) => c.jurors.includes(who));
+    // a dismissed case may be overturned on appeal (contract 0.2.7): the final word is the appeal's, as the landing shows it
+    const appeals = new Map(await Promise.all(sued.filter((c) => c.status === "Dismissed")
+      .map((c) => view(C, "get_appeal", { id: c.id }).catch(() => null).then((a) => [c.id, a]))));
+    const fate = (c) => {
+      const a = appeals.get(c.id);
+      if (a?.status === "Upheld") return t("overturned on appeal, refunded", "dibatalkan lewat banding, dana dikembalikan");
+      if (a?.status === "Open") return t("dismissed, on appeal", "ditolak, sedang dibanding");
+      return `${word(c.status).toLowerCase()}${a ? t(" (the appeal kept the ruling)", " (banding mempertahankan putusan)") : ""}`;
+    };
     const ruling = (c) => { const v = c.votes.find(([j]) => j === who); return v ? (v[1] ? t("you ruled uphold", "Anda memutus kabulkan") : t("you ruled reject", "Anda memutus tolak")) : c.status === "Open" ? t("your ruling is due", "putusan Anda ditunggu") : t("you did not rule", "Anda tidak memutus"); };
     const n = (list, st) => list.filter((c) => c.status === st).length;
     const rows = [
@@ -700,15 +731,15 @@ function history() {
         `${mine.length} (${mine.map((p) => `#${esc(p.id)}`).join(", ")}): ditagih ${onMine.length} kali, ${n(onMine, "Honored")} ditepati, ${n(onMine, "Broken")} diingkari, ${n(onMine, "Open")} terbuka`) : t("none", "tidak ada")],
       [t("Pledges called in", "Janji ditagih"), called.length ? t(`${called.length}: ${n(called, "Honored")} kept, ${n(called, "Broken")} broken, ${n(called, "Open")} for you to confirm`,
         `${called.length}: ${n(called, "Honored")} ditepati, ${n(called, "Broken")} diingkari, ${n(called, "Open")} menunggu konfirmasi Anda`) : t("none", "tidak ada")],
-      [t("Court, as claimant", "Pengadilan, sebagai penggugat"), sued.length ? sued.map((c) => `#${esc(c.id)} ${esc(word(c.status).toLowerCase())}`).join(", ") : t("none", "tidak ada")],
+      [t("Court, as claimant", "Pengadilan, sebagai penggugat"), sued.length ? sued.map((c) => `#${esc(c.id)} ${esc(fate(c))}`).join(", ") : t("none", "tidak ada")],
       [t("Court, as juror", "Pengadilan, sebagai juri"), juror.length ? juror.map((c) => `#${esc(c.id)} (${ruling(c)})`).join(", ") : t("none", "tidak ada")],
       [t("Dues (simpanan wajib)", "Simpanan wajib"), dues ? (dues[1] ? t(`paid until ${date(dues[0])}`, `lunas sampai ${date(dues[0])}`) : t(`late: paid until ${date(dues[0])}`, `terlambat: lunas sampai ${date(dues[0])}`)) : t("no dues voted", "belum ada simpanan wajib")],
       [t("Loan", "Pinjaman"), loan ? `${near3(loan.principal)} NEAR + ${near3(loan.interest)} ${t("interest", "bunga")}, ${esc(word(loan.status).toLowerCase())}${loan.status === "Repaid" ? "" : `, ${t("due", "jatuh tempo")} ${date(loan.due)}`} (${t("DAO proposal", "usulan DAO")} #${esc(loan.proposal)})` : t("none", "tidak ada")],
       [t("Task quality", "Kualitas tugas"), quality ? (() => {
         const f = taskFactor(who, quality, cases);
         const w = weights?.find(([a]) => a === who)?.[1];
-        return t(`${esc(quality.paid)} paid, ${esc(quality.handed_back)} handed back, ${esc(quality.vetoed)} vetoed; with your court record (${f.cg} good, ${f.cb} bad) your weight is multiplied by (${f.good}+2)/(${f.bad}+2) = ×${f.factor.toFixed(2)}; ${w ? `weight now ${esc(w)}` : "no weight now (not in good standing, or no work since the last share)"}.`,
-          `${esc(quality.paid)} dibayar, ${esc(quality.handed_back)} dikembalikan, ${esc(quality.vetoed)} diveto; dengan catatan pengadilan Anda (${f.cg} baik, ${f.cb} buruk) bobot Anda dikali (${f.good}+2)/(${f.bad}+2) = ×${f.factor.toFixed(2)}; ${w ? `bobot sekarang ${esc(w)}` : "belum ada bobot (tidak berstatus baik, atau belum ada kerja sejak pembagian terakhir)"}.`)
+        return t(`${esc(quality.paid)} paid, ${esc(quality.handed_back)} handed back, ${esc(quality.vetoed)} vetoed; your court and task record (good ${f.good}, bad ${f.bad}) multiplies your weight by (${f.good}+2)/(${f.bad}+2) = ×${f.factor.toFixed(2)}; ${w ? `weight now ${esc(w)}` : "no weight now (not in good standing, or no work since the last share)"}.`,
+          `${esc(quality.paid)} dibayar, ${esc(quality.handed_back)} dikembalikan, ${esc(quality.vetoed)} diveto; catatan pengadilan dan tugas Anda (baik ${f.good}, buruk ${f.bad}) mengalikan bobot Anda dengan (${f.good}+2)/(${f.bad}+2) = ×${f.factor.toFixed(2)}; ${w ? `bobot sekarang ${esc(w)}` : "belum ada bobot (tidak berstatus baik, atau belum ada kerja sejak pembagian terakhir)"}.`)
           + qualityExample(who);
       })() : "–"],
       [t("Credit", "Kredit"), credit ? t(`score ${esc(credit[0])} of 10: you can borrow up to ${nearAmt(credit[1])} NEAR`, `skor ${esc(credit[0])} dari 10: Anda bisa meminjam hingga ${nearAmt(credit[1])} NEAR`) : "–"],
@@ -718,7 +749,7 @@ function history() {
       ...votes.map((p) => ({ ts: p.submission_time, html: `${t("You voted", "Anda memilih")} <strong>${esc(word(p.votes[who]).toLowerCase())}</strong> ${t("on", "pada")} #${esc(p.id)}: ${esc(oneLine(p.description, 90))} <span class="muted">(${esc(word(p.status))})</span>` })),
       ...mine.map((p) => ({ ts: p.ts, html: `${t("You pledged", "Anda berjanji")} #${esc(p.id)}: ${esc(p.what)}` })),
       ...called.map((c) => ({ ts: c.ts, html: `${t("You called in pledge", "Anda menagih janji")} #${esc(c.pledge)} <span class="muted">(${esc(word(c.status))})</span>` })),
-      ...sued.map((c) => ({ ts: c.opened, html: `${t("You brought case", "Anda mengajukan perkara")} #${esc(c.id)} <span class="muted">(${esc(word(c.status))})</span>` })),
+      ...sued.map((c) => ({ ts: c.opened, html: `${t("You brought case", "Anda mengajukan perkara")} #${esc(c.id)} <span class="muted">(${esc(fate(c))})</span>` })),
       ...juror.map((c) => ({ ts: c.opened, html: `${t("Juror on case", "Juri pada perkara")} #${esc(c.id)}: ${ruling(c)}` })),
     ].sort((a, b) => (BigInt(b.ts) > BigInt(a.ts) ? 1 : -1));
     return `<p class="small">${t(`For <strong>${esc(who)}</strong>${member ? "" : ", not a member of this co-op"}, read from NEAR.`, `Untuk <strong>${esc(who)}</strong>${member ? "" : ", bukan anggota koperasi ini"}, dibaca dari NEAR.`)}</p>

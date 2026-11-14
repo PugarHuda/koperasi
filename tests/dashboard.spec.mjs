@@ -131,7 +131,7 @@ test("task quality: Bob's hand-back in his history and every member's factor in 
   await page.goto(`/dashboard.html?as=${BOB}#/membership`);
   const hist = page.locator("#m-history");
   await expect(hist).toContainText(/Task quality\s*\d+ paid, \d+ handed back, \d+ vetoed/);
-  await expect(hist).toContainText(/multiplied by \(\d+\+2\)\/\(\d+\+2\) = ×\d\.\d\d/);
+  await expect(hist).toContainText(/court and task record \(good \d+, bad \d+\) multiplies your weight by \(\d+\+2\)\/\(\d+\+2\) = ×\d\.\d\d/);
   await expect(hist).toContainText("task #17 took the weight 275 → 220");
   await go(page, "Commons");
   const q = page.locator("#c-quality");
@@ -198,8 +198,12 @@ test("0.3.7: interest on loans between co-ops, and the loans the agent asked for
   await expect(loans.locator("thead")).toContainText("Interest due / paid");
   await expect(loans.locator("tbody tr").first()).toContainText(/\d+\.\d\d \/ \d+\.\d\d USDC[\s\S]*\d+\.\d\d \/ \d+\.\d\d USDC/);
   const asks = page.locator("#f-asks");
-  await expect(asks).toContainText(/none yet|The agent asked for this loan: (DAO proposal #\d+|not filed with the DAO yet)/);
+  // the agent's ask for loan #2 (DAO #151): the contract clears the suggestion once lent, so the page reads the deployment record
+  await expect(asks).toContainText("DAO proposal #151");
+  await expect(asks).not.toContainText("none yet");
   for (const li of await asks.locator("li").all()) await expect(li).toContainText(/USDC to \S+ for \d+ days at [\d.]+%.*; reason: “/);
+  await expect(asks).toContainText(/The agent asked for loan #2: DAO proposal #151[\s\S]*repaid with interest by the sister's own vote \(#32\)/);
+  await expect(loans.locator("tbody tr").filter({ has: page.getByText("#2", { exact: true }) })).toContainText(/Asked for by the agent; voted by DAO proposal #151\. Repaid by the sister's own vote \(#32\)\./);
 });
 
 test("join from zero: a visitor sees each step with what the chain asks for, and a wallet button", async ({ page }) => {

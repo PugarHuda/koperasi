@@ -107,7 +107,7 @@ h2 .dim { color: var(--grey); }
 
 /* members: pick one, see their three numbers */
 .pick { display: grid; gap: .5rem; font-size: .9rem; max-width: 18rem; }
-.pick select { width: 100%; min-width: 0; font: inherit; padding: .85em 1em; border: 1px solid #c9c9d1; background: #fff; border-radius: 0; }
+.pick select { width: 100%; min-width: 0; font: inherit; padding: .85em 1em; border: 1px solid #c9c9d1; background: #fff; border-radius: 0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
 .meters { display: grid; gap: 2rem; padding-top: 1rem; }
 .meter .label { display: flex; justify-content: space-between; align-items: baseline; font-size: .9rem; color: var(--muted); }
 .meter .val { font: 700 clamp(2.6rem, 5vw, 4rem)/1 var(--display); color: var(--ink); }
