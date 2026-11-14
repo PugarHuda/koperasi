@@ -102,6 +102,18 @@ async function retried(read, tries = 3) {
   }
 }
 
+// a deep link (#audit…) lands before the chain data fills the sections above it, which then push it away: keep the
+// hash's section in place while the page grows, for 8 s, until the reader scrolls, clicks or types. Following another
+// in-page link (hashchange, which comes after its click) holds the new section for 8 s from then.
+let holdUntil = 0, moved = false;
+const hold = () => { holdUntil = Date.now() + 8000; };
+new ResizeObserver(() => {
+  const target = Date.now() < holdUntil && location.hash.length > 1 && document.getElementById(location.hash.slice(1));
+  if (target) target.scrollIntoView({ block: "start" });
+}).observe(document.body);
+["wheel", "touchstart", "keydown", "click"].forEach((ev) => addEventListener(ev, () => { holdUntil = 0; moved = true; }, { passive: true }));
+addEventListener("hashchange", hold);
+
 try {
   const [info, members, versions, receipts, rekon, periods] = await retried(() => Promise.all([
     view(dep.contract, "get_info"),
@@ -111,17 +123,22 @@ try {
     view(dep.contract, "get_audit"),
     view(dep.contract, "get_periods"),
   ]));
-  const claimable = await retried(() => Promise.all(members.map(([a]) => view(dep.contract, "get_claimable", { account_id: a }))));
+  // The hero's vote is asked for first: near.js sends at most 4 reads at a time, in order, so the 50 proofs and the
+  // members' claimable shares queue behind it and are filled in when they arrive.
+  const configVoteP = view(dep.dao, "get_last_proposal_id")
+    .then((last) => view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 100), limit: 100 }))
+    .then((props) => configVote(props, dep.contract, info.config.hash))
+    .catch((e) => { console.warn("could not read the DAO's proposals", e); return null; });
+  // the same (shared, usually already answered) read: resumes after the callback above has queued get_proposals
+  await view(dep.dao, "get_last_proposal_id").catch(() => {});
+  const claimableP = retried(() => Promise.all(members.map(([a]) => view(dep.contract, "get_claimable", { account_id: a }))));
+  claimableP.catch(() => {}); // awaited below; this only stops an early failure being reported as unhandled
   // a receipt with an inference proof was done by a TEE-verified model; one without came from `npm run demo`, where a
   // local stand-in plays Agent Market (it has no testnet) and no model runs. The page says which is which.
   const checked = [...receipts].reverse().slice(0, 50);
-  // undefined: not read (RPC busy), shown as such; null: the chain says this job has no proof
-  const proofs = await Promise.all(checked.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch((e) => (e.final ? null : undefined))));
-  const unread = proofs.some((p) => p === undefined);
   const recent = checked.slice(0, 12);
-  // a proof is JSON: `model`… when a TEE-verified model did the job, `gate` when the by-laws were checked in an enclave first
-  const parsed = proofs.map((p) => { try { return p ? JSON.parse(p) : null; } catch { return null; } });
-  const proven = checked.filter((r, i) => parsed[i]?.model).length;
+  // undefined: not read (RPC busy), shown as such; null: the chain says this job has no proof
+  const proofsP = Promise.all(checked.map((r) => view(dep.contract, "get_proof", { job_id: r.job_id }).catch((e) => (e.final ? null : undefined))));
 
   $("links").innerHTML = [
     `<a href="${explorer(dep.contract)}">Contract on NEAR</a>`,
@@ -149,16 +166,25 @@ try {
   // hero panel: who controls this agent, in three plain steps, all read live
   const nick = (a) => a === info.steward ? "steward" : a.replace(/\.(testnet|near)$/, "").replace(/^kop-/, "").replace(/-[a-z0-9]{8}$/, "");
   const v = info.config.version;
+  const owed = BigInt(rekon.owed);
+  // live status under the hero; the TEE-proof count is filled in once the proofs are read
+  const paid = receipts.filter((x) => x.status === "Paid").length;
+  const status = (proofNote) => {
+    $("status").innerHTML = [
+      ["Agent", info.paused ? "Paused by vote" : "Allowed to work", info.paused ? "warn" : "ok"],
+      ["Running by-laws", `v${info.config.version} <small>${short(info.config.hash)}</small>`, ""],
+      ["Jobs on-chain", `${receipts.length} <small>${paid} paid, ${proofNote}</small>`, ""],
+      ["Audit", owed > 0n ? `Red <small>${usdc(owed)} USDC missing</small>` : "Green <small>all passed on</small>", owed > 0n ? "warn" : "ok"],
+    ].map(([k, v, c]) => `<div><dt>${k}</dt><dd class="${c}">${v}</dd></div>`).join("");
+  };
+  status("TEE proofs not read yet");
+
   let approvedBy = null, proposalId = null;
-  try {
-    const last = await view(dep.dao, "get_last_proposal_id");
-    const props = await view(dep.dao, "get_proposals", { from_index: Math.max(0, last - 100), limit: 100 });
-    const match = configVote(props, dep.contract, info.config.hash);
-    if (match) {
-      proposalId = match.id;
-      approvedBy = new Set(Object.entries(match.votes).filter(([, x]) => x === "Approve").map(([k]) => k));
-    }
-  } catch (e) { console.warn("could not read the DAO's proposals", e); }
+  const match = await configVoteP;
+  if (match) {
+    proposalId = match.id;
+    approvedBy = new Set(Object.entries(match.votes).filter(([, x]) => x === "Approve").map(([k]) => k));
+  }
   $("p-voters").innerHTML = members.slice(0, 6).map(([a]) => {
     const yes = approvedBy?.has(a);
     return `<li class="${yes ? "yes" : "no"}" title="${esc(a)}"><span class="mark" aria-hidden="true">${yes ? "✓" : "–"}</span>${esc(nick(a))}<em>${yes ? "voted yes" : approvedBy ? "didn't vote" : "vote not found"}</em></li>`;
@@ -195,17 +221,6 @@ try {
       ? `<span class="state on">TEE verified</span> ${esc(when)} UTC: Intel TDX ${esc(m.tdx_status ?? "")}, NVIDIA GPU ${m.gpu?.verdict === true ? "pass" : "unknown"}, bound to a fresh nonce. The agent re-checks before every job and refuses unverified models. <a href="/evidence/${esc(file)}">Evidence</a>`
       : `<span class="state off">TEE not verified</span> ${esc(when)} UTC: ${esc(ev.reason ?? "a check failed")}. The agent will not send jobs to this model.`;
   }).catch((e) => verdict("ck-bylaws", false, `Could not download the by-laws file (${esc(e.message)}). Reload to try again.`));
-  const teeJobs = checked.filter((r, i) => parsed[i]?.model);
-  const teeMarket = teeJobs.filter((r) => !/^(demo|taskbond)-/.test(r.job_id)).length;
-  const demoTee = teeJobs.filter((r) => r.job_id.startsWith("demo-"));
-  // jobs won on a third-party testnet market (scripts/taskbond.mjs): another team's escrow, guard and reviewer
-  const won = (dep.taskbond ?? []).filter((t) => t.status === "Paid" && t.winner === t.agent_id);
-  const third = won.length ? ` On <a href="https://taskbond-iota.vercel.app/jobs/${esc(won.at(-1).job)}">Taskbond</a>, another team's testnet market, it won ${won.length === 1 ? "a job" : `${won.length} jobs`} its reviewer AI scored ${won.map((t) => esc(t.score)).join(", ")}/100, paid by that market's escrow.` : "";
-  $("p-agent").innerHTML = info.paused
-    ? `<span class="state off">Paused</span> The members voted to stop it.`
-    : `<span class="state on">Allowed to work</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${teeMarket
-      ? `${teeMarket} Agent Market ${teeMarket === 1 ? "job" : "jobs"} done by a TEE-verified model.`
-      : `No Agent Market job yet.${third}${demoTee.length ? ` ${demoTee.length === 1 ? "One job" : `${demoTee.length} jobs`} from a demo buyer ${demoTee.length === 1 ? "was" : "were"} done by a TEE-verified model, with the proof on-chain;` : ""} the other paid receipts come from the testnet demo, where a local stand-in plays Agent Market and no model runs.`}`;
 
   // passbook: the co-op's life as ledger lines, newest first
   const lines = [
@@ -216,7 +231,6 @@ try {
   rows($("passbook").tBodies[0], lines.map((l) =>
     `<tr><td>${date(l.ts)}</td><td>${esc(l.text)}</td><td class="num${l.out ? " out" : ""}">${l.amt}</td></tr>`).join(""));
 
-  const owed = BigInt(rekon.owed);
   verdict("ck-money", owed === 0n, owed === 0n
     ? `Every paid job (${usdc(rekon.expected)} USDC after the market's 5%) reached the co-op's DAO. The steward's bond stays at stake.`
     : `<strong>${usdc(owed)} USDC</strong> of paid jobs has not reached the co-op. Members can vote to slash the steward's bond. (This demo co-op keeps it red on purpose.)`);
@@ -231,6 +245,7 @@ try {
 
   // members: pick one, see savings, points and share against the largest member
   const top = (f) => Math.max(1, ...members.map((m, i) => Number(f(m, i))));
+  const claimable = await claimableP;
   const tops = [top(([, m]) => m.savings), top(([, m]) => m.points), top((_, i) => claimable[i])];
   const pick = $("member-pick");
   pick.innerHTML = members.map(([a], i) => `<option value="${i}">${esc(a)}${a === info.steward ? " (steward)" : ""}</option>`).join("");
@@ -314,13 +329,31 @@ try {
     // a demo- job came from a stand-in buyer, but a real model in a verified TEE did it and signed the answer
     return `<span class="badge Paid" title="${esc(p)}">TEE-signed</span> <span class="muted">${job.startsWith("demo-") ? "demo buyer, real model" : esc(String(x.tee_signer ?? "").slice(0, 10)) + "…"}</span>${gate}`;
   };
-  rows($("receipts").tBodies[0], recent.map((r, i) => `<tr>
-      <td>${esc(r.job_id.slice(0, 8))}… <span class="muted">${date(r.ts)}</span></td>
-      <td class="num" data-label="Price">${usdc(r.price)}</td>
-      <td class="num" data-label="Inference">$${(Number(r.inference_cost) / 1e6).toFixed(4)}</td>
-      <td data-label="By-laws">v${r.config_version} <span class="muted">${short(r.config_hash)}</span></td>
-      <td data-label="Proof">${proofCell(proofs[i], r.job_id)}</td>
-      <td data-label="Status"><span class="badge ${r.status}">${r.status}</span></td></tr>`).join(""));
+  // everything that cites the proofs is filled in once they are read; the sections below do not wait for them
+  proofsP.then((proofs) => {
+    const unread = proofs.some((p) => p === undefined);
+    // a proof is JSON: `model`… when a TEE-verified model did the job, `gate` when the by-laws were checked in an enclave first
+    const parsed = proofs.map((p) => { try { return p ? JSON.parse(p) : null; } catch { return null; } });
+    const teeJobs = checked.filter((r, i) => parsed[i]?.model);
+    status(unread ? "TEE proofs not read yet" : `${teeJobs.length} with TEE proof`);
+    const teeMarket = teeJobs.filter((r) => !/^(demo|taskbond)-/.test(r.job_id)).length;
+    const demoTee = teeJobs.filter((r) => r.job_id.startsWith("demo-"));
+    // jobs won on a third-party testnet market (scripts/taskbond.mjs): another team's escrow, guard and reviewer
+    const won = (dep.taskbond ?? []).filter((t) => t.status === "Paid" && t.winner === t.agent_id);
+    const third = won.length ? ` On <a href="https://taskbond-iota.vercel.app/jobs/${esc(won.at(-1).job)}">Taskbond</a>, another team's testnet market, it won ${won.length === 1 ? "a job" : `${won.length} jobs`} its reviewer AI scored ${won.map((t) => esc(t.score)).join(", ")}/100, paid by that market's escrow.` : "";
+    $("p-agent").innerHTML = info.paused
+      ? `<span class="state off">Paused</span> The members voted to stop it.`
+      : `<span class="state on">Allowed to work</span> It follows by-laws v${v} and nothing else. Hand it any other version and it stops working, and the contract rejects its receipts. ${teeMarket
+        ? `${teeMarket} Agent Market ${teeMarket === 1 ? "job" : "jobs"} done by a TEE-verified model.`
+        : `No Agent Market job yet.${third}${demoTee.length ? ` ${demoTee.length === 1 ? "One job" : `${demoTee.length} jobs`} from a demo buyer ${demoTee.length === 1 ? "was" : "were"} done by a TEE-verified model, with the proof on-chain;` : ""} the other paid receipts come from the testnet demo, where a local stand-in plays Agent Market and no model runs.`}`;
+    rows($("receipts").tBodies[0], recent.map((r, i) => `<tr>
+        <td>${esc(r.job_id.slice(0, 8))}… <span class="muted">${date(r.ts)}</span></td>
+        <td class="num" data-label="Price">${usdc(r.price)}</td>
+        <td class="num" data-label="Inference">$${(Number(r.inference_cost) / 1e6).toFixed(4)}</td>
+        <td data-label="By-laws">v${r.config_version} <span class="muted">${short(r.config_hash)}</span></td>
+        <td data-label="Proof">${proofCell(proofs[i], r.job_id)}</td>
+        <td data-label="Status"><span class="badge ${r.status}">${r.status}</span></td></tr>`).join(""));
+  }).catch((e) => console.error(e));
 
   // audit: owed vs deposited, two bars on one scale
   const scale = Math.max(Number(rekon.expected), Number(rekon.deposited), 1);
@@ -385,15 +418,6 @@ cargo near build reproducible-wasm
     $("codegov").innerHTML = `<p class="hint">Could not read the contract account: ${esc(e.message)}</p>`;
     verdict("ck-code", null, `Could not read the contract account right now (${esc(e.message)}).`);
   });
-
-  // live status under the hero
-  const paid = receipts.filter((x) => x.status === "Paid").length;
-  $("status").innerHTML = [
-    ["Agent", info.paused ? "Paused by vote" : "Allowed to work", info.paused ? "warn" : "ok"],
-    ["Running by-laws", `v${info.config.version} <small>${short(info.config.hash)}</small>`, ""],
-    ["Jobs on-chain", `${receipts.length} <small>${paid} paid, ${unread ? "TEE proofs not read yet" : `${proven} with TEE proof`}</small>`, ""],
-    ["Audit", owed > 0n ? `Red <small>${usdc(owed)} USDC missing</small>` : "Green <small>all passed on</small>", owed > 0n ? "warn" : "ok"],
-  ].map(([k, v, c]) => `<div><dt>${k}</dt><dd class="${c}">${v}</dd></div>`).join("");
 
   const r = info.share_rule;
   $("share-rule").textContent = `The members vote each profit share. ${r.reserve_bps / 100}% stays in the DAO as the co-op's reserve; the rest is split by savings and by contribution, and each member claims their own.`;
@@ -501,17 +525,7 @@ cargo near build reproducible-wasm
       <td class="num" data-label="Reserve">${usdc(p.reserve)}</td>
       <td class="num" data-label="Members">${p.members}</td></tr>`).join(""));
 
-  // a deep link (#audit…) lands before the chain data fills the sections above it, which then push it away: keep it in
-  // place while the page grows, until the reader scrolls, clicks or follows another link, or 8 s pass
-  const target = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
-  if (target) {
-    // the hash is checked too: hashchange arrives a task after the browser has scrolled to the new section
-    const stick = new ResizeObserver(() => location.hash === `#${target.id}` && target.scrollIntoView({ block: "start" }));
-    const stop = () => stick.disconnect();
-    stick.observe(document.body);
-    ["wheel", "touchstart", "keydown", "click", "hashchange"].forEach((ev) => addEventListener(ev, stop, { once: true, passive: true }));
-    setTimeout(stop, 8000);
-  }
+  if (!moved) hold(); // the first deep link, held from when the data arrives (the stick is set up above the try)
 } catch (e) {
   console.error(e);
   for (const id of ["ck-bylaws", "ck-code", "ck-money"]) verdict(id, null, "Could not reach NEAR right now. Reload in a moment.");
@@ -646,6 +660,26 @@ view(dep.contract, "get_agent_proposals").then(async (list) => {
     ${cfg.version > p.version ? `<p class="note">Since then the members voted by-laws v${esc(cfg.version)}${cfg.contributor && cfg.contributor !== dep.agent ? `, proposed by ${esc(cfg.contributor)}` : ""}: that is what the agent runs now.${p.version === 9 && cfg.version === 10 ? " v9 had cut the price from an average that counted a Taskbond job, paid in testnet NEAR, as a 0 USDC sale; v10 restored v8." : ""}</p>` : ""}
     ${list.length > 1 ? `<p class="muted">${list.length - 1} earlier proposal(s) by the agent, each put to a members' vote.</p>` : ""}`);
 }).catch(() => {});
+
+// the agent's mistakes and the members' corrections: by-laws v9 (the agent's, from a wrong average) undone by v10 (a
+// member's), and the agent's annual review, rejected once and accepted corrected. Versions and votes read from the chain.
+const BAD_V = 9, FIX_V = 10, BAD_P = 139, FIX_P = 140; // ponytail: the one known case; read from the agent's proposals if there is a second
+const review = dep.agentReview;
+Promise.all([view(dep.contract, "get_config_history", { from: 0, limit: 100 }),
+  ...[BAD_P, FIX_P, ...(review ? [review.rejected.proposal, review.proposal] : [])].map((id) => view(dep.dao, "get_proposal", { id }))])
+  .then(([versions, badP, fixP, rejP, okP]) => {
+    const bad = versions.find((x) => x.version === BAD_V), fix = versions.find((x) => x.version === FIX_V);
+    if (!bad || !fix) return;
+    const vote = (id, p) => `<a href="${explorer(dep.dao)}">DAO proposal #${esc(id)}</a>: ${esc(p.status)}`;
+    card("card-errors", `<p>On ${esc(day(bad.activated_at))} the agent proposed by-laws v${BAD_V} (by <code>${esc(bad.contributor ?? "")}</code>) and the members passed it
+      (${vote(BAD_P, badP)}). It was wrong: the agent cut its price from an average that counted a Taskbond job, paid in testnet NEAR, as a 0 USDC sale.</p>
+      <p>On ${esc(day(fix.activated_at))} a member, <code>${esc(fix.contributor ?? "")}</code>, proposed v${FIX_V} to restore v8, and the members passed it
+      (${vote(FIX_P, fixP)}).</p>
+      ${review ? `<p>The agent also writes its own annual review for the members' meeting. Its first draft was turned down (${vote(review.rejected.proposal, rejP)}):
+      ${esc(review.rejected.why)}. <a href="${esc(review.rejected.report)}">The rejected draft</a>.
+      A corrected one was accepted (${vote(review.proposal, okP)}): <a href="${esc(review.report)}">the review</a>, from <a href="${esc(review.facts)}">the facts read from the chain</a>.</p>
+      ${review.note ? `<p class="muted">Accepted ${esc(review.note.replace(/^accepted /, ""))}.</p>` : ""}` : ""}`);
+  }, () => {});
 
 // the credit bureau: a federation of co-ops sets the loan ceiling; a stamp from a sister co-op counts as credit here
 const CAROL = "kop-carol-mw80aczw.testnet";
