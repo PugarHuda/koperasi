@@ -467,3 +467,12 @@ h2 .dim { color: var(--grey); }
 /* the language switch (web/lang.js) */
 .top .lang-btn { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; opacity: .85; padding: .2rem 0; }
 .top .lang-btn:hover { opacity: 1; text-decoration: underline; }
+
+/* Commons: the newest features, each card read from the chain (hidden if a read fails) */
+.cards { list-style: none; margin: 3rem 0; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+.cards > li { padding: 1.3rem; background: #fff; border: 1px solid var(--rule); box-shadow: inset 4px 0 0 var(--blue); min-width: 0; }
+.cards b { display: block; font: 700 1.2rem/1.1 var(--display); text-transform: uppercase; margin-bottom: .6rem; }
+.card-out { font-size: .9rem; color: var(--muted); overflow-wrap: anywhere; }
+.card-out p { margin: 0 0 .5rem; }
+.card-out blockquote { margin: 0 0 .5rem; padding-left: .8rem; border-left: 2px solid var(--rule); color: var(--ink); }
+.card-out ul { margin: 0 0 .5rem; padding-left: 1.1rem; }

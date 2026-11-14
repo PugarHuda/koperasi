@@ -595,3 +595,69 @@ Promise.all([view(dep.contract, "get_agent_standing"), view(dep.contract, "get_d
     $("duties").innerHTML = parts.join("<br>");
   }, () => {});
 
+
+// Newest, read from the chain: one card each. A card whose reads fail stays hidden.
+const card = (id, html) => { $(id).querySelector(".card-out").innerHTML = html; $(id).hidden = false; };
+const day = (ns) => new Date(Number(BigInt(ns) / 1_000_000n)).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const GITHUB = "https://github.com/PugarHuda/koperasi/blob/main/";
+
+// the Shade Agent: a worker whose key was made in a Phala TDX VM, attested by the registry the DAO owns
+const tee = dep.tee;
+if (tee) {
+  Promise.all([view(tee.registry, "get_agent", { account_id: tee.worker }), view(tee.registry, "get_contract_info"),
+    view(dep.contract, "get_agent_tee", { account_id: tee.worker }), view(dep.contract, "get_receipt_agent", { job_id: tee.receipt })])
+    .then(([att, [owner], [teeOnly, held], recAgent]) => {
+      if (!att || !held) throw new Error("not attested");
+      const holds = BigInt(att.valid_until) > BigInt(Date.now()) * 1_000_000n;
+      card("card-tee", `<p>Worker <a href="${explorer(tee.worker)}"><code>${esc(short(tee.worker))}</code></a>: its key was made inside an Intel TDX VM
+        (${esc(tee.cvm?.provider ?? "Phala Cloud")}). Its quote was checked on-chain by <a href="${explorer(tee.registry)}">${esc(tee.registry)}</a>,
+        owned by ${owner === dep.dao ? "the co-op's DAO" : `<code>${esc(owner)}</code>`}.</p>
+        <ul><li>Code (compose hash) <code>${esc(short(att.compose_hash))}</code>, <a href="${GITHUB}${esc(tee.compose)}">${esc(tee.compose)}</a></li>
+        <li>Machine (PPID) <code>${esc(short(att.ppid))}</code></li>
+        <li>Attestation ${holds ? "holds until" : "ran out on"} ${esc(day(att.valid_until))}</li></ul>
+        <p>The members approved this code and machine by <a href="${explorer(dep.dao)}">DAO proposal #${esc(tee.approve)}</a> and admitted the worker
+        ${teeOnly ? "TEE-only" : ""} by #${esc(tee.admit)}: its receipts count only while the attestation holds.
+        ${recAgent === tee.worker ? `It recorded receipt <code>${esc(short(tee.receipt))}</code> from inside the TEE, after the by-laws gate in the OutLayer enclave
+        (<a href="${txUrl(tee.gate)}">tx ${esc(short(tee.gate))}</a>).` : ""}</p>
+        <p class="muted">The VM was stopped after its job to save cost; the attestation and the receipt stay on-chain.</p>`);
+    }, () => {});
+}
+
+// the agent's own by-laws proposal: what it read, what it judged, what it changed, and how the members voted
+const loadJson = (path) => fetch(path).then((r) => (r.ok ? r.json() : null), () => null);
+view(dep.contract, "get_agent_proposals").then(async (list) => {
+  if (!list.length) return;
+  // newest proposal whose files the agent published (web/agent-proposals/v<N>.json)
+  let p = null, file = null;
+  for (const q of [...list].reverse()) if ((file = await loadJson(`agent-proposals/v${Number(q.version)}.json`))) { p = q; break; }
+  if (!p || !file) return;
+  const [facts, dao] = await Promise.all([loadJson(`agent-proposals/v${Number(p.version)}.facts.json`), view(dep.dao, "get_proposal", { id: Number(p.proposal) })]);
+  // the facts file lists the by-laws in force, partly flattened (bid.price_usdc is read as price_usdc)
+  const old = (key) => key.split(".").reduce((o, k) => o?.[k], facts?.by_laws) ?? facts?.by_laws?.[key.split(".").at(-1)];
+  const val = (x) => esc(Array.isArray(x) ? x.join(", ") : x);
+  const diff = Object.entries(file.changes ?? {}).map(([k, v]) =>
+    `<li><code>${esc(k)}</code>: ${old(k) === undefined ? "" : `${val(old(k))} → `}<strong>${val(v)}</strong></li>`).join("");
+  card("card-proposal", `<p>The agent read its own record in a TEE (${esc(file.model ?? "the voted model")}) and proposed by-laws v${esc(p.version)}:</p>
+    ${file.evaluation ? `<blockquote>“${esc(file.evaluation)}”</blockquote>` : ""}
+    ${diff ? `<ul>${diff}</ul>` : ""}
+    <p><a href="${explorer(dep.dao)}">DAO proposal #${esc(p.proposal)}</a>: ${esc(dao.status)}.
+    ${file.factsSha ? `The facts it read: <a href="agent-proposals/v${Number(p.version)}.facts.json">sha256 ${esc(file.factsSha.slice(0, 12))}…</a>.` : ""}</p>
+    ${list.length > 1 ? `<p class="muted">${list.length - 1} earlier proposal(s) by the agent, each put to a members' vote.</p>` : ""}`);
+}).catch(() => {});
+
+// the credit bureau: a federation of co-ops sets the loan ceiling; a stamp from a sister co-op counts as credit here
+const CAROL = "kop-carol-mw80aczw.testnet";
+Promise.all([view(dep.contract, "get_federation"), view(dep.contract, "get_sister_coops"), view(dep.contract, "get_loan_rule"),
+  view(dep.contract, "get_credit", { account_id: CAROL }), view(dep.contract, "get_passport", { account_id: CAROL })])
+  .then(([[fedDao, ceil], sisters, rule, [score], passport]) => {
+    if (!ceil) return;
+    const refused = dep.v033?.federation?.refused;
+    const stamp = passport?.[0];
+    card("card-credit", `<p>The federation <a href="${explorer(fedDao)}">${esc(fedDao.split(".")[0])}</a>, voted by both co-ops, caps loans at
+      <strong>${ceil.max_rate_bps / 100}%</strong> for ${esc(ceil.max_term_days)} days, in the contract's code.
+      ${refused ? `The members here voted ${refused.rate_bps / 100}% loans (<a href="${explorer(dep.dao)}">DAO proposal #${esc(refused.proposals[0])}</a>);
+      the contract refused it, and the loan rule is still ${rule ? `${rule[0].rate_bps / 100}%` : "unchanged"}.` : ""}</p>
+      <p>${sisters.length} sister co-op(s) share credit. <a href="cert.html?who=${CAROL}">${esc(CAROL)}</a> has credit score <strong>${esc(score)}</strong> here
+      ${stamp ? `from a stamp by <code>${esc(stamp.coop)}</code> (${esc(stamp.done)} jobs finished there)` : ""}.</p>
+      <p class="muted">A loan called late here is told to the sister co-ops: the borrower's credit is 0 at all of them until it is repaid.</p>`);
+  }, () => {});

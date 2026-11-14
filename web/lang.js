@@ -1,7 +1,8 @@
 // Bahasa Indonesia for the page's own words (the co-ops it is for are Indonesian villages). The headings, the hero, the
 // sections' explanations and the navigation switch; what the page reads from the chain stays as the chain says it.
-// The choice is remembered in this browser only; by default it follows the browser's language.
-// ponytail: a selector → text table, not an i18n library; the dynamic panels stay English until they need it.
+// The choice is remembered in this browser only; the page opens in English unless the visitor chose Indonesian.
+// ponytail: a selector → text table, not an i18n library. Dynamic panels (wallet.js) call t(en, id) and re-render on
+// the "koperasi:lang" event.
 const ID = [
   ['nav[aria-label="Sections"] a[href="#members"]', "Anggota"],
   ['nav[aria-label="Sections"] a[href="#bylaws"]', "Anggaran dasar"],
@@ -55,7 +56,11 @@ const ID = [
 const RAILS = ["Langsung", "Anggota", "Anggaran dasar", "Kerja", "Audit", "SHU", "Tugas & kepercayaan", "Bersama"];
 
 const saved = new Map();
-let lang = "en";
+let current = "en";
+/** The page's language now: "en" or "id". */
+export const lang = () => current;
+/** The English or the Indonesian text, by the page's language. */
+export const t = (en, id) => (current === "id" ? id : en);
 function apply(to) {
   for (const [sel, text] of ID) {
     const els = document.querySelectorAll(sel);
@@ -66,16 +71,18 @@ function apply(to) {
     });
   }
   document.documentElement.lang = to;
-  lang = to;
+  const changed = current !== to;
+  current = to;
   btn.textContent = to === "id" ? "English" : "Bahasa Indonesia";
   btn.setAttribute("aria-label", to === "id" ? "Switch the page to English" : "Tampilkan halaman dalam Bahasa Indonesia");
   try { localStorage.setItem("kop-lang", to); } catch { /* private window: the choice is not kept */ }
+  if (changed) window.dispatchEvent(new CustomEvent("koperasi:lang"));
 }
 const btn = document.createElement("button");
 btn.type = "button";
 btn.className = "lang-btn";
-btn.addEventListener("click", () => apply(lang === "id" ? "en" : "id"));
+btn.addEventListener("click", () => apply(current === "id" ? "en" : "id"));
 document.querySelector(".top-actions")?.prepend(btn);
 let start = "en";
-try { start = localStorage.getItem("kop-lang") ?? (navigator.language?.toLowerCase().startsWith("id") ? "id" : "en"); } catch { /* none kept */ }
+try { start = localStorage.getItem("kop-lang") ?? "en"; } catch { /* none kept */ } // English by default (a global project); Indonesian only when chosen
 apply(start === "id" ? "id" : "en");

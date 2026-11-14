@@ -3,12 +3,13 @@
 import { NearConnector } from "./vendor/near-connect-0.12.0.mjs";
 import { SEPOLIA, eth, plainPayment, rawHash, rawTx, toHex, transfer, txFromText, txsFromText, txHash, txText } from "./eth.js";
 import { dep, view, all, query, forget, RPC_URLS, explorer, txUrl, $, esc, usdc, nearAmt } from "./near.js";
+import { t } from "./lang.js";
 import { affordable, checkVouch, inviteOf, inviteParam, joinText, vouchParam, vouchSuffix, vouchText, nearUnits, oneLine, payPath, plainCall, splitShare, taskCheck, trustSources, usdcExact, usdcUnits, walletError } from "./share.js";
 
 // what each member would receive from a share of `amount`, by the contract's own rule
 const preview = (amount, s) => {
   const { shares, reserve } = splitShare(amount, s.info.share_rule, s.roster);
-  return [...shares.filter((x) => x.share > 0n).map((x) => `${x.account}: ${usdcExact(x.share)} USDC`), `reserve back to the DAO: ${usdcExact(reserve)} USDC`];
+  return [...shares.filter((x) => x.share > 0n).map((x) => `${x.account}: ${usdcExact(x.share)} USDC`), t(`reserve back to the DAO: ${usdcExact(reserve)} USDC`, `cadangan kembali ke DAO: ${usdcExact(reserve)} USDC`)];
 };
 // a FunctionCall that sends the co-op's USDC to the contract as a profit share
 const shareCall = (p) => kindOf(p) === "FunctionCall" && p.kind.FunctionCall.receiver_id === dep.usdc
@@ -72,7 +73,7 @@ async function send(receiverId, methodName, args, { deposit = 0n, tgas = 100 } =
 
 const kindOf = (p) => (typeof p.kind === "string" ? p.kind : Object.keys(p.kind)[0]);
 // what a proposal really does, built from its kind; the proposer's description is shown apart, as their claim
-const yocto = (y) => (BigInt(y || 0) > 0n ? `, attaches ${nearAmt(y)} NEAR` : "");
+const yocto = (y) => (BigInt(y || 0) > 0n ? t(`, attaches ${nearAmt(y)} NEAR`, `, melampirkan ${nearAmt(y)} NEAR`) : "");
 const argsOf = (b64) => {
   try { return JSON.stringify(JSON.parse(atob(b64)), null, 1); } catch { return null; }
 };
@@ -89,9 +90,12 @@ const DAY_NS = 86_400_000_000_000n;
 const describe = (p, s) => {
   const k = kindOf(p);
   const shared = s && shareCall(p);
-  if (shared) return `Profit share: send ${usdc(shared)} USDC from the treasury to the co-op contract, split by its rule.\nIf approved now:\n  ${preview(shared, s).join("\n  ")}`;
-  if (k === "AddMemberToRole") return `Add ${oneLine(p.kind.AddMemberToRole.member_id)} to role ${oneLine(p.kind.AddMemberToRole.role)}`;
-  if (k === "RemoveMemberFromRole") return `Remove ${oneLine(p.kind.RemoveMemberFromRole.member_id)} from role ${oneLine(p.kind.RemoveMemberFromRole.role)}`;
+  if (shared) return `${t(`Profit share: send ${usdc(shared)} USDC from the treasury to the co-op contract, split by its rule.\nIf approved now:`,
+    `Sisa hasil usaha (SHU): kirim ${usdc(shared)} USDC dari kas ke kontrak koperasi, dibagi menurut aturannya.\nJika disetujui sekarang:`)}\n  ${preview(shared, s).join("\n  ")}`;
+  if (k === "AddMemberToRole") return t(`Add ${oneLine(p.kind.AddMemberToRole.member_id)} to role ${oneLine(p.kind.AddMemberToRole.role)}`,
+    `Tambahkan ${oneLine(p.kind.AddMemberToRole.member_id)} ke peran ${oneLine(p.kind.AddMemberToRole.role)}`);
+  if (k === "RemoveMemberFromRole") return t(`Remove ${oneLine(p.kind.RemoveMemberFromRole.member_id)} from role ${oneLine(p.kind.RemoveMemberFromRole.role)}`,
+    `Keluarkan ${oneLine(p.kind.RemoveMemberFromRole.member_id)} dari peran ${oneLine(p.kind.RemoveMemberFromRole.role)}`);
   if (k === "AddBounty") {
     const b = p.kind.AddBounty.bounty;
     // the terms first, from the proposal's own fields; the proposer's task text last, on one line and cut, so it
@@ -100,8 +104,10 @@ const describe = (p, s) => {
     return `Open a paid task: ${pays(b.token, b.amount)} × ${b.times} = up to ${pays(b.token, BigInt(b.amount) * BigInt(b.times))}, `
       + `${Number(BigInt(b.max_deadline) / DAY_NS)} days to deliver once taken\nTask text (proposer's words): “${task}”`;
   }
-  if (k === "BountyDone") return `Pay task #${p.kind.BountyDone.bounty_id} to ${oneLine(p.kind.BountyDone.receiver_id)} from the treasury`;
-  if (k === "Transfer") return `Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${oneLine(p.kind.Transfer.receiver_id)}`;
+  if (k === "BountyDone") return t(`Pay task #${p.kind.BountyDone.bounty_id} to ${oneLine(p.kind.BountyDone.receiver_id)} from the treasury`,
+    `Bayar tugas #${p.kind.BountyDone.bounty_id} kepada ${oneLine(p.kind.BountyDone.receiver_id)} dari kas`);
+  if (k === "Transfer") return t(`Transfer ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} to ${oneLine(p.kind.Transfer.receiver_id)}`,
+    `Kirim ${pays(oneLine(p.kind.Transfer.token_id), p.kind.Transfer.amount)} kepada ${oneLine(p.kind.Transfer.receiver_id)}`);
   const batch = ethBatch(p);
   if (batch) return batch.ok
     ? `Pay ${batch.ts.length} Sepolia ETH payments from the co-op's Ethereum address, each signed by NEAR's MPC network for the DAO:\n`
@@ -123,7 +129,7 @@ WARNING: the transaction in the description does not make this hash. Do not appr
     const said = (a) => (f.receiver_id === dep.contract && argsOf(a.args) !== null ? plainCall(a.method_name, JSON.parse(atob(a.args))) : null);
     return f.actions.map((a) => `${said(a) ? `${said(a)}\n` : ""}Call ${f.receiver_id} ${oneLine(a.method_name)}${yocto(a.deposit)}\n${argsOf(a.args) ?? "(binary args: inspect in the DAO)"}`).join("\n\n");
   }
-  return `${k} (open the DAO to inspect)`;
+  return t(`${k} (open the DAO to inspect)`, `${k} (buka DAO untuk memeriksanya)`);
 };
 
 // a proposal that asks NEAR's MPC network to sign for the co-op's Ethereum address (trezu/testnet/kop-pay-ethereum.json)
@@ -158,7 +164,7 @@ function ethBatch(p) {
 
 // proposals are anyone's on-chain data: one malformed proposal must not take the panel down for every member
 const safeDescribe = (p, s) => {
-  try { return describe(p, s); } catch { return `${kindOf(p)} (malformed: inspect it in the DAO)`; }
+  try { return describe(p, s); } catch { return t(`${kindOf(p)} (malformed: inspect it in the DAO)`, `${kindOf(p)} (rusak: periksa di DAO)`); }
 };
 
 async function load() {
@@ -224,20 +230,25 @@ async function act(label, fn, check) {
   busy = true;
   extra = "";
   box.querySelectorAll("button, input, select").forEach((el) => { el.disabled = true; });
-  say(`${label}: checking with the chain first…`);
+  say(t(`${label}: checking with the chain first…`, `${label}: memeriksa ke chain dulu…`));
   try {
     const problem = check ? await check() : null;
     if (problem) throw notSent(problem);
-    say(`${label}: waiting for your signature in the wallet. Once signed, NEAR confirms it in about 2 seconds.`);
+    say(t(`${label}: waiting for your signature in the wallet. Once signed, NEAR confirms it in about 2 seconds.`,
+      `${label}: menunggu tanda tangan Anda di dompet. Setelah ditandatangani, NEAR mengonfirmasinya dalam sekitar 2 detik.`));
     const hash = await fn();
-    note = `<span class="ok">${label}: confirmed on-chain${gasless ? ", gas paid by the co-op's relayer" : ""}.</span>${hash ? ` <a href="${esc(txUrl(hash))}">See the transaction</a>.` : ""}${extra}`;
+    note = `<span class="ok">${label}: ${t("confirmed on-chain", "terkonfirmasi on-chain")}${gasless ? t(", gas paid by the co-op's relayer", ", biaya gas dibayar relayer koperasi") : ""}.</span>${
+      hash ? ` <a href="${esc(txUrl(hash))}">${t("See the transaction", "Lihat transaksinya")}</a>.` : ""}${extra}`;
   } catch (e) {
-    const link = e?.hash ? ` <a href="${esc(txUrl(e.hash))}">See the failed transaction</a>.` : "";
-    if (e?.notSent) note = `<span class="err">${label}: not sent. ${esc(e.message)}</span>`;
+    const link = e?.hash ? ` <a href="${esc(txUrl(e.hash))}">${t("See the failed transaction", "Lihat transaksi yang gagal")}</a>.` : "";
+    if (e?.notSent) note = `<span class="err">${label}: ${t("not sent.", "tidak dikirim.")} ${esc(e.message)}</span>`;
     else {
-      const { kind, text } = walletError(e);
+      const { kind, text: en } = walletError(e);
+      // share.js's two fixed sentences in Indonesian; a contract's own reason stays as the chain said it
+      const text = kind === "rejected" ? t(en, "Anda membatalkannya di dompet. Tidak ada yang dikirim.")
+        : kind === "network" ? t(en, "Jaringan tidak menjawab. Transaksinya mungkin tetap masuk: periksa akun Anda di explorer sebelum mencoba lagi.") : en;
       note = kind === "rejected" ? `${label}: ${esc(text)}`
-        : `<span class="err">${label} ${kind === "network" ? "status unknown" : e?.hash ? "failed on-chain" : "failed"}: ${esc(text)}</span>${link}`;
+        : `<span class="err">${label} ${kind === "network" ? t("status unknown", "status tidak diketahui") : e?.hash ? t("failed on-chain", "gagal on-chain") : t("failed", "gagal")}: ${esc(text)}</span>${link}`;
     }
   }
   busy = false;
@@ -251,41 +262,47 @@ const PLEDGE_FEE = 10n ** 22n; // 0.01 NEAR, kept for a pledge's or a claim's st
 const workLink = (d) => (/^https:\/\/\S+$/.test(d) ? `<a href="${esc(d)}" rel="noopener">${esc(d)}</a>` : esc(d));
 function tasksPanel(s) {
   const r = s.board.rule;
-  let html = `<h3 class="jh">Tasks with earned trust</h3>`;
-  if (!r) return `${html}<p class="small">The members have not voted a trust rule yet, so no task can be posted.</p>`;
+  let html = `<h3 class="jh">${t("Tasks with earned trust", "Tugas dengan kepercayaan yang diraih")}</h3>`;
+  if (!r) return `${html}<p class="small">${t("The members have not voted a trust rule yet, so no task can be posted.", "Anggota belum memilih aturan kepercayaan, jadi belum ada tugas yang bisa dipasang.")}</p>`;
   const sources = (a) => trustSources(s.records[a]?.refs ?? [], s.tasks);
   const mine = sources(me);
-  html += `<p class="small">Your record: ${s.records[me]?.done ?? 0} finished, trusted by ${mine} different source${mine === 1 ? "" : "s"}${
-    mine >= r.trusted_after ? `, so tasks up to ${nearAmt(r.auto_max)} NEAR pay you from the DAO treasury when the poster accepts` : ""}.
-    The contract may pay ${nearAmt(s.board.budget)} NEAR more.</p>`;
-  const li = (t, action) => `<li><span><strong>#${t.id}</strong> ${esc(t.description)}<span class="claim">Pays ${nearAmt(t.amount)} NEAR, posted by ${esc(t.poster)}${
-    t.deliverable ? `; delivered: ${workLink(t.deliverable)}` : ""}</span></span>${action}</li>`;
-  const items = s.tasks.flatMap((t) => {
-    if (t.status === "Open" && t.poster !== me) return [li(t, `<button type="button" class="btn small" data-ttake="${t.id}">Take this task</button>`)];
-    if (t.status === "Claimed" && t.contributor === me) return [li(t, `<span class="task-done"><input id="w-tw-${t.id}" type="text" maxlength="500" placeholder="Link to your work" aria-label="Link to your work for task #${t.id}">
-      <button type="button" class="btn small" data-tsubmit="${t.id}">Deliver</button><button type="button" class="btn ghost small" data-tgiveup="${t.id}">Give up</button></span>`)];
-    if (t.status === "Submitted" && t.poster === me) {
-      const how = payPath(t.amount, r, sources(t.contributor)) === "trust" ? "pays at once if you are within your daily limit" : "then one other member approves";
-      return [li(t, `<button type="button" class="btn small" data-taccept="${t.id}">Accept the work (${how})</button>`)];
+  const done = s.records[me]?.done ?? 0;
+  html += `<p class="small">${t(`Your record: ${done} finished, trusted by ${mine} different source${mine === 1 ? "" : "s"}`,
+    `Catatan Anda: ${done} selesai, dipercaya oleh ${mine} sumber berbeda`)}${
+    mine >= r.trusted_after ? t(`, so tasks up to ${nearAmt(r.auto_max)} NEAR pay you from the DAO treasury when the poster accepts`,
+      `, jadi tugas sampai ${nearAmt(r.auto_max)} NEAR dibayar dari kas DAO begitu pemasangnya menerima`) : ""}.
+    ${t(`The contract may pay ${nearAmt(s.board.budget)} NEAR more.`, `Kontrak masih boleh membayar ${nearAmt(s.board.budget)} NEAR lagi.`)}</p>`;
+  const li = (k, action) => `<li><span><strong>#${k.id}</strong> ${esc(k.description)}<span class="claim">${t(`Pays ${nearAmt(k.amount)} NEAR, posted by`, `Bayaran ${nearAmt(k.amount)} NEAR, dipasang oleh`)} ${esc(k.poster)}${
+    k.deliverable ? `; ${t("delivered", "diserahkan")}: ${workLink(k.deliverable)}` : ""}</span></span>${action}</li>`;
+  const items = s.tasks.flatMap((k) => {
+    if (k.status === "Open" && k.poster !== me) return [li(k, `<button type="button" class="btn small" data-ttake="${k.id}">${t("Take this task", "Ambil tugas ini")}</button>`)];
+    if (k.status === "Claimed" && k.contributor === me) return [li(k, `<span class="task-done"><input id="w-tw-${k.id}" type="text" maxlength="500" placeholder="${t("Link to your work", "Tautan ke hasil kerja Anda")}" aria-label="${t("Link to your work for task", "Tautan ke hasil kerja Anda untuk tugas")} #${k.id}">
+      <button type="button" class="btn small" data-tsubmit="${k.id}">${t("Deliver", "Serahkan")}</button><button type="button" class="btn ghost small" data-tgiveup="${k.id}">${t("Give up", "Mundur")}</button></span>`)];
+    if (k.status === "Submitted" && k.poster === me) {
+      const how = payPath(k.amount, r, sources(k.contributor)) === "trust"
+        ? t("pays at once if you are within your daily limit", "langsung dibayar jika masih dalam batas harian Anda")
+        : t("then one other member approves", "lalu satu anggota lain menyetujui");
+      return [li(k, `<button type="button" class="btn small" data-taccept="${k.id}">${t("Accept the work", "Terima hasil kerjanya")} (${how})</button>`)];
     }
-    if (t.status === "Held") {
-      const due = s.dues?.[t.id];
+    if (k.status === "Held") {
+      const due = s.dues?.[k.id];
       const open = due && Date.now() < due;
-      return [li(t, `${open ? `<span class="small">held until ${new Date(due).toLocaleTimeString()}</span>` : ""}${
-        s.member && t.contributor !== me ? `<button type="button" class="btn ghost small" data-tveto="${t.id}">Veto: needs one member</button>` : ""}${
-        open ? "" : `<button type="button" class="btn small" data-trelease="${t.id}">Release the payout</button>`}`)];
+      return [li(k, `${open ? `<span class="small">${t("held until", "ditahan sampai")} ${new Date(due).toLocaleTimeString()}</span>` : ""}${
+        s.member && k.contributor !== me ? `<button type="button" class="btn ghost small" data-tveto="${k.id}">${t("Veto: needs one member", "Veto: cukup satu anggota")}</button>` : ""}${
+        open ? "" : `<button type="button" class="btn small" data-trelease="${k.id}">${t("Release the payout", "Cairkan bayarannya")}</button>`}`)];
     }
-    if (t.status === "NeedsApproval" && s.member && t.poster !== me && t.contributor !== me) {
-      return [li(t, `<button type="button" class="btn small" data-tapprove="${t.id}">Approve paying ${esc(t.contributor)}</button>`)];
+    if (k.status === "NeedsApproval" && s.member && k.poster !== me && k.contributor !== me) {
+      return [li(k, `<button type="button" class="btn small" data-tapprove="${k.id}">${t("Approve paying", "Setujui pembayaran kepada")} ${esc(k.contributor)}</button>`)];
     }
     return [];
   });
-  html += items.length ? `<ul class="props tasks">${items.join("")}</ul>` : `<p class="small">Nothing for you to do on the board right now.</p>`;
+  html += items.length ? `<ul class="props tasks">${items.join("")}</ul>` : `<p class="small">${t("Nothing for you to do on the board right now.", "Belum ada yang perlu Anda kerjakan di papan tugas.")}</p>`;
   if (s.member) {
-    html += `<div class="stake-row"><label>Task <input id="w-task-desc" type="text" maxlength="500" autocomplete="off" aria-label="Task description"></label>
-      <label>Pays <input id="w-task-amt" type="text" inputmode="decimal" autocomplete="off" aria-label="NEAR to pay" placeholder="0.05"> NEAR</label>
-      <button type="button" class="btn" id="w-task-post">Post (0.01 NEAR storage)</button></div>
-      <p class="small">Up to ${nearAmt(r.one_vote_max)} NEAR. Larger tasks are DAO bounties, voted by all members.</p>`;
+    html += `<div class="stake-row"><label>${t("Task", "Tugas")} <input id="w-task-desc" type="text" maxlength="500" autocomplete="off" aria-label="${t("Task description", "Uraian tugas")}"></label>
+      <label>${t("Pays", "Bayaran")} <input id="w-task-amt" type="text" inputmode="decimal" autocomplete="off" aria-label="${t("NEAR to pay", "NEAR yang dibayar")}" placeholder="0.05"> NEAR</label>
+      <button type="button" class="btn" id="w-task-post">${t("Post (0.01 NEAR storage)", "Pasang (0.01 NEAR penyimpanan)")}</button></div>
+      <p class="small">${t(`Up to ${nearAmt(r.one_vote_max)} NEAR. Larger tasks are DAO bounties, voted by all members.`,
+        `Sampai ${nearAmt(r.one_vote_max)} NEAR. Tugas yang lebih besar menjadi bounty DAO, dipilih oleh semua anggota.`)}</p>`;
   }
   return html;
 }
@@ -303,21 +320,28 @@ const nsMs = (ns) => Number(BigInt(ns) / 1_000_000n);
 export function inboxItems(s, now = Date.now()) {
   const items = [];
   for (const p of s.proposals) {
-    if (p.status === "InProgress" && !p.votes?.[me]) items.push({ key: `p${p.id}`, text: `Vote on DAO proposal #${p.id}: ${oneLine(p.description).slice(0, 90)}` });
+    if (p.status === "InProgress" && !p.votes?.[me]) {
+      items.push({ key: `p${p.id}`, text: `${t(`Vote on DAO proposal #${p.id}`, `Berikan suara pada usulan DAO #${p.id}`)}: ${oneLine(p.description).slice(0, 90)}` });
+    }
   }
   for (const c of s.cases ?? []) {
     if (c.status === "Open" && c.jurors.includes(me) && !c.votes.some(([j]) => j === me)) {
-      items.push({ key: `c${c.id}`, text: `You are a juror on court case #${c.id}: rule by ${new Date(nsMs(c.opened) + 3 * DAY_MS).toLocaleDateString()}` });
+      const by = new Date(nsMs(c.opened) + 3 * DAY_MS).toLocaleDateString();
+      items.push({ key: `c${c.id}`, text: t(`You are a juror on court case #${c.id}: rule by ${by}`, `Anda juri dalam perkara #${c.id}: putuskan paling lambat ${by}`) });
     }
   }
   for (const c of s.pclaims ?? []) {
-    if (c.holder === me && c.status === "Open") items.push({ key: `k${c.id}`, text: `Say whether pledge #${c.pledge}, which you called in, was kept` });
+    if (c.holder === me && c.status === "Open") {
+      items.push({ key: `k${c.id}`, text: t(`Say whether pledge #${c.pledge}, which you called in, was kept`, `Nyatakan apakah janji #${c.pledge} yang Anda tagih sudah ditepati`) });
+    }
   }
   if (s.duesStatus) {
     const [until, ok] = s.duesStatus;
     const left = nsMs(until) - now;
-    if (!ok) items.push({ key: "dues-late", text: "Your dues are more than 7 days late: you are out of good standing until you pay" });
-    else if (left < 7 * DAY_MS) items.push({ key: `dues${until}`, text: `Your dues fall due on ${new Date(nsMs(until)).toLocaleDateString()}` });
+    const day = new Date(nsMs(until)).toLocaleDateString();
+    if (!ok) items.push({ key: "dues-late", text: t("Your dues are more than 7 days late: you are out of good standing until you pay",
+      "Simpanan wajib Anda terlambat lebih dari 7 hari: status Anda tidak baik sampai Anda membayar") });
+    else if (left < 7 * DAY_MS) items.push({ key: `dues${until}`, text: t(`Your dues fall due on ${day}`, `Simpanan wajib Anda jatuh tempo pada ${day}`) });
   }
   return items;
 }
@@ -328,34 +352,38 @@ function inboxPanel(s) {
   try { seen = JSON.parse(localStorage.getItem(`kop-seen:${me}`) ?? "[]"); } catch { /* private mode */ }
   const fresh = items.filter((i) => !seen.includes(i.key));
   if (fresh.length && typeof Notification !== "undefined" && Notification.permission === "granted") {
-    try { new Notification("Koperasi: something needs you", { body: fresh.map((i) => i.text).join("\n").slice(0, 300) }); } catch { /* not allowed here */ }
+    try { new Notification(t("Koperasi: something needs you", "Koperasi: ada yang menunggu Anda"), { body: fresh.map((i) => i.text).join("\n").slice(0, 300) }); } catch { /* not allowed here */ }
   }
   try { localStorage.setItem(`kop-seen:${me}`, JSON.stringify(items.map((i) => i.key))); } catch { /* private mode */ }
   const ask = typeof Notification !== "undefined" && Notification.permission === "default"
-    ? ' <button type="button" class="linkish" id="w-notify">Tell me in this browser when something new needs me</button>' : "";
-  return `<div class="inbox" id="w-inbox"><h3 class="jh">Needs you${items.length ? ` (${items.length})` : ""}</h3>${items.length
-    ? `<ul>${items.map((i) => `<li>${fresh.includes(i) ? "<strong>new</strong> " : ""}${esc(i.text)}</li>`).join("")}</ul>`
-    : `<p class="small">Nothing waits for you: no vote, no jury, no pledge to confirm, no dues due this week.</p>`}<p class="small">${ask}
-      Outside this page: <a href="/api/inbox?who=${encodeURIComponent(me)}">your feed</a> (RSS, read from the chain; any feed-to-email or feed-to-Telegram service delivers it).</p></div>`;
+    ? ` <button type="button" class="linkish" id="w-notify">${t("Tell me in this browser when something new needs me", "Beri tahu saya di browser ini jika ada hal baru untuk saya")}</button>` : "";
+  return `<div class="inbox" id="w-inbox"><h3 class="jh">${t("Needs you", "Menunggu Anda")}${items.length ? ` (${items.length})` : ""}</h3>${items.length
+    ? `<ul>${items.map((i) => `<li>${fresh.includes(i) ? `<strong>${t("new", "baru")}</strong> ` : ""}${esc(i.text)}</li>`).join("")}</ul>`
+    : `<p class="small">${t("Nothing waits for you: no vote, no jury, no pledge to confirm, no dues due this week.",
+      "Tidak ada yang menunggu Anda: tidak ada pemungutan suara, tugas juri, janji untuk dikonfirmasi, atau simpanan wajib yang jatuh tempo minggu ini.")}</p>`}<p class="small">${ask}
+      ${t("Outside this page", "Di luar halaman ini")}: <a href="/api/inbox?who=${encodeURIComponent(me)}">${t("your feed", "feed Anda")}</a> ${t("(RSS, read from the chain; any feed-to-email or feed-to-Telegram service delivers it).",
+        "(RSS, dibaca dari chain; layanan feed-ke-email atau feed-ke-Telegram apa pun bisa mengantarkannya).")}</p></div>`;
 }
 
 function commonsPanel(s) {
   if (!s.member || !s.pledges || !s.pclaims || !s.cases) return "";
   const [st, good] = s.standing ?? [{}, true];
-  let html = `<h3 class="jh">Pledges and the co-op court</h3>
-    <p class="small">Your standing: ${st.pledges_honored ?? 0} pledge(s) kept, ${st.pledges_broken ?? 0} broken, ${st.juries_served ?? 0} jury rulings,
-      ${st.juries_missed ?? 0} missed${st.slashed ? `, slashed ${st.slashed} time(s)` : ""}: <strong>${good ? "good" : "not good"}</strong>${good ? "" : " (you are not drawn as a juror)"}.</p>`;
+  let html = `<h3 class="jh">${t("Pledges and the co-op court", "Janji dan pengadilan koperasi")}</h3>
+    <p class="small">${t(`Your standing: ${st.pledges_honored ?? 0} pledge(s) kept, ${st.pledges_broken ?? 0} broken, ${st.juries_served ?? 0} jury rulings,
+      ${st.juries_missed ?? 0} missed`, `Status Anda: ${st.pledges_honored ?? 0} janji ditepati, ${st.pledges_broken ?? 0} diingkari, ${st.juries_served ?? 0} putusan juri,
+      ${st.juries_missed ?? 0} terlewat`)}${st.slashed ? t(`, slashed ${st.slashed} time(s)`, `, didenda ${st.slashed} kali`) : ""}: <strong>${good ? t("good", "baik") : t("not good", "tidak baik")}</strong>${
+      good ? "" : t(" (you are not drawn as a juror)", " (Anda tidak diundi sebagai juri)")}.</p>`;
   const items = [];
   for (const p of s.pledges) {
-    if (p.issuer !== me && p.called < p.units) items.push(`<li><span><strong>Pledge #${p.id}</strong> ${esc(p.what)}<span class="claim">by ${esc(p.issuer)}, ${p.units - p.called} of ${p.units} left</span></span>
-      <button type="button" class="btn small" data-predeem="${p.id}">Call one in</button></li>`);
+    if (p.issuer !== me && p.called < p.units) items.push(`<li><span><strong>${t("Pledge", "Janji")} #${p.id}</strong> ${esc(p.what)}<span class="claim">${t("by", "oleh")} ${esc(p.issuer)}, ${t(`${p.units - p.called} of ${p.units} left`, `sisa ${p.units - p.called} dari ${p.units}`)}</span></span>
+      <button type="button" class="btn small" data-predeem="${p.id}">${t("Call one in", "Tagih satu")}</button></li>`);
   }
   for (const c of s.pclaims) {
     if (c.holder !== me || c.status !== "Open") continue;
     const p = s.pledges.find((x) => x.id === c.pledge);
     const late = Date.now() >= nsMs(c.ts) + 14 * DAY_MS;
-    items.push(`<li><span><strong>You called in</strong> ${esc(p?.what ?? `pledge #${c.pledge}`)}<span class="claim">from ${esc(p?.issuer ?? "?")}: was it kept?</span></span>
-      <span class="task-done"><button type="button" class="btn small" data-pkept="${c.id}">Kept</button>${late ? `<button type="button" class="btn ghost small" data-pbroken="${c.id}">Not kept (14 days passed)</button>` : ""}</span></li>`);
+    items.push(`<li><span><strong>${t("You called in", "Anda menagih")}</strong> ${esc(p?.what ?? `${t("pledge", "janji")} #${c.pledge}`)}<span class="claim">${t("from", "dari")} ${esc(p?.issuer ?? "?")}: ${t("was it kept?", "sudah ditepati?")}</span></span>
+      <span class="task-done"><button type="button" class="btn small" data-pkept="${c.id}">${t("Kept", "Ditepati")}</button>${late ? `<button type="button" class="btn ghost small" data-pbroken="${c.id}">${t("Not kept (14 days passed)", "Tidak ditepati (sudah 14 hari)")}</button>` : ""}</span></li>`);
   }
   // appeal to the members (0.2.7): the claimant of a dismissed case a juror ruled on, within 7 days after the jury's 3
   for (const c of s.cases) {
@@ -385,29 +413,33 @@ function commonsPanel(s) {
     if (over) items.push(`<li>${head}<button type="button" class="btn small" data-cclose="${c.id}">Close (3 days passed)</button></li>`);
     else if (mine) items.push(`<li>${head}<span class="task-done"><button type="button" class="btn small" data-crule="${c.id}" data-up="1">Uphold: refund</button><button type="button" class="btn ghost small" data-crule="${c.id}" data-up="0">Reject</button></span></li>`);
   }
-  html += items.length ? `<ul class="props tasks">${items.join("")}</ul>` : `<p class="small">Nothing for you to do here right now.</p>`;
-  html += `<div class="stake-row"><label>I pledge <input id="w-pl-what" type="text" maxlength="280" autocomplete="off" aria-label="What you promise the co-op" placeholder="review one pull request"></label>
-    <label>times <input id="w-pl-units" type="number" min="1" max="20" value="1" aria-label="How many times"></label>
-    <button type="button" class="btn" id="w-pl-post">Pledge</button></div>
-    <p class="small">Another member calls it in and says if you kept it. Kept and broken pledges are your standing, not profit-share points.</p>`;
+  html += items.length ? `<ul class="props tasks">${items.join("")}</ul>` : `<p class="small">${t("Nothing for you to do here right now.", "Belum ada yang perlu Anda lakukan di sini.")}</p>`;
+  html += `<div class="stake-row"><label>${t("I pledge", "Saya berjanji")} <input id="w-pl-what" type="text" maxlength="280" autocomplete="off" aria-label="${t("What you promise the co-op", "Apa yang Anda janjikan kepada koperasi")}" placeholder="${t("review one pull request", "memeriksa satu pull request")}"></label>
+    <label>${t("times", "kali")} <input id="w-pl-units" type="number" min="1" max="20" value="1" aria-label="${t("How many times", "Berapa kali")}"></label>
+    <button type="button" class="btn" id="w-pl-post">${t("Pledge", "Berjanji")}</button></div>
+    <p class="small">${t("Another member calls it in and says if you kept it. Kept and broken pledges are your standing, not profit-share points.",
+      "Anggota lain menagihnya dan menyatakan apakah Anda menepatinya. Janji yang ditepati dan diingkari menjadi status Anda, bukan poin SHU.")}</p>`;
   // contract 0.3.0: stand surety for another account, and the savings-and-loan fund
   if (s.loanRule !== null && s.loanRule !== undefined) {
-    html += `<h3 class="jh">Surety and loans</h3>
-      <p class="small">Your guarantors: ${s.guarantors?.length ? s.guarantors.map(esc).join(", ") : "none yet (a loan needs one)"}.
-        If an account you stand surety for falls out of good standing, so do you, until the members clear it.</p>
-      <div class="stake-row"><label>Stand surety for <input id="w-g-who" type="text" autocomplete="off" aria-label="The account you stand surety for"></label>
-        <button type="button" class="btn ghost" id="w-g-go">Stand surety (0.01 NEAR)</button></div>`;
+    html += `<h3 class="jh">${t("Surety and loans", "Tanggung renteng dan pinjaman")}</h3>
+      <p class="small">${t("Your guarantors", "Penjamin Anda")}: ${s.guarantors?.length ? s.guarantors.map(esc).join(", ") : t("none yet (a loan needs one)", "belum ada (pinjaman perlu satu penjamin)")}.
+        ${t("If an account you stand surety for falls out of good standing, so do you, until the members clear it.",
+          "Jika akun yang Anda jamin kehilangan status baik, Anda juga, sampai anggota memulihkannya.")}</p>
+      <div class="stake-row"><label>${t("Stand surety for", "Jadi penjamin untuk")} <input id="w-g-who" type="text" autocomplete="off" aria-label="${t("The account you stand surety for", "Akun yang Anda jamin")}"></label>
+        <button type="button" class="btn ghost" id="w-g-go">${t("Stand surety (0.01 NEAR)", "Jadi penjamin (0.01 NEAR)")}</button></div>`;
     if (s.loanRule) {
       const [r, fund] = s.loanRule;
       const open = s.loan && s.loan.status !== "Repaid";
       html += open
         // exact amounts: the contract takes nothing less than principal plus interest
-        ? `<p class="small">Your loan: ${nearAmt(s.loan.principal)} NEAR plus ${(Number(BigInt(s.loan.interest) / 10n ** 18n) / 1e6).toLocaleString("en", { maximumFractionDigits: 6 })} NEAR interest, due ${new Date(nsMs(s.loan.due)).toLocaleDateString()}${s.loan.status === "Late" ? " (<strong>late</strong>)" : ""}.</p>
-           <button type="button" class="btn" id="w-l-repay">Repay ${(Number((BigInt(s.loan.principal) + BigInt(s.loan.interest)) / 10n ** 18n) / 1e6).toLocaleString("en", { maximumFractionDigits: 6 })} NEAR</button>`
-        : `<div class="stake-row"><label>Borrow <input id="w-l-amt" type="number" min="0.01" step="0.01" aria-label="NEAR to borrow"> NEAR</label>
-             <button type="button" class="btn" id="w-l-go">Borrow</button></div>
-           <p class="small">Up to ${nearAmt(r.max_loan)} NEAR for ${esc(r.term_days)} days at ${r.rate_bps / 100}% flat; the fund can lend ${nearAmt(fund)} NEAR now.
-             The contract files the payment as a DAO proposal and approves it with its role; repaying sends it all to the treasury.</p>`;
+        ? `<p class="small">${t(`Your loan: ${nearAmt(s.loan.principal)} NEAR plus`, `Pinjaman Anda: ${nearAmt(s.loan.principal)} NEAR ditambah`)} ${(Number(BigInt(s.loan.interest) / 10n ** 18n) / 1e6).toLocaleString("en", { maximumFractionDigits: 6 })} ${t("NEAR interest, due", "NEAR bunga, jatuh tempo")} ${new Date(nsMs(s.loan.due)).toLocaleDateString()}${s.loan.status === "Late" ? ` (<strong>${t("late", "terlambat")}</strong>)` : ""}.</p>
+           <button type="button" class="btn" id="w-l-repay">${t("Repay", "Lunasi")} ${(Number((BigInt(s.loan.principal) + BigInt(s.loan.interest)) / 10n ** 18n) / 1e6).toLocaleString("en", { maximumFractionDigits: 6 })} NEAR</button>`
+        : `<div class="stake-row"><label>${t("Borrow", "Pinjam")} <input id="w-l-amt" type="number" min="0.01" step="0.01" aria-label="${t("NEAR to borrow", "NEAR yang dipinjam")}"> NEAR</label>
+             <button type="button" class="btn" id="w-l-go">${t("Borrow", "Pinjam")}</button></div>
+           <p class="small">${t(`Up to ${nearAmt(r.max_loan)} NEAR for ${esc(r.term_days)} days at ${r.rate_bps / 100}% flat; the fund can lend ${nearAmt(fund)} NEAR now.
+             The contract files the payment as a DAO proposal and approves it with its role; repaying sends it all to the treasury.`,
+             `Sampai ${nearAmt(r.max_loan)} NEAR selama ${esc(r.term_days)} hari dengan bunga tetap ${r.rate_bps / 100}%; dana bisa meminjamkan ${nearAmt(fund)} NEAR sekarang.
+             Kontrak mengajukan pencairannya sebagai usulan DAO dan menyetujuinya dengan perannya; pelunasan dikirim seluruhnya ke kas.`)}</p>`;
     }
   }
   const paid = (s.receipts ?? []).filter((r) => r.status === "Paid");
@@ -430,10 +462,10 @@ function armCommons() {
     b.onclick = () => act(`${label} #${b.dataset[attr]}`, () => send(dep.contract, method, args(b), { tgas }));
   });
   box.querySelectorAll("[data-predeem]").forEach((b) => {
-    b.onclick = () => act(`Call in pledge #${b.dataset.predeem}`, () => send(dep.contract, "redeem_pledge", { id: Number(b.dataset.predeem) }, { deposit: PLEDGE_FEE, tgas: 30 }));
+    b.onclick = () => act(t(`Call in pledge #${b.dataset.predeem}`, `Tagih janji #${b.dataset.predeem}`), () => send(dep.contract, "redeem_pledge", { id: Number(b.dataset.predeem) }, { deposit: PLEDGE_FEE, tgas: 30 }));
   });
-  one("pkept", "Kept: pledge claim", "settle_pledge", (b) => ({ claim: Number(b.dataset.pkept), honored: true }));
-  one("pbroken", "Not kept: pledge claim", "settle_pledge", (b) => ({ claim: Number(b.dataset.pbroken), honored: false }));
+  one("pkept", t("Kept: pledge claim", "Ditepati: tagihan janji"), "settle_pledge", (b) => ({ claim: Number(b.dataset.pkept), honored: true }));
+  one("pbroken", t("Not kept: pledge claim", "Tidak ditepati: tagihan janji"), "settle_pledge", (b) => ({ claim: Number(b.dataset.pbroken), honored: false }));
   // the deciding ruling files and approves the refund in the same transaction
   one("crule", "Rule on case", "rule_case", (b) => ({ id: Number(b.dataset.crule), uphold: b.dataset.up === "1" }), 300);
   one("cclose", "Close case", "close_case", (b) => ({ id: Number(b.dataset.cclose) }), 300);
@@ -452,8 +484,8 @@ function armCommons() {
   if (post) post.onclick = () => {
     const what = $("w-pl-what").value.trim();
     const units = Number($("w-pl-units").value);
-    if (!what || !(units >= 1 && units <= 20)) { say(`<span class="err">Pledge: say what you promise, 1 to 20 times.</span>`); return; }
-    act("Pledge", () => send(dep.contract, "pledge", { what, units }, { deposit: PLEDGE_FEE, tgas: 30 }));
+    if (!what || !(units >= 1 && units <= 20)) { say(`<span class="err">${t("Pledge: say what you promise, 1 to 20 times.", "Janji: tulis apa yang Anda janjikan, 1 sampai 20 kali.")}</span>`); return; }
+    act(t("Pledge", "Janji"), () => send(dep.contract, "pledge", { what, units }, { deposit: PLEDGE_FEE, tgas: 30 }));
   };
   const open = $("w-c-open");
   if (open) open.onclick = () => {
@@ -473,20 +505,23 @@ function reachPanel(s) {
   let html = "";
   if (s.member && s.routes !== undefined) {
     const mine = s.routes.find(([a]) => a === me);
-    html += `<h3 class="jh">Where your payouts land</h3>
-      <p class="small">Now: <strong>${mine ? `${CHAINS[mine[1]] ?? esc(mine[1])}, ${esc(mine[2])}` : CHAINS.near}</strong>. The agent's NEAR Intents wallet pays profit
-      shares by these routes; its policy lists exactly the members' routes, and only a members' vote changes it.</p>
+    html += `<h3 class="jh">${t("Where your payouts land", "Ke mana bayaran Anda dikirim")}</h3>
+      <p class="small">${t("Now", "Sekarang")}: <strong>${mine ? `${CHAINS[mine[1]] ?? esc(mine[1])}, ${esc(mine[2])}` : CHAINS.near}</strong>. ${t(`The agent's NEAR Intents wallet pays profit
+      shares by these routes; its policy lists exactly the members' routes, and only a members' vote changes it.`, `Dompet NEAR Intents milik agen membayar SHU
+      lewat rute ini; kebijakannya memuat persis rute para anggota, dan hanya suara anggota yang bisa mengubahnya.`)}</p>
       <div class="stake-row"><label>Chain <select id="w-route-chain">${Object.entries(CHAINS).map(([k, v]) => `<option value="${k}"${(mine?.[1] ?? "near") === k ? " selected" : ""}>${v}</option>`).join("")}</select></label>
-      <label>Address <input id="w-route-addr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…" aria-label="Your address on that chain" value="${esc(mine?.[2] ?? "")}"></label>
-      <button type="button" class="btn" id="w-route">Save my route</button></div>`;
+      <label>${t("Address", "Alamat")} <input id="w-route-addr" type="text" autocomplete="off" spellcheck="false" placeholder="0x…" aria-label="${t("Your address on that chain", "Alamat Anda di chain itu")}" value="${esc(mine?.[2] ?? "")}"></label>
+      <button type="button" class="btn" id="w-route">${t("Save my route", "Simpan rute saya")}</button></div>`;
   }
   if (s.token !== undefined && (s.member || s.records[me] || s.standing?.[0]?.juries_served)) {
-    html += `<h3 class="jh">Your work record, as a token</h3>`;
+    html += `<h3 class="jh">${t("Your work record, as a token", "Catatan kerja Anda, sebagai token")}</h3>`;
     html += s.token
-      ? `<p class="small">Minted: any NEAR wallet or explorer that reads NFTs (NEP-171) shows it, read live from the contract; it cannot be transferred.
-          <a href="/cert.html?who=${encodeURIComponent(me)}">See it</a>.</p>`
-      : `<p class="small">Take your record (tasks, pledges kept, juries) beyond this co-op: a token in your wallet, read live from the contract, never transferable.</p>
-          <button type="button" class="btn" id="w-mint">Mint my work record (0.01 NEAR storage)</button>`;
+      ? `<p class="small">${t(`Minted: any NEAR wallet or explorer that reads NFTs (NEP-171) shows it, read live from the contract; it cannot be transferred.
+          <a href="/cert.html?who=${encodeURIComponent(me)}">See it</a>.`, `Sudah dicetak: dompet atau explorer NEAR apa pun yang membaca NFT (NEP-171) menampilkannya, dibaca langsung dari kontrak; tidak bisa dipindahtangankan.
+          <a href="/cert.html?who=${encodeURIComponent(me)}">Lihat</a>.`)}</p>`
+      : `<p class="small">${t("Take your record (tasks, pledges kept, juries) beyond this co-op: a token in your wallet, read live from the contract, never transferable.",
+        "Bawa catatan Anda (tugas, janji yang ditepati, tugas juri) ke luar koperasi ini: token di dompet Anda, dibaca langsung dari kontrak, tidak pernah bisa dipindahtangankan.")}</p>
+          <button type="button" class="btn" id="w-mint">${t("Mint my work record (0.01 NEAR storage)", "Cetak catatan kerja saya (0.01 NEAR penyimpanan)")}</button>`;
   }
   if (s.member && dep.chainSignatures?.address) {
     html += `<details class="court"><summary>Pay from the co-op's Ethereum address (members vote, NEAR signs)</summary>
@@ -508,7 +543,7 @@ function armReach(s) {
     act(`Payouts on ${CHAINS[chain]}`, () => send(dep.contract, "set_payout_route", { chain, address: chain === "near" ? null : address }, { tgas: 30 }));
   };
   const mint = $("w-mint");
-  if (mint) mint.onclick = () => act("Mint your work record", () => send(dep.contract, "mint_work_record", {}, { deposit: PLEDGE_FEE, tgas: 30 }));
+  if (mint) mint.onclick = () => act(t("Mint your work record", "Cetak catatan kerja Anda"), () => send(dep.contract, "mint_work_record", {}, { deposit: PLEDGE_FEE, tgas: 30 }));
   const pay = $("w-eth");
   if (pay) pay.onclick = () => {
     const to = $("w-eth-to").value.trim().toLowerCase();
@@ -549,28 +584,35 @@ async function sendSigned(p) {
   }
 }
 
+const whoBar = () => `<div class="who-bar"><span>${t("Signed in as", "Masuk sebagai")} <strong>${esc(me)}</strong></span>
+    <button type="button" class="linkish" id="w-out">${t("Disconnect", "Putuskan")}</button></div>`;
 const step = (state, title, body) => `<li class="${state}"><b>${title}</b>${body ? `<div>${body}</div>` : ""}</li>`;
 
 async function render() {
   if (!me) {
-    box.innerHTML = `<p>Connect a NEAR <strong>testnet</strong> wallet (Meteor, Intear, Nightly…) to join this co-op from here.
+    box.innerHTML = t(`<p>Connect a NEAR <strong>testnet</strong> wallet (Meteor, Intear, Nightly…) to join this co-op from here.
       New to testnet? Meteor creates a free testnet account with faucet NEAR.</p>
-      <button type="button" class="btn" id="w-connect">Connect a testnet wallet</button>`;
+      <button type="button" class="btn" id="w-connect">Connect a testnet wallet</button>`,
+    `<p>Hubungkan dompet NEAR <strong>testnet</strong> (Meteor, Intear, Nightly…) untuk bergabung dengan koperasi ini dari sini.
+      Baru mengenal testnet? Meteor membuatkan akun testnet gratis berisi NEAR dari faucet.</p>
+      <button type="button" class="btn" id="w-connect">Hubungkan dompet testnet</button>`);
     $("w-connect").onclick = () => connector.connect().catch(() => {});
     return;
   }
   let s;
   try { s = await load(); } catch (e) {
-    box.innerHTML = `<p class="err">Could not read the co-op: ${esc(e.message)}. Reload to try again.</p>`;
+    box.innerHTML = `<p class="err">${t("Could not read the co-op", "Gagal membaca data koperasi")}: ${esc(e.message)}. ${t("Reload to try again.", "Muat ulang untuk mencoba lagi.")}</p>`;
     return;
   }
   if (!s.onNetwork) {
-    box.innerHTML = `<div class="who-bar"><span>Signed in as <strong>${esc(me)}</strong></span>
-      <button type="button" class="linkish" id="w-out">Disconnect</button></div>
-      <p class="err" id="w-network">This account does not exist on NEAR ${esc(dep.network)}, where this co-op runs. If your wallet is
-        set to the other network, switch it to ${esc(dep.network)} (in Meteor: the network menu at the top) and connect again.
-        A new implicit account exists only once it has received some NEAR.</p>
-      <button type="button" class="btn" id="w-switch">Disconnect and connect a ${esc(dep.network)} account</button>`;
+    const net = esc(dep.network);
+    box.innerHTML = `${whoBar()}
+      <p class="err" id="w-network">${t(`This account does not exist on NEAR ${net}, where this co-op runs. If your wallet is
+        set to the other network, switch it to ${net} (in Meteor: the network menu at the top) and connect again.
+        A new implicit account exists only once it has received some NEAR.`, `Akun ini tidak ada di NEAR ${net}, tempat koperasi ini berjalan. Jika dompet Anda
+        diatur ke jaringan lain, ganti ke ${net} (di Meteor: menu jaringan di bagian atas) lalu hubungkan lagi.
+        Akun implisit baru baru ada setelah menerima sedikit NEAR.`)}</p>
+      <button type="button" class="btn" id="w-switch">${t(`Disconnect and connect a ${net} account`, `Putuskan dan hubungkan akun ${net}`)}</button>`;
     $("w-out").onclick = () => connector.disconnect().catch(() => {});
     $("w-switch").onclick = () => connector.disconnect().catch(() => {}).then(() => connector.connect()).catch(() => {});
     return;
@@ -582,106 +624,126 @@ async function render() {
   const req = s.request;
   const approvals = req ? Object.values(req.votes).filter((v) => v === "Approve").length : 0;
 
-  let html = `<div class="who-bar"><span>Signed in as <strong>${esc(me)}</strong></span>
-    <button type="button" class="linkish" id="w-out">Disconnect</button></div>`;
+  let html = whoBar();
 
   if (!s.member) {
-    if (invitedBy && invitedBy !== me) html += `<p class="small">Invited by <strong>${esc(invitedBy)}</strong>${vouchParam(location.search, me)
-      ? ", who signed a vouch for your account with their wallet (NEP-413). Your request carries it, so every member can check it in their browser"
-      : ". Your request to the members names them"}, and it shows as vouched once they vote for you.</p>`;
+    if (invitedBy && invitedBy !== me) html += `<p class="small">${t("Invited by", "Diundang oleh")} <strong>${esc(invitedBy)}</strong>${vouchParam(location.search, me)
+      ? t(", who signed a vouch for your account with their wallet (NEP-413). Your request carries it, so every member can check it in their browser",
+        ", yang menandatangani jaminan untuk akun Anda dengan dompetnya (NEP-413). Permohonan Anda membawanya, jadi setiap anggota bisa memeriksanya di browser mereka")
+      : t(". Your request to the members names them", ". Permohonan Anda kepada anggota menyebut namanya")}${
+      t(", and it shows as vouched once they vote for you.", ", dan tampil sebagai dijamin setelah ia memilih Anda.")}</p>`;
     html += `<ol class="jsteps">
-      ${step(joined ? "done" : "now", `Pay the join deposit: ${nearAmt(deposit)} NEAR`, joined
-        ? "Paid. You get it back if the members remove you, or if you cancel before they vote you in."
-        : `<button type="button" class="btn" id="w-join">Pay ${nearAmt(deposit)} NEAR</button>`)}
-      ${step(asked ? "done" : joined ? "now" : "todo", "Ask the members to vote you in", asked
-        ? (req ? `Your request is <a href="${explorer(dep.dao)}">proposal #${req.id}</a>.` : "The members added you.")
-        : joined ? `Creates a DAO proposal from your wallet. Bond ${nearAmt(bond)} NEAR, returned when the members decide.
-            <button type="button" class="btn" id="w-ask">Create my proposal</button>` : "")}
-      ${step(s.inRole ? "done" : asked ? "now" : "todo", "The members vote", s.inRole
-        ? "Approved. You hold the member role in the DAO."
-        : req ? `${req.status === "InProgress" ? `${approvals} of ${s.needed} approvals so far. Members have 7 days.` : `Proposal ended: ${esc(req.status)}.`}` : "")}
-      ${step(s.inRole ? "now" : "todo", "Sync your membership", s.inRole
-        ? `The contract reads the DAO's decision on-chain. <button type="button" class="btn" id="w-sync">Sync my membership</button>` : "")}
+      ${step(joined ? "done" : "now", t(`Pay the join deposit: ${nearAmt(deposit)} NEAR`, `Bayar simpanan pokok: ${nearAmt(deposit)} NEAR`), joined
+        ? t("Paid. You get it back if the members remove you, or if you cancel before they vote you in.",
+          "Sudah dibayar. Uang ini kembali jika anggota mengeluarkan Anda, atau jika Anda membatalkan sebelum mereka menerima Anda.")
+        : `<button type="button" class="btn" id="w-join">${t("Pay", "Bayar")} ${nearAmt(deposit)} NEAR</button>`)}
+      ${step(asked ? "done" : joined ? "now" : "todo", t("Ask the members to vote you in", "Minta anggota menerima Anda"), asked
+        ? (req ? t(`Your request is <a href="${explorer(dep.dao)}">proposal #${req.id}</a>.`, `Permohonan Anda adalah <a href="${explorer(dep.dao)}">usulan #${req.id}</a>.`)
+          : t("The members added you.", "Anggota sudah menambahkan Anda."))
+        : joined ? `${t(`Creates a DAO proposal from your wallet. Bond ${nearAmt(bond)} NEAR, returned when the members decide.`,
+          `Membuat usulan DAO dari dompet Anda. Jaminan ${nearAmt(bond)} NEAR, dikembalikan setelah anggota memutuskan.`)}
+            <button type="button" class="btn" id="w-ask">${t("Create my proposal", "Buat usulan saya")}</button>` : "")}
+      ${step(s.inRole ? "done" : asked ? "now" : "todo", t("The members vote", "Anggota memberikan suara"), s.inRole
+        ? t("Approved. You hold the member role in the DAO.", "Disetujui. Anda memegang peran anggota di DAO.")
+        : req ? `${req.status === "InProgress" ? t(`${approvals} of ${s.needed} approvals so far. Members have 7 days.`, `${approvals} dari ${s.needed} persetujuan sejauh ini. Anggota punya waktu 7 hari.`)
+          : `${t("Proposal ended", "Usulan berakhir")}: ${esc(req.status)}.`}` : "")}
+      ${step(s.inRole ? "now" : "todo", t("Sync your membership", "Sinkronkan keanggotaan Anda"), s.inRole
+        ? `${t("The contract reads the DAO's decision on-chain.", "Kontrak membaca keputusan DAO di on-chain.")} <button type="button" class="btn" id="w-sync">${t("Sync my membership", "Sinkronkan keanggotaan saya")}</button>` : "")}
     </ol>`;
-    if (s.pending && !s.inRole) html += `<p class="small"><button type="button" class="linkish" id="w-cancel">Cancel and take my ${nearAmt(deposit)} NEAR back</button></p>`;
+    if (s.pending && !s.inRole) html += `<p class="small"><button type="button" class="linkish" id="w-cancel">${t(`Cancel and take my ${nearAmt(deposit)} NEAR back`, `Batalkan dan ambil kembali ${nearAmt(deposit)} NEAR saya`)}</button></p>`;
   } else {
     const open = s.proposals.filter((p) => p.status === "InProgress").reverse();
     html += inboxPanel(s);
     html += `<div class="me-card">
-        <div><span>Your vote</span><strong>1 of ${s.members}</strong></div>
-        <div><span>Contribution points</span><strong>${s.member.points}</strong></div>
-        <div><span>Share to claim</span><strong>${usdc(s.claimable)} USDC</strong></div>
+        <div><span>${t("Your vote", "Suara Anda")}</span><strong>${t(`1 of ${s.members}`, `1 dari ${s.members}`)}</strong></div>
+        <div><span>${t("Contribution points", "Poin kontribusi")}</span><strong>${s.member.points}</strong></div>
+        <div><span>${t("Share to claim", "SHU yang bisa diambil")}</span><strong>${usdc(s.claimable)} USDC</strong></div>
       </div>
       ${BigInt(s.claimable) > 0n ? (s.usdcReady
-        ? `<button type="button" class="btn" id="w-claim">Claim ${usdc(s.claimable)} USDC</button>`
-        : `<p class="small">To receive USDC, register your account with the token first (a one-time ${(Number(s.usdcStorage) / 1e24).toLocaleString("en", { maximumFractionDigits: 6 })} NEAR storage deposit).</p>
-           <button type="button" class="btn" id="w-usdc">Register for USDC</button>`) : ""}
-      ${s.pool ? `<h3 class="jh">Savings: your stake for the agent's inference</h3>
-      <p class="small">The members chose <a href="${explorer(s.pool)}">${esc(s.pool)}</a>. Your stake there is your savings: it weighs your
-        profit share, and its rewards are what pay for inference. The NEAR stays yours; unstake from the pool any time.</p>
+        ? `<button type="button" class="btn" id="w-claim">${t("Claim", "Ambil")} ${usdc(s.claimable)} USDC</button>`
+        : `<p class="small">${t("To receive USDC, register your account with the token first (a one-time", "Untuk menerima USDC, daftarkan akun Anda ke token dulu (sekali saja, simpanan penyimpanan")} ${(Number(s.usdcStorage) / 1e24).toLocaleString("en", { maximumFractionDigits: 6 })} ${t("NEAR storage deposit).", "NEAR).")}</p>
+           <button type="button" class="btn" id="w-usdc">${t("Register for USDC", "Daftar untuk USDC")}</button>`) : ""}
+      ${s.pool ? `<h3 class="jh">${t("Savings: your stake for the agent's inference", "Simpanan sukarela: stake Anda untuk inferensi agen")}</h3>
+      <p class="small">${t("The members chose", "Anggota memilih")} <a href="${explorer(s.pool)}">${esc(s.pool)}</a>. ${t(`Your stake there is your savings: it weighs your
+        profit share, and its rewards are what pay for inference. The NEAR stays yours; unstake from the pool any time.`, `Stake Anda di sana adalah simpanan Anda: ia menentukan bobot
+        SHU Anda, dan imbalannya membayar inferensi. NEAR-nya tetap milik Anda; tarik dari pool kapan saja.`)}</p>
       <div class="me-card two">
-        <div><span>Staked in the pool now</span><strong>${nearAmt(s.staked)} NEAR</strong></div>
-        <div><span>Counted as savings</span><strong>${nearAmt(s.member.savings)} NEAR</strong></div>
+        <div><span>${t("Staked in the pool now", "Di-stake di pool sekarang")}</span><strong>${nearAmt(s.staked)} NEAR</strong></div>
+        <div><span>${t("Counted as savings", "Dihitung sebagai simpanan")}</span><strong>${nearAmt(s.member.savings)} NEAR</strong></div>
       </div>
-      ${s.waiting ? `<p class="small">${nearAmt(s.waiting[0])} NEAR waits to count: a stake increase counts as savings after 7 days
-        in the pool, from ${new Date(Number(BigInt(s.waiting[1]) / 1_000_000n)).toLocaleString("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-        (sync again then). The co-op's keeper reads it twice a day meanwhile: a gap of more than a day between readings
-        starts the wait again. A decrease counts at once.</p>` : `<p class="small">A stake increase counts as savings after 7 days in the pool, read at least once a day (the co-op's keeper does it); a decrease counts at once.</p>`}
-      <div class="stake-row"><label>Stake <input id="w-amt" type="number" min="1" step="1" value="1" inputmode="numeric"> NEAR</label>
-        <button type="button" class="btn" id="w-stake">Stake</button>
-        <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings || (s.waiting?.[0] === s.staked && BigInt(s.waiting[1]) > BigInt(Date.now()) * 1_000_000n) ? " disabled" : ""}>Count my stake as savings</button></div>` : ""}
-      <h3 class="jh">Invite someone</h3>
-      <p class="small">Share this link. Their membership proposal names you, and it shows as vouched once you vote for them.
+      ${s.waiting ? `<p class="small">${nearAmt(s.waiting[0])} ${t(`NEAR waits to count: a stake increase counts as savings after 7 days
+        in the pool, from`, `NEAR menunggu dihitung: kenaikan stake dihitung sebagai simpanan setelah 7 hari
+        di pool, mulai`)} ${new Date(Number(BigInt(s.waiting[1]) / 1_000_000n)).toLocaleString("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+        ${t(`(sync again then). The co-op's keeper reads it twice a day meanwhile: a gap of more than a day between readings
+        starts the wait again. A decrease counts at once.`, `(sinkronkan lagi saat itu). Sementara itu penjaga koperasi membacanya dua kali sehari: jeda lebih dari sehari
+        antarpembacaan memulai penantian dari awal. Penurunan langsung dihitung.`)}</p>`
+    : `<p class="small">${t("A stake increase counts as savings after 7 days in the pool, read at least once a day (the co-op's keeper does it); a decrease counts at once.",
+      "Kenaikan stake dihitung sebagai simpanan setelah 7 hari di pool, dibaca minimal sekali sehari (oleh penjaga koperasi); penurunan langsung dihitung.")}</p>`}
+      <div class="stake-row"><label>${t("Stake", "Stake")} <input id="w-amt" type="number" min="1" step="1" value="1" inputmode="numeric"> NEAR</label>
+        <button type="button" class="btn" id="w-stake">${t("Stake", "Stake")}</button>
+        <button type="button" class="btn ghost" id="w-sync-sav"${s.staked === s.member.savings || (s.waiting?.[0] === s.staked && BigInt(s.waiting[1]) > BigInt(Date.now()) * 1_000_000n) ? " disabled" : ""}>${t("Count my stake as savings", "Hitung stake saya sebagai simpanan")}</button></div>` : ""}
+      <h3 class="jh">${t("Invite someone", "Undang seseorang")}</h3>
+      <p class="small">${t(`Share this link. Their membership proposal names you, and it shows as vouched once you vote for them.
         Know their account? Sign a vouch for it with your wallet (NEP-413, no transaction, no gas): the link then carries
-        your signature, their request carries it to the members, and anyone can check it against your keys on-chain.</p>
-      <div class="stake-row"><input id="w-vouch-for" type="text" autocomplete="off" placeholder="their-account.testnet" aria-label="Account to vouch for">
-        <button type="button" class="btn ghost" id="w-vouch">Sign a vouch</button></div>
-      <div class="stake-row"><input id="w-invite" type="text" readonly value="${esc(`${location.origin}/?invite=${me}#joinapp`)}" aria-label="Your invite link">
-        <button type="button" class="btn ghost" id="w-invite-copy">Copy</button></div>
-      <h3 class="jh">Members' meeting: propose a profit share</h3>
+        your signature, their request carries it to the members, and anyone can check it against your keys on-chain.`, `Bagikan tautan ini. Usulan keanggotaan mereka menyebut nama Anda, dan tampil sebagai dijamin setelah Anda memilih mereka.
+        Tahu akun mereka? Tanda tangani jaminan untuknya dengan dompet Anda (NEP-413, tanpa transaksi, tanpa gas): tautannya lalu membawa
+        tanda tangan Anda, permohonan mereka membawanya ke anggota, dan siapa pun bisa memeriksanya terhadap kunci Anda di on-chain.`)}</p>
+      <div class="stake-row"><input id="w-vouch-for" type="text" autocomplete="off" placeholder="their-account.testnet" aria-label="${t("Account to vouch for", "Akun yang Anda jamin")}">
+        <button type="button" class="btn ghost" id="w-vouch">${t("Sign a vouch", "Tanda tangani jaminan")}</button></div>
+      <div class="stake-row"><input id="w-invite" type="text" readonly value="${esc(`${location.origin}/?invite=${me}#joinapp`)}" aria-label="${t("Your invite link", "Tautan undangan Anda")}">
+        <button type="button" class="btn ghost" id="w-invite-copy">${t("Copy", "Salin")}</button></div>
+      <h3 class="jh">${t("Members' meeting: propose a profit share", "Rapat anggota: usulkan pembagian SHU")}</h3>
       ${s.treasury > 0n
-        ? `<p class="small">The treasury holds ${usdc(s.treasury)} USDC. Choose how much to share; everyone sees each member's part before voting.</p>
-           <div class="stake-row"><label>Share <input id="w-share-amt" type="text" inputmode="decimal" autocomplete="off" placeholder="${usdc(s.treasury)}" aria-label="USDC to share"> USDC</label>
-           <button type="button" class="btn" id="w-share">Propose this share</button></div>
-           <pre class="does" id="w-share-preview" aria-live="polite">Type an amount to see each member's part.</pre>`
-        : `<p class="small">The treasury holds 0.00 USDC of ${esc(dep.usdc.slice(0, 12))}…, so there is nothing to share yet.</p>`}
-      <h3 class="jh">Tasks the co-op pays for</h3>
+        ? `<p class="small">${t(`The treasury holds ${usdc(s.treasury)} USDC. Choose how much to share; everyone sees each member's part before voting.`,
+          `Kas berisi ${usdc(s.treasury)} USDC. Pilih berapa yang dibagi; semua melihat bagian setiap anggota sebelum memberikan suara.`)}</p>
+           <div class="stake-row"><label>${t("Share", "Bagikan")} <input id="w-share-amt" type="text" inputmode="decimal" autocomplete="off" placeholder="${usdc(s.treasury)}" aria-label="${t("USDC to share", "USDC yang dibagi")}"> USDC</label>
+           <button type="button" class="btn" id="w-share">${t("Propose this share", "Usulkan pembagian ini")}</button></div>
+           <pre class="does" id="w-share-preview" aria-live="polite">${t("Type an amount to see each member's part.", "Ketik jumlahnya untuk melihat bagian setiap anggota.")}</pre>`
+        : `<p class="small">${t(`The treasury holds 0.00 USDC of ${esc(dep.usdc.slice(0, 12))}…, so there is nothing to share yet.`,
+          `Kas berisi 0.00 USDC dari ${esc(dep.usdc.slice(0, 12))}…, jadi belum ada yang bisa dibagi.`)}</p>`}
+      <h3 class="jh">${t("Tasks the co-op pays for", "Tugas yang dibayar koperasi")}</h3>
       ${s.bounties.length ? `<ul class="props tasks">${s.bounties.map((b) => {
         const mine = s.myClaims.find((c) => c.bounty_id === b.id);
         const days = Number(BigInt(b.max_deadline) / DAY_NS);
-        return `<li><span><strong>#${b.id}</strong> ${esc(b.description)}<span class="claim">Pays ${esc(pays(b.token, b.amount))}; ${b.times} left; ${days} days to deliver once taken.</span></span>${mine
-          ? `<span class="task-done"><input id="w-work-${b.id}" type="text" maxlength="300" placeholder="Link to your work (PR, file…)" aria-label="Link to your work for task #${b.id}">
-             <button type="button" class="btn small" data-done="${b.id}">Ask to be paid</button>
-             <button type="button" class="btn ghost small" data-giveup="${b.id}">Give up</button></span>`
-          : `<button type="button" class="btn small" data-claim="${b.id}" data-days="${days}">Take this task (${nearAmt(s.policy.bounty_bond)} NEAR bond)</button>`}</li>`;
-      }).join("")}</ul>${s.usdcReady ? "" : `<p class="small">Payouts are in USDC: register for USDC first.</p>`}`
-        : `<p class="small">No open tasks right now.</p>`}
-      <h3 class="jh">Open proposals</h3>
+        return `<li><span><strong>#${b.id}</strong> ${esc(b.description)}<span class="claim">${t("Pays", "Bayaran")} ${esc(pays(b.token, b.amount))}; ${
+          t(`${b.times} left; ${days} days to deliver once taken.`, `sisa ${b.times}; ${days} hari untuk menyerahkan setelah diambil.`)}</span></span>${mine
+          ? `<span class="task-done"><input id="w-work-${b.id}" type="text" maxlength="300" placeholder="${t("Link to your work (PR, file…)", "Tautan ke hasil kerja Anda (PR, berkas…)")}" aria-label="${t("Link to your work for task", "Tautan ke hasil kerja Anda untuk tugas")} #${b.id}">
+             <button type="button" class="btn small" data-done="${b.id}">${t("Ask to be paid", "Minta dibayar")}</button>
+             <button type="button" class="btn ghost small" data-giveup="${b.id}">${t("Give up", "Mundur")}</button></span>`
+          : `<button type="button" class="btn small" data-claim="${b.id}" data-days="${days}">${t(`Take this task (${nearAmt(s.policy.bounty_bond)} NEAR bond)`, `Ambil tugas ini (jaminan ${nearAmt(s.policy.bounty_bond)} NEAR)`)}</button>`}</li>`;
+      }).join("")}</ul>${s.usdcReady ? "" : `<p class="small">${t("Payouts are in USDC: register for USDC first.", "Bayaran dalam USDC: daftar untuk USDC dulu.")}</p>`}`
+        : `<p class="small">${t("No open tasks right now.", "Belum ada tugas terbuka.")}</p>`}
+      <h3 class="jh">${t("Open proposals", "Usulan yang terbuka")}</h3>
       ${open.length ? `<ul class="props">${open.map((p) => {
         const mine = p.votes[me];
         const hidden = opaque(p);
         return `<li><span><strong>#${p.id}</strong> <pre class="does">${esc(safeDescribe(p, s))}</pre>${p.description
-          ? `<span class="claim">Proposer says: “${esc(p.description.slice(0, 200))}”</span>` : ""}${(() => {
+          ? `<span class="claim">${t("Proposer says", "Kata pengusul")}: “${esc(p.description.slice(0, 200))}”</span>` : ""}${(() => {
             const inv = inviteOf(p, s.group);
-            return inv ? `<span class="claim">${inv.vouched ? `Vouched: ${esc(inv.by)} invited them and voted to approve.` : `Says ${esc(inv.by)} invited them; ${esc(inv.by)} has not approved yet.`}</span>${inv.signed
-              ? `<span class="claim" data-vouch="${esc(JSON.stringify({ by: inv.by, member: p.kind.AddMemberToRole.member_id, ...inv.signed }))}">Checking ${esc(inv.by)}'s signed vouch…</span>` : ""}` : "";
-          })()}</span>${mine ? `<em>you voted ${esc(mine.toLowerCase())}</em>`
-          : hidden ? `<a class="small-link" href="${explorer(dep.dao)}">Inspect in the DAO to vote</a>`
-          : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">Approve</button>
-             <button type="button" class="btn ghost small" data-vote="VoteReject" data-id="${p.id}">Reject</button></span>`}</li>`;
-      }).join("")}</ul>` : `<p class="small">Nothing to vote on right now.</p>`}
-      <h3 class="jh">Leave the co-op</h3>
+            const by = inv ? esc(inv.by) : "";
+            return inv ? `<span class="claim">${inv.vouched ? t(`Vouched: ${by} invited them and voted to approve.`, `Dijamin: ${by} mengundangnya dan memilih setuju.`)
+              : t(`Says ${by} invited them; ${by} has not approved yet.`, `Mengaku diundang ${by}; ${by} belum menyetujui.`)}</span>${inv.signed
+              ? `<span class="claim" data-vouch="${esc(JSON.stringify({ by: inv.by, member: p.kind.AddMemberToRole.member_id, ...inv.signed }))}">${t(`Checking ${by}'s signed vouch…`, `Memeriksa jaminan bertanda tangan dari ${by}…`)}</span>` : ""}` : "";
+          })()}</span>${mine ? `<em>${mine === "Approve" ? t("you voted approve", "Anda memilih setuju") : mine === "Reject" ? t("you voted reject", "Anda memilih tolak") : `${t("you voted", "Anda memilih")} ${esc(mine.toLowerCase())}`}</em>`
+          : hidden ? `<a class="small-link" href="${explorer(dep.dao)}">${t("Inspect in the DAO to vote", "Periksa di DAO untuk memilih")}</a>`
+          : `<span class="vote-btns"><button type="button" class="btn small" data-vote="VoteApprove" data-id="${p.id}">${t("Approve", "Setuju")}</button>
+             <button type="button" class="btn ghost small" data-vote="VoteReject" data-id="${p.id}">${t("Reject", "Tolak")}</button></span>`}</li>`;
+      }).join("")}</ul>` : `<p class="small">${t("Nothing to vote on right now.", "Belum ada yang perlu dipilih.")}</p>`}
+      <h3 class="jh">${t("Leave the co-op", "Keluar dari koperasi")}</h3>
       ${!s.inRole
-        ? `<p class="small">The members removed you from the DAO role. Close your membership to get your ${nearAmt(s.member.join_deposit)} NEAR
-             join deposit back; a profit share already credited stays yours to claim.</p>
-           <button type="button" class="btn" id="w-leave-sync">Close my membership and take the deposit back</button>`
+        ? `<p class="small">${t(`The members removed you from the DAO role. Close your membership to get your ${nearAmt(s.member.join_deposit)} NEAR
+             join deposit back; a profit share already credited stays yours to claim.`, `Anggota telah mengeluarkan Anda dari peran DAO. Tutup keanggotaan Anda untuk mengambil kembali simpanan pokok
+             ${nearAmt(s.member.join_deposit)} NEAR; SHU yang sudah dikreditkan tetap milik Anda untuk diambil.`)}</p>
+           <button type="button" class="btn" id="w-leave-sync">${t("Close my membership and take the deposit back", "Tutup keanggotaan saya dan ambil kembali simpanannya")}</button>`
         : s.leave?.status === "InProgress"
-          ? `<p class="small">Your request to leave is <a href="${explorer(dep.dao)}">proposal #${s.leave.id}</a>:
-               ${Object.values(s.leave.votes).filter((v) => v === "Approve").length} of ${s.needed} approvals so far.</p>`
-          : `<p class="small">Asks the members to remove you from the DAO role (bond ${nearAmt(bond)} NEAR, returned when they decide).
+          ? `<p class="small">${t(`Your request to leave is <a href="${explorer(dep.dao)}">proposal #${s.leave.id}</a>:`, `Permohonan keluar Anda adalah <a href="${explorer(dep.dao)}">usulan #${s.leave.id}</a>:`)}
+               ${t(`${Object.values(s.leave.votes).filter((v) => v === "Approve").length} of ${s.needed} approvals so far.`, `${Object.values(s.leave.votes).filter((v) => v === "Approve").length} dari ${s.needed} persetujuan sejauh ini.`)}</p>`
+          : `<p class="small">${t(`Asks the members to remove you from the DAO role (bond ${nearAmt(bond)} NEAR, returned when they decide).
                Once they approve, come back here to take your ${nearAmt(s.member.join_deposit)} NEAR join deposit back.
-               A profit share already credited stays yours to claim.</p>
-             <button type="button" class="btn ghost" id="w-leave">Ask to leave</button>`}`;
+               A profit share already credited stays yours to claim.`, `Meminta anggota mengeluarkan Anda dari peran DAO (jaminan ${nearAmt(bond)} NEAR, dikembalikan setelah mereka memutuskan).
+               Setelah mereka setuju, kembali ke sini untuk mengambil simpanan pokok ${nearAmt(s.member.join_deposit)} NEAR Anda.
+               SHU yang sudah dikreditkan tetap milik Anda untuk diambil.`)}</p>
+             <button type="button" class="btn ghost" id="w-leave">${t("Ask to leave", "Minta keluar")}</button>`}`;
   }
   html += tasksPanel(s);
   html += commonsPanel(s);
@@ -693,7 +755,7 @@ async function render() {
   armCommons();
   armReach(s);
   const copy = $("w-invite-copy");
-  if (copy) copy.onclick = () => navigator.clipboard.writeText($("w-invite").value).then(() => { copy.textContent = "Copied"; }, () => $("w-invite").select());
+  if (copy) copy.onclick = () => navigator.clipboard.writeText($("w-invite").value).then(() => { copy.textContent = t("Copied", "Tersalin"); }, () => $("w-invite").select());
   const vouch = $("w-vouch");
   if (vouch) vouch.onclick = async () => {
     const who = $("w-vouch-for").value.trim();
@@ -707,9 +769,9 @@ async function render() {
       const v = { pk: String(r.publicKey), sig, nonce: btoa(String.fromCharCode(...nonce)) };
       if (!(await checkVouch({ by: me, member: who, dao: dep.dao, ...v }))) throw new Error("the wallet's signature does not verify");
       $("w-invite").value = `${location.origin}/?${new URLSearchParams({ invite: me, for: who, pk: v.pk, sig: v.sig, n: v.nonce })}#joinapp`;
-      vouch.textContent = "Signed: copy the link";
+      vouch.textContent = t("Signed: copy the link", "Ditandatangani: salin tautannya");
     } catch (e) {
-      vouch.textContent = `Not signed: ${e.message ?? e}`.slice(0, 80);
+      vouch.textContent = `${t("Not signed", "Tidak ditandatangani")}: ${e.message ?? e}`.slice(0, 80);
     }
   };
   // a signed vouch on an open request: the signature, and that the key is a full-access key of the inviter, today
@@ -718,31 +780,33 @@ async function render() {
     const sigOk = await checkVouch({ ...v, dao: dep.dao });
     const key = sigOk ? await query({ request_type: "view_access_key", account_id: v.by, public_key: v.pk }).catch(() => null) : null;
     el.textContent = sigOk && key?.permission === "FullAccess"
-      ? `Signed vouch: ${v.by} signed "I vouch for ${v.member}" with a full-access key of their account. Verified in your browser (NEP-413).`
-      : `A signed vouch is attached, but it does not verify against ${v.by}'s keys: treat the request as unvouched.`;
+      ? t(`Signed vouch: ${v.by} signed "I vouch for ${v.member}" with a full-access key of their account. Verified in your browser (NEP-413).`,
+        `Jaminan bertanda tangan: ${v.by} menandatangani "I vouch for ${v.member}" dengan kunci akses penuh akunnya. Diperiksa di browser Anda (NEP-413).`)
+      : t(`A signed vouch is attached, but it does not verify against ${v.by}'s keys: treat the request as unvouched.`,
+        `Ada jaminan bertanda tangan, tetapi tidak cocok dengan kunci ${v.by}: anggap permohonan ini tanpa jaminan.`);
   });
   const on =(id, label, fn, check) => { const b = $(id); if (b) b.onclick = () => act(label, fn, check); };
-  on("w-join", "Join deposit", () => send(dep.contract, "join", {}, { deposit, tgas: 30 }), async () =>
+  on("w-join", t("Join deposit", "Simpanan pokok"), () => send(dep.contract, "join", {}, { deposit, tgas: 30 }), async () =>
     ((await view(dep.contract, "get_member", { account_id: me })) || (await view(dep.contract, "is_pending", { account_id: me }))
-      ? "You already joined: the panel will refresh." : null));
-  on("w-ask", "Membership proposal", () => send(dep.dao, "add_proposal", {
+      ? t("You already joined: the panel will refresh.", "Anda sudah bergabung: panel akan dimuat ulang.") : null));
+  on("w-ask", t("Membership proposal", "Usulan keanggotaan"), () => send(dep.dao, "add_proposal", {
     proposal: { description: joinText(me, invitedBy) + (invitedBy && vouchParam(location.search, me) ? vouchSuffix(vouchParam(location.search, me)) : ""),
       kind: { AddMemberToRole: { member_id: me, role: "member" } } },
   }, { deposit: bond, tgas: 50 }));
-  on("w-sync", "Sync membership", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
-  on("w-cancel", "Cancel", () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));
-  on("w-leave", "Request to leave", () => send(dep.dao, "add_proposal", {
+  on("w-sync", t("Sync membership", "Sinkron keanggotaan"), () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
+  on("w-cancel", t("Cancel", "Batal"), () => send(dep.contract, "cancel_join", {}, { tgas: 30 }));
+  on("w-leave", t("Request to leave", "Permohonan keluar"), () => send(dep.dao, "add_proposal", {
     proposal: { description: `Remove ${me} from the members: they asked to leave (from the Koperasi page)`, kind: { RemoveMemberFromRole: { member_id: me, role: "member" } } },
   }, { deposit: bond, tgas: 50 }));
-  on("w-leave-sync", "Leave", () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
-  on("w-usdc", "USDC registration", () => send(dep.usdc, "storage_deposit", { account_id: me, registration_only: true }, { deposit: s.usdcStorage, tgas: 30 }));
+  on("w-leave-sync", t("Leave", "Keluar"), () => send(dep.contract, "sync_member", { account_id: me }, { tgas: 60 }));
+  on("w-usdc", t("USDC registration", "Pendaftaran USDC"), () => send(dep.usdc, "storage_deposit", { account_id: me, registration_only: true }, { deposit: s.usdcStorage, tgas: 30 }));
   // read the amount on click: act() re-renders the panel (and this input) before the transaction runs
   const stake = $("w-stake");
   if (stake) stake.onclick = () => {
     const raw = $("w-amt").value;
     const n = Number(raw);
     if (!(Number.isInteger(n) && n >= 1 && n <= 1000)) {
-      say(`<span class="err">Stake: enter a whole number of NEAR, 1 to 1000 (got "${esc(raw)}").</span>`);
+      say(`<span class="err">${t("Stake: enter a whole number of NEAR, 1 to 1000", "Stake: masukkan bilangan bulat NEAR, 1 sampai 1000")} (${t("got", "tertulis")} "${esc(raw)}").</span>`);
       return;
     }
     act(`Stake ${n} NEAR`, () => send(s.pool, "deposit_and_stake", {}, { deposit: BigInt(n) * 10n ** 24n, tgas: 100 }));
@@ -750,40 +814,41 @@ async function render() {
   const gGo = $("w-g-go");
   if (gGo) gGo.onclick = () => {
     const who = $("w-g-who").value.trim();
-    if (!/^[a-z0-9._-]{2,64}$/.test(who)) { say(`<span class="err">Surety: a NEAR account id.</span>`); return; }
-    act(`Stand surety for ${who}`, () => send(dep.contract, "guarantee", { account_id: who }, { deposit: PLEDGE_FEE, tgas: 30 }));
+    if (!/^[a-z0-9._-]{2,64}$/.test(who)) { say(`<span class="err">${t("Surety: a NEAR account id.", "Penjamin: isi id akun NEAR.")}</span>`); return; }
+    act(t(`Stand surety for ${who}`, `Menjamin ${who}`), () => send(dep.contract, "guarantee", { account_id: who }, { deposit: PLEDGE_FEE, tgas: 30 }));
   };
   const lGo = $("w-l-go");
   if (lGo) lGo.onclick = () => {
     const n = Number($("w-l-amt").value);
-    if (!(n > 0)) { say(`<span class="err">Borrow: an amount of NEAR.</span>`); return; }
-    act(`Borrow ${n} NEAR`, () => send(dep.contract, "request_loan", { amount: (BigInt(Math.round(n * 1000)) * 10n ** 21n).toString() }, { tgas: 200 }));
+    if (!(n > 0)) { say(`<span class="err">${t("Borrow: an amount of NEAR.", "Pinjam: isi jumlah NEAR.")}</span>`); return; }
+    act(t(`Borrow ${n} NEAR`, `Pinjam ${n} NEAR`), () => send(dep.contract, "request_loan", { amount: (BigInt(Math.round(n * 1000)) * 10n ** 21n).toString() }, { tgas: 200 }));
   };
   const lRepay = $("w-l-repay");
-  if (lRepay) lRepay.onclick = () => act("Repay the loan", () => send(dep.contract, "repay_loan", {},
+  if (lRepay) lRepay.onclick = () => act(t("Repay the loan", "Pelunasan pinjaman"), () => send(dep.contract, "repay_loan", {},
     { deposit: BigInt(s.loan.principal) + BigInt(s.loan.interest), tgas: 30 }));
   const notify = $("w-notify");
   if (notify) notify.onclick = () => Notification.requestPermission().then(() => render());
-  on("w-sync-sav", "Savings sync", () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
-  on("w-claim", "Claim", () => send(dep.contract, "claim_share", {}, { tgas: 60 }), async () =>
-    (BigInt(await view(dep.contract, "get_claimable", { account_id: me })) > 0n ? null : "Nothing to claim any more: it was claimed already."));
+  on("w-sync-sav", t("Savings sync", "Sinkron simpanan"), () => send(dep.contract, "sync_savings", { account_id: me }, { tgas: 40 }));
+  on("w-claim", t("Claim", "Ambil SHU"), () => send(dep.contract, "claim_share", {}, { tgas: 60 }), async () =>
+    (BigInt(await view(dep.contract, "get_claimable", { account_id: me })) > 0n ? null
+      : t("Nothing to claim any more: it was claimed already.", "Tidak ada lagi yang bisa diambil: sudah diambil sebelumnya.")));
   const shareIn = $("w-share-amt");
   if (shareIn) {
     // the amount is read on click (act() re-renders the panel), and checked against the treasury before the wallet opens
     const check = () => {
       const units = usdcUnits(shareIn.value);
-      if (units === null) return { err: "a positive USDC amount, at most 6 decimals" };
-      if (units > s.treasury) return { err: `at most the ${usdc(s.treasury)} USDC the treasury holds` };
+      if (units === null) return { err: t("a positive USDC amount, at most 6 decimals", "jumlah USDC positif, paling banyak 6 desimal") };
+      if (units > s.treasury) return { err: t(`at most the ${usdc(s.treasury)} USDC the treasury holds`, `paling banyak ${usdc(s.treasury)} USDC yang ada di kas`) };
       return { units };
     };
     shareIn.oninput = () => {
       const c = check();
-      $("w-share-preview").textContent = c.err ? `Enter ${c.err}.` : `If the members approve:\n${preview(c.units, s).join("\n")}`;
+      $("w-share-preview").textContent = c.err ? `${t("Enter", "Masukkan")} ${c.err}.` : `${t("If the members approve:", "Jika anggota menyetujui:")}\n${preview(c.units, s).join("\n")}`;
     };
     $("w-share").onclick = () => {
       const c = check();
-      if (c.err) { say(`<span class="err">Profit share: enter ${esc(c.err)}.</span>`); return; }
-      act(`Propose a ${usdc(c.units)} USDC profit share`, () => send(dep.dao, "add_proposal", { proposal: {
+      if (c.err) { say(`<span class="err">${t("Profit share: enter", "SHU: masukkan")} ${esc(c.err)}.</span>`); return; }
+      act(t(`Propose a ${usdc(c.units)} USDC profit share`, `Usulan SHU ${usdc(c.units)} USDC`), () => send(dep.dao, "add_proposal", { proposal: {
         description: `Profit share of ${usdc(c.units)} USDC (proposed from the Koperasi page)`,
         kind: { FunctionCall: { receiver_id: dep.usdc, actions: [{ method_name: "ft_transfer_call",
           args: btoa(JSON.stringify({ receiver_id: dep.contract, amount: c.units.toString(), msg: "share" })),
@@ -792,20 +857,20 @@ async function render() {
     };
   }
   box.querySelectorAll("[data-claim]").forEach((b) => {
-    b.onclick = () => act(`Take task #${b.dataset.claim}`, () => send(dep.dao, "bounty_claim",
+    b.onclick = () => act(t(`Take task #${b.dataset.claim}`, `Ambil tugas #${b.dataset.claim}`), () => send(dep.dao, "bounty_claim",
       { id: Number(b.dataset.claim), deadline: String(BigInt(b.dataset.days) * DAY_NS) },
       { deposit: BigInt(s.policy.bounty_bond), tgas: 50 }));
   });
   box.querySelectorAll("[data-giveup]").forEach((b) => {
-    b.onclick = () => act(`Give up task #${b.dataset.giveup}`, () => send(dep.dao, "bounty_giveup", { id: Number(b.dataset.giveup) }, { tgas: 50 }));
+    b.onclick = () => act(t(`Give up task #${b.dataset.giveup}`, `Mundur dari tugas #${b.dataset.giveup}`), () => send(dep.dao, "bounty_giveup", { id: Number(b.dataset.giveup) }, { tgas: 50 }));
   });
   box.querySelectorAll("[data-done]").forEach((b) => {
     b.onclick = () => {
       const id = Number(b.dataset.done);
       const work = $(`w-work-${id}`).value.trim(); // read before act() re-renders the panel
-      if (work.length < 4) { say(`<span class="err">Task #${id}: link to the work you delivered first.</span>`); return; }
+      if (work.length < 4) { say(`<span class="err">${t(`Task #${id}: link to the work you delivered first.`, `Tugas #${id}: isi dulu tautan ke hasil kerja Anda.`)}</span>`); return; }
       // Sputnik v2's bounty_done cannot succeed (no deposit, then ERR_MIN_BOND): file BountyDone as a proposal instead
-      act(`Ask to be paid for task #${id}`, () => send(dep.dao, "add_proposal",
+      act(t(`Ask to be paid for task #${id}`, `Minta dibayar untuk tugas #${id}`), () => send(dep.dao, "add_proposal",
         { proposal: { description: `Task #${id} done: ${work}`, kind: { BountyDone: { bounty_id: id, receiver_id: me } } } },
         { deposit: BigInt(s.policy.proposal_bond), tgas: 50 }));
     };
@@ -823,18 +888,18 @@ async function render() {
     b.onclick = () => {
       const id = Number(b.dataset[attr]);
       const args = extra(id); // read inputs before act() re-renders the panel
-      if (args) act(`${label} task #${id}`, () => send(dep.contract, method, { id, ...args }, { tgas }), action ? () => fresh(id, action) : undefined);
+      if (args) act(`${label} ${t("task", "tugas")} #${id}`, () => send(dep.contract, method, { id, ...args }, { tgas }), action ? () => fresh(id, action) : undefined);
     };
   });
-  task("ttake", "Take", "claim_task", undefined, 30, "claim");
-  task("tgiveup", "Give up", "give_up_task");
-  task("taccept", "Accept", "accept_task", undefined, 200, "accept");
-  task("tapprove", "Approve", "approve_task", undefined, 300, "approve");
+  task("ttake", t("Take", "Ambil"), "claim_task", undefined, 30, "claim");
+  task("tgiveup", t("Give up", "Mundur dari"), "give_up_task");
+  task("taccept", t("Accept", "Terima"), "accept_task", undefined, 200, "accept");
+  task("tapprove", t("Approve", "Setujui"), "approve_task", undefined, 300, "approve");
   task("tveto", "Veto", "veto_task", undefined, 30, "veto");
-  task("trelease", "Release", "release_task", undefined, 200, "release");
-  task("tsubmit", "Deliver", "submit_task", (id) => {
+  task("trelease", t("Release", "Cairkan"), "release_task", undefined, 200, "release");
+  task("tsubmit", t("Deliver", "Serahkan"), "submit_task", (id) => {
     const work = $(`w-tw-${id}`).value.trim();
-    if (!work) { say(`<span class="err">Task #${id}: link to the work you delivered first.</span>`); return null; }
+    if (!work) { say(`<span class="err">${t(`Task #${id}: link to the work you delivered first.`, `Tugas #${id}: isi dulu tautan ke hasil kerja Anda.`)}</span>`); return null; }
     return { deliverable: work };
   }, 30, "submit");
   const post = $("w-task-post");
@@ -842,13 +907,15 @@ async function render() {
     const desc = $("w-task-desc").value.trim();
     const amt = nearUnits($("w-task-amt").value);
     const max = BigInt(s.board.rule.one_vote_max);
-    if (!desc) { say(`<span class="err">Task: describe the task first.</span>`); return; }
-    if (amt === null || amt > max) { say(`<span class="err">Task: pay a positive NEAR amount, at most ${nearAmt(max)} NEAR and 6 decimals.</span>`); return; }
-    act(`Post a ${nearAmt(amt)} NEAR task`, () => send(dep.contract, "post_task", { description: desc, amount: amt.toString() }, { deposit: TASK_FEE, tgas: 30 }));
+    if (!desc) { say(`<span class="err">${t("Task: describe the task first.", "Tugas: uraikan tugasnya dulu.")}</span>`); return; }
+    if (amt === null || amt > max) {
+      say(`<span class="err">${t(`Task: pay a positive NEAR amount, at most ${nearAmt(max)} NEAR and 6 decimals.`, `Tugas: bayaran NEAR positif, paling banyak ${nearAmt(max)} NEAR dan 6 desimal.`)}</span>`); return;
+    }
+    act(t(`Post a ${nearAmt(amt)} NEAR task`, `Pasang tugas ${nearAmt(amt)} NEAR`), () => send(dep.contract, "post_task", { description: desc, amount: amt.toString() }, { deposit: TASK_FEE, tgas: 30 }));
   };
   box.querySelectorAll("[data-vote]").forEach((b) => {
     let p;
-    b.onclick = () => act(b.dataset.vote === "VoteApprove" ? "Approve" : "Reject",
+    b.onclick = () => act(b.dataset.vote === "VoteApprove" ? t("Approve", "Setuju") : t("Reject", "Tolak"),
       async () => {
         const hash = await send(dep.dao, "act_proposal", { id: p.id, action: b.dataset.vote, proposal: p.kind }, { tgas: 200 });
         if (b.dataset.vote === "VoteApprove") extra = await sendSigned(p);
@@ -856,14 +923,16 @@ async function render() {
       },
       async () => {
         p = await view(dep.dao, "get_proposal", { id: Number(b.dataset.id) });
-        if (p.status !== "InProgress") return `Proposal #${p.id} already ended: ${p.status}.`;
-        return p.votes[me] ? `You already voted on proposal #${p.id}.` : null;
+        if (p.status !== "InProgress") return t(`Proposal #${p.id} already ended: ${p.status}.`, `Usulan #${p.id} sudah berakhir: ${p.status}.`);
+        return p.votes[me] ? t(`You already voted on proposal #${p.id}.`, `Anda sudah memilih pada usulan #${p.id}.`) : null;
       });
   });
 }
 
 // a new event on-chain (live.js) refreshes the panel, unless a transaction is in progress
 window.addEventListener("koperasi:events", () => { forget(); if (me && !busy) render(); });
+// the language switch (lang.js): re-render in the new language; mid-transaction, act() re-renders when it ends
+window.addEventListener("koperasi:lang", () => { if (!busy) render(); });
 connector.on("wallet:signIn", (e) => { me = e?.accounts?.[0]?.accountId ?? ""; note = ""; render(); });
 connector.on("wallet:signOut", () => { me = ""; note = ""; render(); });
 // ponytail: ?as=<account> previews the panel for any account, on localhost only (to test each state without a wallet)

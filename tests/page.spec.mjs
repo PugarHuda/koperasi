@@ -252,3 +252,19 @@ test("the page reads in Bahasa Indonesia, and back in English", async ({ page })
   await page.getByRole("button", { name: /English/ }).click();
   await expect(page.locator("#panel-q")).toHaveText("Who controls this AI agent?");
 });
+
+test("the wallet panel follows the language switch", async ({ page }, testInfo) => {
+  test.skip(!local(testInfo), "?as= previews run on localhost only");
+  const errors = [];
+  page.on("pageerror", (e) => { if (!network(e.message)) errors.push(e.message); });
+  await page.addInitScript(() => { if (!sessionStorage.getItem("set")) { localStorage.setItem("kop-lang", "id"); sessionStorage.setItem("set", "1"); } });
+  await page.goto("/?as=kop-publisher-mw5tkpfo.testnet");
+  const panel = page.locator("#joinapp");
+  await expect(panel).toContainText("Masuk sebagai kop-publisher-mw5tkpfo.testnet");
+  await expect(panel.locator("#w-join")).toHaveText(/Bayar 0\.5 NEAR/);
+  await expect(panel.locator(".jsteps li").first()).toContainText("simpanan pokok");
+  await page.locator(".lang-btn").click();
+  await expect(panel).toContainText("Signed in as kop-publisher-mw5tkpfo.testnet");
+  await expect(panel.locator("#w-join")).toHaveText(/Pay 0\.5 NEAR/);
+  expect(errors).toEqual([]);
+});
