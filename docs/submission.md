@@ -53,7 +53,7 @@ built on an unmodified Sputnik DAO (no new multisig):
   record, an annual members' meeting whose report the agent writes in a TEE, pledges of work, and a court drawn at
   random with evidence from both sides and appeal to every member.
 - **Proof:** contract 0.3.6 upgraded only by vote (#144), 0 full-access keys, rebuilt byte for byte from source; 176
-  contract tests; 19 attacks sent to the live co-op, all refused on-chain; `verify` checks 83 claims.
+  contract tests; 19 attacks sent to the live co-op, all refused on-chain; `verify` checks 92 claims.
 
 **Autonomous Business / Agent Economy.** The DAO owns the agent, and the agent is a member that answers for itself:
 - **What it may do:** its prompt, model, prices and markets are by-laws pinned by hash, checked in an Intel TDX enclave
