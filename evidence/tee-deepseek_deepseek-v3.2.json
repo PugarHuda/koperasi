@@ -1,15 +1,15 @@
 {
   "ok": true,
   "model": "deepseek/deepseek-v3.2",
-  "at": "2026-11-18T11:50:04.077Z",
-  "nonce": "4502ff5f358e82cca8cbc37c52394e814abfbdc6b0f24eb5daa90f34922df150",
+  "at": "2026-11-19T11:45:59.619Z",
+  "nonce": "1eec6a3e14a69e4e5d71ae40fcc4d859fddb889614cd009e92bb3197946146fe",
   "gateway": {
     "signing_address": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
     "signing_algo": "ecdsa",
     "tdx_status": "UpToDate",
     "binds_address": true,
     "binds_nonce": true,
-    "compose_sha256": "2643bc7ae47ecf4cf84509a647d2c2cc3bcacad95a87b8a73d543e6c48ad3b22",
+    "compose_sha256": "53cd435edbc129f848ed0ddce301f7f192446fe39683713a38537820bea7e1fb",
     "compose_matches": true,
     "gpu": null,
     "ok": true
@@ -17,11 +17,11 @@
   "models": [
     {
       "provider": "chutes",
-      "instance_id": "323e6d53-af30-4136-9811-a4f102aa21e0",
+      "instance_id": "6193a13c-6b89-41f1-bc8c-01d54108a7ff",
       "tdx_status": "UpToDate",
       "binds_nonce": true,
       "binds_cert": true,
-      "measurement": "8xh200 [10.2.1, numa-124c-1128g-nvsw-node1] v1.4.1",
+      "measurement": "8xh200 [10.2.1, numa-124c-1128g-nvsw-node1] v1.4.0",
       "gpus": 8,
       "gpu": {
         "ok": true,
