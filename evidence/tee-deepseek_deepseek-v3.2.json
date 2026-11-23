@@ -1,8 +1,8 @@
 {
   "ok": true,
   "model": "deepseek/deepseek-v3.2",
-  "at": "2026-11-22T11:31:39.793Z",
-  "nonce": "d0d0185b50909cc1c8c6b56e0e9f8f9bd8621b00d3d8dd81a538c2b7cd4b2e72",
+  "at": "2026-11-23T12:55:33.830Z",
+  "nonce": "a479a7812164dcf44559d464a947435cfe05eb5c224b6ef3c3781cbfd1da1eb5",
   "gateway": {
     "signing_address": "0xb98a789cdc4817275f5155593ba73ef2a957e779",
     "signing_algo": "ecdsa",
@@ -17,11 +17,11 @@
   "models": [
     {
       "provider": "chutes",
-      "instance_id": "cf6d2531-9dab-414e-ab30-50265e6a9fac",
+      "instance_id": "b40db1e5-f07c-441e-9212-a93b1c1b8490",
       "tdx_status": "UpToDate",
       "binds_nonce": true,
       "binds_cert": true,
-      "measurement": "8xh200 [10.2.1, numa-188c-1128g-nvsw-node1] v1.5.0",
+      "measurement": "8xh200 [10.2.1, numa-124c-1128g-nvsw-node1] v1.4.1",
       "gpus": 8,
       "gpu": {
         "ok": true,
